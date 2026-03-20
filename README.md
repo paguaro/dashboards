@@ -120,4 +120,4 @@ Il `.nojekyll` disabilita il processore Jekyll di GitHub Pages.
 
 ## Autore
 **Giuseppe Cornaglia** — ANEPC · Copernicus EMS National Focal Point Portugal
-Colaboração científica: Marco Turco (npj Natural Hazards 2026)
+
