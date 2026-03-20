@@ -4846,15 +4846,15 @@ function initEFFISYearSelector() {
 function toggleEFFISLayer(){
   _effisVisible=!_effisVisible;
   const btn=document.getElementById('btnEFFIS');
+  const srcLabel = (_activeFireSource==='GWIS') ? '🌐 GWIS' : '🔥 EFFIS';
   if(_effisVisible){
     _buildAndShowEFFIS();
-    // Add GetFeatureInfo click handler (separate from selectPoint)
     if(map._effisClickHandler) map.on('click', map._effisClickHandler);
-    if(btn){btn.style.background='rgba(232,93,47,.1)';btn.style.borderColor='var(--accent)';btn.style.color='var(--accent)';btn.textContent='🔥 Hide EFFIS layer';}
+    if(btn){btn.style.background='rgba(232,93,47,.1)';btn.style.borderColor='var(--accent)';btn.style.color='var(--accent)';btn.textContent=srcLabel+' layer active — click to hide';}
   } else {
     if(_effisLayer) map.removeLayer(_effisLayer);
     if(map._effisClickHandler) map.off('click', map._effisClickHandler);
-    if(btn){btn.style.background='';btn.style.borderColor='';btn.style.color='';btn.textContent='🔥 Show EFFIS layer';}
+    if(btn){btn.style.background='';btn.style.borderColor='';btn.style.color='';btn.textContent='Show '+srcLabel+' layer';}
   }
 }
 
@@ -4891,7 +4891,13 @@ function setFireLayerSource(source) {
     btnG.style.borderColor  = source==='GWIS' ? 'var(--accent)' : 'var(--border)';
   }
   if (note) note.textContent = FIRE_SOURCE_INFO[source].note;
-  if (_effisVisible) _buildAndShowEFFIS(); // rebuild with new source
+  if (_effisVisible) {
+    _buildAndShowEFFIS(); // rebuild with new source
+    // Update button text too
+    const btn = document.getElementById('btnEFFIS');
+    const srcLabel = (source==='GWIS') ? '🌐 GWIS' : '🔥 EFFIS';
+    if (btn) btn.textContent = srcLabel + ' layer active — click to hide';
+  }
 }
 
 // ── Override _buildAndShowEFFIS to use active source ─────────────────────
@@ -4905,8 +4911,11 @@ function _buildAndShowEFFIS(){
   _effisLayer=L.tileLayer.wms(src.wms,{
     layers:layer,format:'image/png',transparent:true,
     version:'1.1.1',time:time,opacity:0.7,
-    attribution:'EFFIS © Copernicus EMS / JRC'
-  }).addTo(map);
+    attribution:(_activeFireSource==='GWIS'?'GWIS':'EFFIS')+' © Copernicus EMS / JRC'
+  });
+  _effisLayer.on('tileerror', () => showToast(_activeFireSource+' tile error — check console',3000));
+  _effisLayer.addTo(map);
+  console.log('[FireMeteo] Loading', _activeFireSource, 'layer:', src.wms, layer, 'TIME:', time);
   // GetFeatureInfo — stored as separate handler, toggled with EFFIS visibility
   map._effisClickHandler = async (e) => {
     if (!_effisVisible) return;
