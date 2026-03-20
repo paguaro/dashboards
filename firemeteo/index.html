@@ -4762,7 +4762,7 @@ function errorHTML(err){
 // ═══════════════════════════════════════════════════════════════════════════
 
 const EFFIS_WMS        = 'https://maps.effis.emergency.copernicus.eu/effis';
-const GWIS_WMS         = 'https://maps.gwis.emergency.copernicus.eu/gwis';
+const GWIS_WMS         = 'https://ies-ows.jrc.ec.europa.eu/gwis';
 const CUSTOM_LAYERS_LS = 'frd_intl_custom_layers';
 const NAMED_PRESETS_KEY = 'frd_named_alpha_presets';
 
@@ -4777,6 +4777,27 @@ const BASEMAPS = {
   osm:       {url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',attr:'© OpenStreetMap'},
   terrain:   {url:'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png',attr:'© Stadia Maps'},
   dark:      {url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',attr:'© CartoDB'},
+};
+
+// ── GWIS Global Layer Support ─────────────────────────────────────────────
+let _activeFireSource = 'EFFIS'; // 'EFFIS' or 'GWIS'
+
+const FIRE_SOURCE_INFO = {
+  EFFIS: {
+    wms:        'https://maps.effis.emergency.copernicus.eu/effis',
+    note:       'EFFIS: Europe + Mediterranean (2003–present)',
+    // Official layer from WFS: typename=ms:modis.ba.poly → WMS: modis.ba.poly
+    // TIME=YYYY-MM-DD filters to that date range
+    layerSeason:'modis.ba.poly',
+    layerYear:  () => 'modis.ba.poly',  // same layer, filtered by TIME
+  },
+  GWIS: {
+    // JRC public WMS endpoint for GWIS — parallel to EFFIS
+    wms:        'https://maps.gwis.emergency.copernicus.eu/gwis',
+    note:       'GWIS: Global — Australia, Americas, Asia (2003–present)',
+    layerSeason:'modis.ba.poly',
+    layerYear:  () => 'modis.ba.poly',
+  },
 };
 
 function _v5PostMapInit() {
@@ -4835,12 +4856,13 @@ function toggleBasemapPanel(){
 
 // ── EFFIS Layer ────────────────────────────────────────────────────────────
 function initEFFISYearSelector() {
-  const sel=document.getElementById('effisYearSel');
-  if(!sel)return;
-  const cy=new Date().getFullYear();
-  let opts='<option value="season">Current season</option>';
-  for(let y=cy;y>=2003;y--) opts+=`<option value="${y}">${y}</option>`;
-  sel.innerHTML=opts;
+  const sel = document.getElementById('effisYearSel');
+  if (!sel) return;
+  const cy = new Date().getFullYear();
+  // "Season" = from Jan 1 of current year to today (TIME=today, layer shows YTD)
+  let opts = `<option value="season">Season ${cy} (YTD)</option>`;
+  for (let y = cy-1; y >= 2003; y--) opts += `<option value="${y}">${y}</option>`;
+  sel.innerHTML = opts;
 }
 
 function toggleEFFISLayer(){
@@ -4860,43 +4882,35 @@ function toggleEFFISLayer(){
 
 function updateEFFISLayer(){ if(_effisVisible) _buildAndShowEFFIS(); }
 
-// ── GWIS Global Layer Support ─────────────────────────────────────────────
-let _activeFireSource = 'EFFIS'; // 'EFFIS' or 'GWIS'
-
-const FIRE_SOURCE_INFO = {
-  EFFIS: {
-    wms:  'https://maps.effis.emergency.copernicus.eu/effis',
-    note: 'EFFIS: Europe + Mediterranean',
-    layerPrefix: 'modis.ba',
-  },
-  GWIS: {
-    wms:  'https://maps.gwis.emergency.copernicus.eu/gwis',
-    note: 'GWIS: Global coverage (Australia, Americas, Asia…)',
-    layerPrefix: 'modis.ba',
-  },
-};
-
 function setFireLayerSource(source) {
   _activeFireSource = source;
-  // Update button styles
+  // Update source pill buttons
   const btnE = document.getElementById('btnSrcEFFIS');
   const btnG = document.getElementById('btnSrcGWIS');
   const note = document.getElementById('fireLayerSourceNote');
   if (btnE && btnG) {
-    btnE.style.background = source==='EFFIS' ? 'var(--accent)' : 'var(--surface)';
+    btnE.style.background  = source==='EFFIS' ? 'var(--accent)' : 'var(--surface)';
     btnE.style.color       = source==='EFFIS' ? '#fff'          : 'var(--dim)';
     btnE.style.borderColor = source==='EFFIS' ? 'var(--accent)' : 'var(--border)';
     btnG.style.background  = source==='GWIS'  ? 'var(--accent)' : 'var(--surface)';
-    btnG.style.color        = source==='GWIS' ? '#fff'          : 'var(--dim)';
-    btnG.style.borderColor  = source==='GWIS' ? 'var(--accent)' : 'var(--border)';
+    btnG.style.color       = source==='GWIS'  ? '#fff'          : 'var(--dim)';
+    btnG.style.borderColor = source==='GWIS'  ? 'var(--accent)' : 'var(--border)';
   }
-  if (note) note.textContent = FIRE_SOURCE_INFO[source].note;
-  if (_effisVisible) {
-    _buildAndShowEFFIS(); // rebuild with new source
-    // Update button text too
-    const btn = document.getElementById('btnEFFIS');
-    const srcLabel = (source==='GWIS') ? '🌐 GWIS' : '🔥 EFFIS';
-    if (btn) btn.textContent = srcLabel + ' layer active — click to hide';
+  if (note) note.textContent = FIRE_SOURCE_INFO[source]?.note || '';
+  // Always activate the layer on source switch (gives immediate visual feedback)
+  if (!_effisVisible) {
+    _effisVisible = true;
+    if (map._effisClickHandler) map.on('click', map._effisClickHandler);
+  }
+  _buildAndShowEFFIS();
+  // Update toggle button text
+  const btn = document.getElementById('btnEFFIS');
+  const icon = source==='GWIS' ? '🌐' : '🔥';
+  if (btn) {
+    btn.style.background  = 'rgba(232,93,47,.1)';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color       = 'var(--accent)';
+    btn.textContent       = `${icon} Hide ${source} layer`;
   }
 }
 
@@ -4906,12 +4920,20 @@ function _buildAndShowEFFIS(){
   if(_effisLayer) map.removeLayer(_effisLayer);
   const val=document.getElementById('effisYearSel')?.value||'season';
   const src=FIRE_SOURCE_INFO[_activeFireSource||'EFFIS'];
-  const layer=val==='season'?`${src.layerPrefix}.All`:`${src.layerPrefix}.${val}`;
-  const time=val==='season'?new Date().toISOString().split('T')[0]:`${val}-12-31`;
-  _effisLayer=L.tileLayer.wms(src.wms,{
-    layers:layer,format:'image/png',transparent:true,
-    version:'1.1.1',time:time,opacity:0.7,
-    attribution:(_activeFireSource==='GWIS'?'GWIS':'EFFIS')+' © Copernicus EMS / JRC'
+  const layer=val==='season'? src.layerSeason : src.layerYear(val);
+  const cy   = new Date().getFullYear();
+  const today = new Date().toISOString().split('T')[0];
+  // WMS-T: use time range (start/end) for correct cumulative display
+  const time = val==='season'
+    ? `${cy}-01-01/${today}`
+    : `${val}-01-01/${val}-12-31`;
+  _effisLayer = L.tileLayer.wms(src.wms, {
+    layers: layer, format:'image/png', transparent:true,
+    version:'1.1.1', time: time, opacity:0.75,
+    attribution: (_activeFireSource==='GWIS' ? 'GWIS' : 'EFFIS') + ' © Copernicus EMS / JRC'
+  });
+  _effisLayer.on('tileerror', e => {
+    showToast(`⚠ ${_activeFireSource} tile error — layer may be unsupported at this zoom`, 4000);
   });
   _effisLayer.on('tileerror', () => showToast(_activeFireSource+' tile error — check console',3000));
   _effisLayer.addTo(map);
@@ -4929,8 +4951,10 @@ async function _queryEFFISInfo(lat,lng,pt){
     const bbox=`${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
     const val=document.getElementById('effisYearSel')?.value||'season';
     const fsrc=FIRE_SOURCE_INFO[_activeFireSource||'EFFIS'];
-    const layer=val==='season'?`${fsrc.layerPrefix}.All`:`${fsrc.layerPrefix}.${val}`;
-    const time=val==='season'?new Date().toISOString().split('T')[0]:`${val}-12-31`;
+    const layer=val==='season'? fsrc.layerSeason : fsrc.layerYear(val);
+    const cy2  = new Date().getFullYear();
+    const tod  = new Date().toISOString().split('T')[0];
+    const time = val==='season' ? `${cy2}-01-01/${tod}` : `${val}-01-01/${val}-12-31`;
     const url=`${fsrc.wms}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo`+
       `&LAYERS=${layer}&QUERY_LAYERS=${layer}&INFO_FORMAT=application/json`+
       `&BBOX=${bbox}&WIDTH=${sz.x}&HEIGHT=${sz.y}&X=${Math.round(pt.x)}&Y=${Math.round(pt.y)}`+
