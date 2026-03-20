@@ -376,11 +376,21 @@ tr:hover{background:#f9fafb}
             <input id="customLayerName" type="text" placeholder="Layer name"
               style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--border);
                      border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:4px">
-            <button onclick="addCustomLayer()"
-              style="width:100%;font-size:10px;padding:4px 8px;background:var(--accent);color:#fff;
-                     border:none;border-radius:4px;cursor:pointer;font-weight:600;margin-bottom:5px">
-              ＋ Add layer
-            </button>
+            <div style="display:flex;gap:4px;margin-bottom:5px">
+              <button onclick="addCustomLayer()"
+                style="flex:1;font-size:10px;padding:4px 8px;background:var(--accent);color:#fff;
+                       border:none;border-radius:4px;cursor:pointer;font-weight:600">
+                ＋ Add URL
+              </button>
+              <label style="flex:1;font-size:10px;padding:4px 8px;background:#334155;color:#f9fafb;
+                            border:none;border-radius:4px;cursor:pointer;font-weight:600;
+                            text-align:center;display:flex;align-items:center;justify-content:center;gap:3px"
+                     title="Upload local GeoJSON file">
+                📂 File
+                <input type="file" id="geoJsonFileInput" accept=".geojson,.json"
+                  style="display:none" onchange="addLocalGeoJSON(this)">
+              </label>
+            </div>
             <div id="customLayerList" style="display:flex;flex-direction:column;gap:3px"></div>
           </div>
           <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
@@ -5059,6 +5069,34 @@ document.addEventListener('DOMContentLoaded', ()=>{
     _v5AddAlphaNameField();
   }, 500);
 });
+
+
+function addLocalGeoJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const name = (document.getElementById('customLayerName')?.value.trim()) ||
+               file.name.replace(/\.geojson$|\.json$/i,'');
+  showToast(`Loading ${file.name}…`, 3000);
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const geojson = JSON.parse(e.target.result);
+      if (!geojson?.features?.length) throw new Error('No features found');
+      const idx = Date.now();
+      _customLayersObj[idx] = { url: '[local file] ' + file.name, name, layer: null, visible: false, idx };
+      _customLayersSave();
+      _addLeafletLayer(geojson, name, idx);
+      renderCustomLayerList();
+      if (document.getElementById('customLayerName')) document.getElementById('customLayerName').value = '';
+      input.value = '';
+      showToast(`✓ ${name} loaded (${geojson.features.length} features)`, 3000);
+    } catch(err) {
+      showToast(`Error: ${err.message}`, 4000);
+    }
+  };
+  reader.onerror = () => showToast('File read error', 3000);
+  reader.readAsText(file);
+}
 
 </script>
 
