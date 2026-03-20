@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fire Risk Dashboards — ANEPC / CFVA</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;
+       display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .wrap{text-align:center;padding:40px 20px}
+  h1{color:#f9fafb;font-size:22px;font-weight:700;margin-bottom:6px}
+  p{color:#94a3b8;font-size:12px;margin-bottom:36px}
+  .cards{display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;
+        padding:28px 36px;text-decoration:none;transition:border-color .2s,transform .15s}
+  .card:hover{border-color:#e85d2f;transform:translateY(-3px)}
+  .flag{font-size:42px;margin-bottom:10px}
+  .name{color:#f1f5f9;font-size:15px;font-weight:700}
+  .sub{color:#64748b;font-size:11px;margin-top:4px}
+  .ver{color:#e85d2f;font-size:10px;font-family:monospace;margin-top:8px}
+  footer{color:#334155;font-size:10px;margin-top:40px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔥 Fire Risk Dashboards</h1>
+  <p>HDW_eff · HDWc · Open-Meteo 16d · Alpha Preset v4.0</p>
+  <div class="cards">
+    <a class="card" href="portugal/">
+      <div class="flag">🇵🇹</div>
+      <div class="name">Portugal</div>
+      <div class="sub">ICNF GIFR · ANEPC</div>
+      <div class="ver">v4.0</div>
+    </a>
+    <a class="card" href="sardegna/">
+      <div class="flag">🇮🇹</div>
+      <div class="name">Sardegna</div>
+      <div class="sub">CFVA · Griglia 10km</div>
+      <div class="ver">v4.0 SARD</div>
+    </a>
+  </div>
+  <footer>Giuseppe Cornaglia · ANEPC · Copernicus EMS NFP Portugal · 20260320</footer>
+</div>
+</body>
+</html>
