@@ -4766,7 +4766,7 @@ const GWIS_WMS         = 'https://ies-ows.jrc.ec.europa.eu/gwis';
 const CUSTOM_LAYERS_LS = 'frd_intl_custom_layers';
 const NAMED_PRESETS_KEY = 'frd_named_alpha_presets';
 
-let _effisLayer=null, _effisVisible=false;
+let _effisLayer=null, _effisVisible=false, _gwisErrShown=false;
 let _customLayersObj={};
 let _basemapLayer=null, _activeBasemap='voyager';
 
@@ -4784,19 +4784,20 @@ let _activeFireSource = 'EFFIS'; // 'EFFIS' or 'GWIS'
 
 const FIRE_SOURCE_INFO = {
   EFFIS: {
-    wms:        'https://maps.effis.emergency.copernicus.eu/effis',
-    note:       'EFFIS: Europe + Mediterranean (2003–present)',
-    // Official layer from WFS: typename=ms:modis.ba.poly → WMS: modis.ba.poly
-    // TIME=YYYY-MM-DD filters to that date range
-    layerSeason:'modis.ba.poly',
-    layerYear:  () => 'modis.ba.poly',  // same layer, filtered by TIME
+    wms:         'https://maps.effis.emergency.copernicus.eu/effis',
+    note:        'EFFIS · Europe + Mediterranean · 2003–present',
+    layerSeason: 'modis.ba.All',
+    layerYear:   y => `modis.ba.${y}`,
+    supportsYear: true,
   },
   GWIS: {
-    // JRC public WMS endpoint for GWIS — parallel to EFFIS
-    wms:        'https://maps.gwis.emergency.copernicus.eu/gwis',
-    note:       'GWIS: Global — Australia, Americas, Asia (2003–present)',
-    layerSeason:'modis.ba.poly',
-    layerYear:  () => 'modis.ba.poly',
+    // Confirmed endpoint: ies-ows.jrc.ec.europa.eu/gwis (WMS server responds)
+    // Layer names mirror EFFIS structure on this server
+    wms:         'https://ies-ows.jrc.ec.europa.eu/gwis',
+    note:        'GWIS · Global coverage · 2003–present',
+    layerSeason: 'modis.ba.All',
+    layerYear:   y => `modis.ba.${y}`,
+    supportsYear: true,
   },
 };
 
