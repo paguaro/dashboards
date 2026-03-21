@@ -4784,19 +4784,20 @@ let _activeFireSource = 'EFFIS'; // 'EFFIS' or 'GWIS'
 
 const FIRE_SOURCE_INFO = {
   EFFIS: {
+    // Confirmed from EFFIS data-and-services page:
+    // WFS typename = ms:modis.ba.poly → WMS layer = modis.ba.poly
     wms:         'https://maps.effis.emergency.copernicus.eu/effis',
     note:        'EFFIS · Europe + Mediterranean · 2003–present',
-    layerSeason: 'modis.ba.All',
-    layerYear:   y => `modis.ba.${y}`,
+    layerMODIS:  'modis.ba.poly',
+    layerVIIRS:  'viirs.ba.poly',
     supportsYear: true,
   },
   GWIS: {
-    // Confirmed endpoint: ies-ows.jrc.ec.europa.eu/gwis (WMS server responds)
-    // Layer names mirror EFFIS structure on this server
+    // Same MapServer structure on JRC server — layer names likely identical
     wms:         'https://ies-ows.jrc.ec.europa.eu/gwis',
     note:        'GWIS · Global coverage · 2003–present',
-    layerSeason: 'modis.ba.All',
-    layerYear:   y => `modis.ba.${y}`,
+    layerMODIS:  'modis.ba.poly',
+    layerVIIRS:  'viirs.ba.poly',
     supportsYear: true,
   },
 };
@@ -4918,52 +4919,76 @@ function setFireLayerSource(source) {
 // ── Override _buildAndShowEFFIS to use active source ─────────────────────
 
 function _buildAndShowEFFIS(){
-  if(_effisLayer) map.removeLayer(_effisLayer);
-  const val = document.getElementById('effisYearSel')?.value || 'season';
-  const fsrc = FIRE_SOURCE_INFO[_activeFireSource || 'EFFIS'];
-  const layer = (val==='season' || !fsrc.supportsYear) ? fsrc.layerSeason : fsrc.layerYear(val);
-  // TIME: single ISO date (EFFIS/GWIS WMS-T format)
-  const time  = val==='season'
-    ? new Date().toISOString().split('T')[0]
-    : `${val}-12-31`;
-  _effisLayer = L.tileLayer.wms(fsrc.wms, {
+  if (_effisLayer) map.removeLayer(_effisLayer);
+  const val    = document.getElementById('effisYearSel')?.value || 'season';
+  const isGWIS = (_activeFireSource === 'GWIS');
+  const wmsUrl = isGWIS
+    ? 'https://ies-ows.jrc.ec.europa.eu/gwis'
+    : 'https://maps.effis.emergency.copernicus.eu/effis';
+
+  // Confirmed layer name from EFFIS data-and-services page:
+  // WFS typename = ms:modis.ba.poly → WMS layer = modis.ba.poly
+  const layer = 'modis.ba.poly';
+
+  // TIME: date range for correct temporal filtering
+  const cy    = new Date().getFullYear();
+  const today = new Date().toISOString().split('T')[0];
+  const time  = (val === 'season')
+    ? `${cy}-01-01/${today}`
+    : `${val}-01-01/${val}-12-31`;
+
+  _effisLayer = L.tileLayer.wms(wmsUrl, {
     layers: layer, format:'image/png', transparent:true,
     version:'1.1.1', time: time, opacity:0.75,
-    attribution: (_activeFireSource==='GWIS' ? 'GWIS' : 'EFFIS') + ' © Copernicus EMS / JRC'
+    attribution: (isGWIS ? 'GWIS' : 'EFFIS') + ' © Copernicus EMS / JRC'
   });
   _effisLayer.on('tileerror', () => {
+    console.warn('[FireMeteo]', _activeFireSource, 'tileerror layer:', layer, 'time:', time, 'wms:', wmsUrl);
     showToast(_activeFireSource + ' WMS error — layer: ' + layer, 4000);
-    console.warn('[FireMeteo]', _activeFireSource, 'tileerror layer:', layer, 'time:', time, 'wms:', fsrc.wms);
   });
   _effisLayer.addTo(map);
-  console.log('[FireMeteo]', _activeFireSource, 'layer:', layer, 'TIME:', time, 'WMS:', fsrc.wms);
+  console.log('[FireMeteo]', _activeFireSource, 'layer:', layer, 'TIME:', time, 'WMS:', wmsUrl);
+
   map._effisClickHandler = async (e) => {
     if (!_effisVisible) return;
     await _queryEFFISInfo(e.latlng.lat, e.latlng.lng, e.containerPoint);
   };
 }
 
-async function _queryEFFISInfo(lat,lng,pt){
-  try{
-    const sz=map.getSize(), b=map.getBounds();
-    const bbox=`${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-    const val=document.getElementById('effisYearSel')?.value||'season';
-    const fsrc=FIRE_SOURCE_INFO[_activeFireSource||'EFFIS'];
-    const layer=val==='season'? fsrc.layerSeason : fsrc.layerYear(val);
-    const cy2  = new Date().getFullYear();
-    const tod  = new Date().toISOString().split('T')[0];
-    const time = val==='season' ? `${cy2}-01-01/${tod}` : `${val}-01-01/${val}-12-31`;
-    const url=`${fsrc.wms}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo`+
+async function _queryEFFISInfo(lat, lng, pt){
+  try {
+    const sz  = map.getSize(), b = map.getBounds();
+    const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+    const val  = document.getElementById('effisYearSel')?.value || 'season';
+    const isGWIS = (_activeFireSource === 'GWIS');
+    const wmsUrl = isGWIS
+      ? 'https://ies-ows.jrc.ec.europa.eu/gwis'
+      : 'https://maps.effis.emergency.copernicus.eu/effis';
+    const layer = 'modis.ba.poly';
+    const cy    = new Date().getFullYear();
+    const today = new Date().toISOString().split('T')[0];
+    const time  = (val === 'season')
+      ? `${cy}-01-01/${today}`
+      : `${val}-01-01/${val}-12-31`;
+    const url = `${wmsUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo`+
       `&LAYERS=${layer}&QUERY_LAYERS=${layer}&INFO_FORMAT=application/json`+
       `&BBOX=${bbox}&WIDTH=${sz.x}&HEIGHT=${sz.y}&X=${Math.round(pt.x)}&Y=${Math.round(pt.y)}`+
       `&TIME=${time}&FEATURE_COUNT=5`;
-    const r=await fetch(url);
-    if(!r.ok)return;
-    const d=await r.json();
-    if(d.features?.length) showAttributePopup(lat,lng,'EFFIS Burnt Area',d.features[0].properties);
-  }catch(e){console.warn('EFFIS GFI:',e.message);}
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const ct = r.headers.get('content-type') || '';
+    if (ct.includes('html')) {
+      // GetFeatureInfo returns HTML — parse and show
+      const html = await r.text();
+      const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      const body = match ? match[1].replace(/<[^>]+>/g,'').trim() : '';
+      if (body) showAttributePopup(lat, lng, _activeFireSource + ' Burnt Area', {Info: body.slice(0,300)});
+      return;
+    }
+    const d = await r.json();
+    if (d.features?.length) showAttributePopup(lat, lng, _activeFireSource + ' Burnt Area', d.features[0].properties);
+  } catch(e) { console.warn('GFI error:', e.message); }
 }
-
 // ── Attribute Popup ────────────────────────────────────────────────────────
 function showAttributePopup(lat,lng,layerName,props){
   if(!props)return;
