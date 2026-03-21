@@ -362,20 +362,34 @@ tr:hover{background:#f9fafb}
                        background:var(--accent);color:#fff">
                 🔥 EFFIS
               </button>
-              <button id="btnSrcGWIS" onclick="setFireLayerSource('GWIS')"
+              <button id="btnSrcGWIS" onclick="setFireLayerSource('VIIRS')"
                 style="flex:1;font-size:9px;padding:3px 5px;border:1px solid var(--border);
                        border-radius:4px;cursor:pointer;font-weight:700;
                        background:var(--surface);color:var(--dim)">
-                🌐 GWIS
+                🛰 VIIRS
               </button>
             </div>
             <div id="fireLayerSourceNote" style="font-size:8.5px;color:var(--dim);
                  margin-bottom:4px;line-height:1.4">
-              EFFIS: Europe + Mediterranean
+              EFFIS · Europe + Mediterranean
             </div>
-            <select id="effisYearSel" onchange="updateEFFISLayer()"
-              style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--border);
-                     border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:4px"></select>
+            <!-- Year selector — shown for EFFIS -->
+            <div id="effisYearRow">
+              <select id="effisYearSel" onchange="updateEFFISLayer()"
+                style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--border);
+                       border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:4px"></select>
+            </div>
+            <!-- Time window selector — shown for FIRMS/VIIRS -->
+            <div id="viirsTimeRow" style="display:none;margin-bottom:4px">
+              <select id="viirsTimeSel" onchange="updateEFFISLayer()"
+                style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--border);
+                       border-radius:4px;background:var(--surface);color:var(--text)">
+                <option value="1">Last 24 hours</option>
+                <option value="2">Last 48 hours</option>
+                <option value="7" selected>Last 7 days</option>
+                <option value="30">Last 30 days</option>
+              </select>
+            </div>
             <button id="btnEFFIS" onclick="toggleEFFISLayer()"
               style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:5px;
                      background:var(--surface);font-size:10px;cursor:pointer;font-weight:600;
@@ -4784,21 +4798,19 @@ let _activeFireSource = 'EFFIS'; // 'EFFIS' or 'GWIS'
 
 const FIRE_SOURCE_INFO = {
   EFFIS: {
-    // Confirmed from EFFIS data-and-services page:
-    // WFS typename = ms:modis.ba.poly → WMS layer = modis.ba.poly
+    type:        'wms',
     wms:         'https://maps.effis.emergency.copernicus.eu/effis',
-    note:        'EFFIS · Europe + Mediterranean · 2003–present',
-    layerMODIS:  'modis.ba.poly',
-    layerVIIRS:  'viirs.ba.poly',
+    note:        'EFFIS · Burnt areas Europe+Med · 2003–present',
+    layerSeason: 'modis.ba.All',
+    layerYear:   y => `modis.ba.${y}`,
     supportsYear: true,
   },
-  GWIS: {
-    // Same MapServer structure on JRC server — layer names likely identical
-    wms:         'https://ies-ows.jrc.ec.europa.eu/gwis',
-    note:        'GWIS · Global coverage · 2003–present',
-    layerMODIS:  'modis.ba.poly',
-    layerVIIRS:  'viirs.ba.poly',
-    supportsYear: true,
+  VIIRS: {
+    type:  'arcgis',
+    // NASA FIRMS VIIRS via ArcGIS Living Atlas — public, global, 7-day hotspots
+    url:   'https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/Satellite_VIIRS_Thermal_Hotspots_and_Fire_Activity/FeatureServer/0',
+    note:  'NASA VIIRS · Active fire hotspots · Global · Last 7 days',
+    supportsYear: false,
   },
 };
 
@@ -4894,11 +4906,16 @@ function setFireLayerSource(source) {
     btnE.style.background  = source==='EFFIS' ? 'var(--accent)' : 'var(--surface)';
     btnE.style.color       = source==='EFFIS' ? '#fff'          : 'var(--dim)';
     btnE.style.borderColor = source==='EFFIS' ? 'var(--accent)' : 'var(--border)';
-    btnG.style.background  = source==='GWIS'  ? 'var(--accent)' : 'var(--surface)';
-    btnG.style.color       = source==='GWIS'  ? '#fff'          : 'var(--dim)';
-    btnG.style.borderColor = source==='GWIS'  ? 'var(--accent)' : 'var(--border)';
+    btnG.style.background  = source==='VIIRS' ? 'var(--accent)' : 'var(--surface)';
+    btnG.style.color       = source==='VIIRS' ? '#fff'          : 'var(--dim)';
+    btnG.style.borderColor = source==='VIIRS' ? 'var(--accent)' : 'var(--border)';
   }
   if (note) note.textContent = FIRE_SOURCE_INFO[source]?.note || '';
+  // Toggle year vs time selectors
+  const yearRow  = document.getElementById('effisYearRow');
+  const viirsRow = document.getElementById('viirsTimeRow');
+  if (yearRow)  yearRow.style.display  = source==='VIIRS' ? 'none'  : 'block';
+  if (viirsRow) viirsRow.style.display = source==='VIIRS' ? 'block' : 'none';
   // Always activate the layer on source switch (gives immediate visual feedback)
   if (!_effisVisible) {
     _effisVisible = true;
@@ -4907,48 +4924,79 @@ function setFireLayerSource(source) {
   _buildAndShowEFFIS();
   // Update toggle button text
   const btn = document.getElementById('btnEFFIS');
-  const icon = source==='GWIS' ? '🌐' : '🔥';
+  const icon = source==='VIIRS' ? '🛰' : '🔥';
   if (btn) {
     btn.style.background  = 'rgba(232,93,47,.1)';
     btn.style.borderColor = 'var(--accent)';
     btn.style.color       = 'var(--accent)';
-    btn.textContent       = `${icon} Hide ${source} layer`;
+    btn.textContent       = icon + ' Hide ' + (source==='VIIRS'?'FIRMS/VIIRS':source) + ' layer';
   }
 }
 
 // ── Override _buildAndShowEFFIS to use active source ─────────────────────
 
 function _buildAndShowEFFIS(){
-  if (_effisLayer) map.removeLayer(_effisLayer);
-  const val    = document.getElementById('effisYearSel')?.value || 'season';
-  const isGWIS = (_activeFireSource === 'GWIS');
-  const wmsUrl = isGWIS
-    ? 'https://ies-ows.jrc.ec.europa.eu/gwis'
-    : 'https://maps.effis.emergency.copernicus.eu/effis';
+  if(_effisLayer){ map.removeLayer(_effisLayer); _effisLayer=null; }
+  const fsrc = FIRE_SOURCE_INFO[_activeFireSource || 'EFFIS'];
 
-  // Confirmed layer name from EFFIS data-and-services page:
-  // WFS typename = ms:modis.ba.poly → WMS layer = modis.ba.poly
-  const layer = 'modis.ba.poly';
+  if(fsrc.type === 'arcgis'){
+    // ── NASA VIIRS via ArcGIS Living Atlas FeatureServer ──────────────
+    showToast('Loading NASA VIIRS hotspots…', 3000);
+    const days   = parseInt(document.getElementById('viirsTimeSel')?.value || '7');
+    const cutoff = new Date(Date.now() - days*86400000).toISOString().split('T')[0];
+    const where  = encodeURIComponent(`ACQ_DATE >= DATE '${cutoff}'`);
+    const queryUrl = fsrc.url + '/query?where=' + where + '&outFields=*&f=geojson&resultRecordCount=4000';
+    fetch(queryUrl)
+      .then(r => r.ok ? r.json() : Promise.reject('HTTP '+r.status))
+      .then(geojson => {
+        if(!geojson.features?.length){ showToast('No VIIRS hotspots found', 3000); return; }
+        _effisLayer = L.geoJSON(geojson, {
+          pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+            radius: Math.max(3, Math.min((f.properties.frp||1)/30, 9)),
+            fillColor: f.properties.daynight==='D' ? '#ff4500' : '#ff8c00',
+            color:'#fff', weight:0.5, fillOpacity:0.8
+          }),
+          onEachFeature: (f, lyr) => lyr.on('click', e => {
+            L.DomEvent.stopPropagation(e);
+            // Build clean VIIRS attribute dict
+            const p = f.properties;
+            const attrs = {
+              'Date':        p.ACQ_DATE || p.acq_date || '—',
+              'Time (UTC)':  p.ACQ_TIME || p.acq_time || '—',
+              'FRP (MW)':    p.FRP      || p.frp      || '—',
+              'Confidence':  p.CONFIDENCE || p.confidence || '—',
+              'Day/Night':   (p.DAYNIGHT||p.daynight)==='D' ? '☀ Day' : '🌙 Night',
+              'Satellite':   p.SATELLITE || p.satellite || '—',
+              'Instrument':  p.INSTRUMENT || p.instrument || '—',
+              'Bright (K)':  p.BRIGHT_TI4 || p.bright_ti4 || p.BRIGHTNESS || '—',
+            };
+            showAttributePopup(f.geometry.coordinates[1], f.geometry.coordinates[0],
+              '🛰 NASA FIRMS / VIIRS Hotspot', attrs);
+          })
+        }).addTo(map);
+        showToast('NASA FIRMS · ' + days + 'd · ' + geojson.features.length + ' hotspots loaded ✓', 3500);
+      })
+      .catch(err => { showToast('VIIRS error: ' + err, 4000); console.error('[VIIRS]', err); });
+    return;
+  }
 
-  // TIME: date range for correct temporal filtering
-  const cy    = new Date().getFullYear();
-  const today = new Date().toISOString().split('T')[0];
-  const time  = (val === 'season')
-    ? `${cy}-01-01/${today}`
-    : `${val}-01-01/${val}-12-31`;
-
-  _effisLayer = L.tileLayer.wms(wmsUrl, {
-    layers: layer, format:'image/png', transparent:true,
-    version:'1.1.1', time: time, opacity:0.75,
-    attribution: (isGWIS ? 'GWIS' : 'EFFIS') + ' © Copernicus EMS / JRC'
+  // ── EFFIS WMS ─────────────────────────────────────────────────────
+  const val   = document.getElementById('effisYearSel')?.value || 'season';
+  const layer = (val==='season' || !fsrc.supportsYear) ? fsrc.layerSeason : fsrc.layerYear(val);
+  const time  = val==='season'
+    ? new Date().toISOString().split('T')[0]
+    : `${val}-12-31`;
+  _effisLayer = L.tileLayer.wms(fsrc.wms, {
+    layers:layer, format:'image/png', transparent:true,
+    version:'1.1.1', time:time, opacity:0.75,
+    attribution:'EFFIS © Copernicus EMS / JRC'
   });
   _effisLayer.on('tileerror', () => {
-    console.warn('[FireMeteo]', _activeFireSource, 'tileerror layer:', layer, 'time:', time, 'wms:', wmsUrl);
-    showToast(_activeFireSource + ' WMS error — layer: ' + layer, 4000);
+    showToast('EFFIS WMS error — layer: ' + layer, 4000);
+    console.warn('[EFFIS] tileerror layer:', layer, 'time:', time);
   });
   _effisLayer.addTo(map);
-  console.log('[FireMeteo]', _activeFireSource, 'layer:', layer, 'TIME:', time, 'WMS:', wmsUrl);
-
+  console.log('[EFFIS] layer:', layer, 'TIME:', time);
   map._effisClickHandler = async (e) => {
     if (!_effisVisible) return;
     await _queryEFFISInfo(e.latlng.lat, e.latlng.lng, e.containerPoint);
