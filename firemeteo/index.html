@@ -4919,27 +4919,24 @@ function setFireLayerSource(source) {
 
 function _buildAndShowEFFIS(){
   if(_effisLayer) map.removeLayer(_effisLayer);
-  const val=document.getElementById('effisYearSel')?.value||'season';
-  const src=FIRE_SOURCE_INFO[_activeFireSource||'EFFIS'];
-  const layer=val==='season'? src.layerSeason : src.layerYear(val);
-  const cy   = new Date().getFullYear();
-  const today = new Date().toISOString().split('T')[0];
-  // WMS-T: use time range (start/end) for correct cumulative display
-  const time = val==='season'
-    ? `${cy}-01-01/${today}`
-    : `${val}-01-01/${val}-12-31`;
-  _effisLayer = L.tileLayer.wms(src.wms, {
+  const val = document.getElementById('effisYearSel')?.value || 'season';
+  const fsrc = FIRE_SOURCE_INFO[_activeFireSource || 'EFFIS'];
+  const layer = (val==='season' || !fsrc.supportsYear) ? fsrc.layerSeason : fsrc.layerYear(val);
+  // TIME: single ISO date (EFFIS/GWIS WMS-T format)
+  const time  = val==='season'
+    ? new Date().toISOString().split('T')[0]
+    : `${val}-12-31`;
+  _effisLayer = L.tileLayer.wms(fsrc.wms, {
     layers: layer, format:'image/png', transparent:true,
     version:'1.1.1', time: time, opacity:0.75,
     attribution: (_activeFireSource==='GWIS' ? 'GWIS' : 'EFFIS') + ' © Copernicus EMS / JRC'
   });
-  _effisLayer.on('tileerror', e => {
-    showToast(`⚠ ${_activeFireSource} tile error — layer may be unsupported at this zoom`, 4000);
+  _effisLayer.on('tileerror', () => {
+    showToast(_activeFireSource + ' WMS error — layer: ' + layer, 4000);
+    console.warn('[FireMeteo]', _activeFireSource, 'tileerror layer:', layer, 'time:', time, 'wms:', fsrc.wms);
   });
-  _effisLayer.on('tileerror', () => showToast(_activeFireSource+' tile error — check console',3000));
   _effisLayer.addTo(map);
-  console.log('[FireMeteo] Loading', _activeFireSource, 'layer:', src.wms, layer, 'TIME:', time);
-  // GetFeatureInfo — stored as separate handler, toggled with EFFIS visibility
+  console.log('[FireMeteo]', _activeFireSource, 'layer:', layer, 'TIME:', time, 'WMS:', fsrc.wms);
   map._effisClickHandler = async (e) => {
     if (!_effisVisible) return;
     await _queryEFFISInfo(e.latlng.lat, e.latlng.lng, e.containerPoint);
