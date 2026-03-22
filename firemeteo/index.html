@@ -959,8 +959,14 @@ function alphaPresetLoad() {
   try {
     const s = JSON.parse(localStorage.getItem(ALPHA_LS_KEY)||'null');
     if (!s) return { key:'Portugal', alpha:ALPHA_PRESETS['Portugal'].alpha.slice(), custom:false };
+    // Built-in preset — ignore stored alpha, always use canonical values
     if (s.key && ALPHA_PRESETS[s.key]) return { key:s.key, alpha:ALPHA_PRESETS[s.key].alpha.slice(), custom:false };
-    if (s.key==='Custom' && Array.isArray(s.alpha) && s.alpha.length===12) return { key:'Custom', alpha:s.alpha, custom:true };
+    // Anonymous custom
+    if (s.key==='Custom' && Array.isArray(s.alpha) && s.alpha.length===12) return { key:'Custom', alpha:s.alpha.slice(), custom:true };
+    // Named saved preset — key not in ALPHA_PRESETS but alpha array is valid
+    if (s.key && Array.isArray(s.alpha) && s.alpha.length===12
+        && s.alpha.every(v => typeof v==='number' && v>=0 && v<=1))
+      return { key:s.key, alpha:s.alpha.slice(), custom:true };
   } catch(e) {}
   return { key:'Portugal', alpha:ALPHA_PRESETS['Portugal'].alpha.slice(), custom:false };
 }
@@ -2203,15 +2209,22 @@ function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
 function alphaUIInit() {
   const sel = document.getElementById('alphaPresetSel');
   if (!sel) return;
-  sel.value = _activePreset.key in ALPHA_PRESETS ? _activePreset.key : 'Custom';
-  if (_activePreset.key === 'Custom') {
+  const key = _activePreset.key;
+  if (key in ALPHA_PRESETS) {
+    sel.value = key;
+  } else {
+    // Named or anonymous custom: show values in Custom input so Apply works
+    sel.value = 'Custom';
     document.getElementById('alphaCustomRow').style.display = 'block';
     document.getElementById('alphaCustomInput').value = _activePreset.alpha.join(',');
+    // Pre-fill name field if it's a named preset (not anonymous 'Custom')
+    const nameInput = document.getElementById('alphaNameInput');
+    if (nameInput && key !== 'Custom') nameInput.value = key;
   }
-  alphaUpdateBadge(); setTimeout(drawAlphaSensChart, 200);
+  alphaUpdateBadge();
   const note = document.getElementById('alphaSourceNote');
-  if (note && ALPHA_PRESETS[_activePreset.key]) note.textContent = ALPHA_PRESETS[_activePreset.key].source;
-  // alphaPresetRow is always visible now
+  if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
+  else if (note && key !== 'Custom') note.textContent = `★ Named preset "${key}" — active`;
 }
 
 function alphaUpdateBadge() {
@@ -2226,39 +2239,60 @@ function onAlphaPresetChange() {
   const key = document.getElementById('alphaPresetSel')?.value || '';
   const customRow = document.getElementById('alphaCustomRow');
   const note      = document.getElementById('alphaSourceNote');
-  if (customRow) customRow.style.display = key === 'Custom' ? 'block' : 'none';
-  if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
-  else if (note) note.textContent = 'Enter 12 monthly values (Jan–Dec)';
+  if (key.startsWith('__saved__')) {
+    const name = key.slice(9);
+    const obj  = namedPresetsLoad();
+    if (obj[name]) {
+      if (customRow) {
+        customRow.style.display = 'block';
+        document.getElementById('alphaCustomInput').value = obj[name].alpha.join(',');
+        const ni = document.getElementById('alphaNameInput');
+        if (ni) ni.value = name;
+      }
+      if (note) note.textContent = `★ Named preset "${name}" — click Apply to activate`;
+    }
+  } else if (key === 'Custom') {
+    if (customRow) customRow.style.display = 'block';
+    if (note) note.textContent = 'Enter 12 monthly values (Jan–Dec)';
+  } else {
+    if (customRow) customRow.style.display = 'none';
+    if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
+    else if (note) note.textContent = '';
+  }
 }
 
 function applyAlphaPreset() {
   const key  = document.getElementById('alphaPresetSel').value;
-  let newAlpha;
+  let newAlpha, newLbl, saveAsName = null;
 
-  if (key === 'Custom') {
-    const raw = document.getElementById('alphaCustomInput').value;
+  if (key.startsWith('__saved__')) {
+    // Named preset selected from dropdown
+    const name = key.slice(9);
+    const obj  = namedPresetsLoad();
+    if (!obj[name]) { showToast('⚠ Preset not found — try reloading.', 2500); return; }
+    newAlpha = obj[name].alpha.slice();
+    newLbl   = name;
+  } else if (key === 'Custom') {
+    const raw   = document.getElementById('alphaCustomInput').value;
     const errEl = document.getElementById('alphaCustomError');
     newAlpha = alphaValidateCustom(raw);
-    if (!newAlpha) {
-      return;  // error shown by alphaValidateCustom
-    }
+    if (!newAlpha) return;
     errEl.style.display = 'none';
+    saveAsName = (document.getElementById('alphaNameInput')?.value||'').trim() || null;
+    newLbl = saveAsName || 'Custom';
   } else {
+    if (!ALPHA_PRESETS[key]) return;
     newAlpha = ALPHA_PRESETS[key].alpha.slice();
+    newLbl   = key;
   }
 
-  // Apply always — user explicitly clicked Apply
-  const saveAsName = (key === 'Custom') ? (document.getElementById('alphaNameInput')?.value||'').trim() : null;
-  const oldKey  = _activePreset.key;
-  const newFlag = ALPHA_PRESETS[key]?.flag || (saveAsName ? '★' : '✏');
-  const newLbl  = saveAsName || key;
-  ALPHA_MENSILE  = newAlpha.slice();
-  _activePreset  = { key: newLbl, alpha: newAlpha, custom: key === 'Custom' };
+  ALPHA_MENSILE = newAlpha.slice();
+  _activePreset = { key: newLbl, alpha: newAlpha, custom: key === 'Custom' || key.startsWith('__saved__') };
   alphaPresetSave(newLbl, newAlpha);
   alphaUpdateBadge();
 
-  // Save as named preset if name provided
-  if (saveAsName && typeof namedPresetsLoad === 'function') {
+  // Persist to named presets library if user gave a name
+  if (saveAsName) {
     const obj = namedPresetsLoad();
     obj[saveAsName] = { alpha: newAlpha, flag: '★' };
     namedPresetsSave(obj);
@@ -2266,20 +2300,14 @@ function applyAlphaPreset() {
   }
 
   const note = document.getElementById('alphaSourceNote');
-  if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
-  else if (note) note.textContent = saveAsName ? `★ Saved as "${saveAsName}"` : `Custom: [${newAlpha.join(', ')}]`;
-
-  showToast(`✓ α changed: ${ALPHA_PRESETS[_activePreset.key]?.flag||newFlag} ${newLbl} — recalculating HDWc…`, 3000);
-
-  // Trigger full recalculation using module-level coords (reliable)
-  const lat = _mapLat;
-  const lng = _mapLng;
-  console.log('[ALPHA] ALPHA_MENSILE[2]=', ALPHA_MENSILE[2], 'lat=', lat, 'lng=', lng);
-  if (!isNaN(lat) && !isNaN(lng)) {
-    setTimeout(() => selectPoint(lat, lng), 300);
-  } else {
-    showToast('α updated — select a point on the map to recalculate.', 3000);
+  if (note) {
+    if (ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
+    else note.textContent = `★ "${newLbl}" — [${newAlpha.map(v=>v.toFixed(2)).join(', ')}]`;
   }
+  showToast(`✓ α: ${newLbl} — recalculating HDWc…`, 3000);
+  const lat = _mapLat, lng = _mapLng;
+  if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
+  else showToast('α updated — select a point to recalculate.', 3000);
 }
 
 
@@ -5232,19 +5260,58 @@ function namedPresetsSave(obj){
   try{localStorage.setItem(NAMED_PRESETS_KEY,JSON.stringify(obj));}catch(e){}
 }
 function namedPresetsRender(){
-  // Add saved presets to alpha dropdown if not already there
-  const sel=document.getElementById('alphaPresetSel');
-  if(!sel)return;
-  // Remove old saved options
-  [...sel.options].filter(o=>o.dataset.saved).forEach(o=>o.remove());
-  const obj=namedPresetsLoad();
-  Object.keys(obj).forEach(k=>{
-    const opt=document.createElement('option');
-    opt.value='__saved__'+k; opt.textContent=`★ ${k}`; opt.dataset.saved='1';
-    // Insert before Custom
-    const customOpt=[...sel.options].find(o=>o.value==='Custom');
+  const sel = document.getElementById('alphaPresetSel');
+  if (!sel) return;
+  // Remove old saved options from dropdown
+  [...sel.options].filter(o => o.dataset.saved).forEach(o => o.remove());
+  const obj = namedPresetsLoad();
+  const names = Object.keys(obj);
+  names.forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = '__saved__' + k;
+    opt.textContent = `★ ${k}`;
+    opt.dataset.saved = '1';
+    const customOpt = [...sel.options].find(o => o.value === 'Custom');
     sel.insertBefore(opt, customOpt);
   });
+  // Render delete list below the select
+  let listEl = document.getElementById('namedPresetsList');
+  if (!listEl) {
+    listEl = document.createElement('div');
+    listEl.id = 'namedPresetsList';
+    listEl.style.cssText = 'margin-bottom:5px';
+    sel.parentNode.insertBefore(listEl, sel.nextSibling);
+  }
+  if (!names.length) { listEl.innerHTML = ''; return; }
+  listEl.innerHTML = names.map(k =>
+    `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:9.5px">
+      <span style="flex:1;color:var(--text);font-family:var(--mono);overflow:hidden;
+                   text-overflow:ellipsis;white-space:nowrap" title="${k}">★ ${k}</span>
+      <button onclick="deleteNamedPreset('${k.replace(/'/g,"\\'")}');" title="Delete preset"
+        style="font-size:9px;padding:1px 5px;border:1px solid #fca5a5;border-radius:3px;
+               background:#fef2f2;color:#b91c1c;cursor:pointer;flex-shrink:0;line-height:1.4">
+        ✕
+      </button>
+    </div>`
+  ).join('');
+}
+
+function deleteNamedPreset(name) {
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  const obj = namedPresetsLoad();
+  delete obj[name];
+  namedPresetsSave(obj);
+  // If active preset was this one, reset to Portugal
+  if (_activePreset.key === name) {
+    _activePreset = { key:'Portugal', alpha:ALPHA_PRESETS['Portugal'].alpha.slice(), custom:false };
+    ALPHA_MENSILE = _activePreset.alpha.slice();
+    alphaPresetSave('Portugal', _activePreset.alpha);
+    alphaUpdateBadge();
+    showToast(`Preset "${name}" deleted — reset to Portugal`, 2500);
+  } else {
+    showToast(`Preset "${name}" deleted`, 1800);
+  }
+  namedPresetsRender();
 }
 
 function loadNamedPreset(name){
@@ -5648,8 +5715,7 @@ function drawAlphaSensChart() {
   }
 }
 
-// drawAlphaSensChart is triggered by alphaUpdateBadge() (already patched above)
-// and by loadPoint via setTimeout(drawAlphaSensChart, 200)
+// drawAlphaSensChart is triggered inside alphaUpdateBadge() above
 
 
 function toggleAlphaSection() {
