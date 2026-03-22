@@ -428,49 +428,92 @@ tr:hover{background:#f9fafb}
             <div class="spill"><div class="sdot" id="pdot"></div><span id="ptxt">Ready</span></div>
             <button class="btn-pdf" id="btnPdfPanel" style="display:none" onclick="exportPDF()">📄 PDF Report</button>
           </div>
-          <!-- ── Alpha Preset Selector ──────────────────────────────────── -->
-      <div id="alphaPresetRow" style="display:none;margin:7px 0 5px;
-           background:var(--surface);border:1px solid var(--border);
-           border-radius:6px;padding:7px 10px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-          <span style="font-size:10px;font-weight:700;text-transform:uppercase;
-                letter-spacing:.06em;color:var(--dim)">α Regional</span>
-          <span id="alphaActiveFlag" style="font-size:14px">🇵🇹</span>
-          <span id="alphaActiveLabel" style="font-size:10px;font-weight:600;
-                color:var(--accent);font-family:var(--mono)">Portugal</span>
-        </div>
-        <select id="alphaPresetSel"
-          style="width:100%;font-size:10px;padding:4px 6px;border:1px solid var(--border);
-                 border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:5px"
-          onchange="onAlphaPresetChange()">
-          <option value="Portugal">🇵🇹 Portugal (ANEPC calibrated)</option>
-          <option value="California">🇺🇸 California</option>
-          <option value="Australia">🇦🇺 Australia</option>
-          <option value="Canada">🇨🇦 Canada</option>
-          <option value="Mediterranean">🌍 Mediterranean (W. Europe)</option>
-          <option value="Greece">🇬🇷 Greece / E. Mediterranean (W. Europe)</option>
-          <option value="Custom">✏ New custom…</option>
-        </select>
-        <div id="alphaCustomRow" style="display:none">
-          <input id="alphaNameInput" type="text" placeholder="Preset name (optional, to save)"
-            style="width:100%;font-size:10px;padding:4px 6px;border:1px solid var(--border);
-                   border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:4px">
-          <div style="font-size:9px;color:var(--dim);margin-bottom:3px">
-            12 monthly values Jan–Dec, comma-separated (0.0–1.0)
+          <!-- ══════════════════════════════════════════════════
+               α REGIONAL SECTION — collapsible card
+               ══════════════════════════════════════════════════ -->
+      <div id="alphaPresetRow" style="margin:7px 0 5px;
+           background:var(--surface);border:1.5px solid var(--border);
+           border-radius:8px;overflow:hidden">
+
+        <!-- ── Header (always visible, click to expand/collapse) ── -->
+        <div onclick="toggleAlphaSection()"
+          style="display:flex;align-items:center;justify-content:space-between;
+                 padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);
+                 background:var(--surface2)">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;font-weight:700;text-transform:uppercase;
+                  letter-spacing:.06em;color:var(--dim)">α Regional</span>
+            <span id="alphaActiveFlag" style="font-size:13px">🇵🇹</span>
+            <span id="alphaActiveLabel" style="font-size:10px;font-weight:700;
+                  color:var(--accent);font-family:var(--mono)">Portugal</span>
           </div>
-          <input id="alphaCustomInput" type="text" placeholder="0.20,0.20,0.30,…"
-            style="width:100%;font-size:10px;padding:4px 6px;border:1px solid var(--border);
-                   border-radius:4px;background:var(--surface);color:var(--text);
-                   font-family:var(--mono);margin-bottom:4px">
-          <div id="alphaCustomError" style="display:none;font-size:9px;color:#b91c1c;margin-bottom:3px"></div>
+          <span id="alphaChevron" style="font-size:10px;color:var(--dim)">▼</span>
         </div>
-        <button id="alphaApplyBtn" onclick="applyAlphaPreset()"
-          style="width:100%;font-size:10px;padding:4px 8px;background:var(--accent);
-                 color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">
-          ⚙ Apply α regional
-        </button>
-        <div id="alphaSourceNote" style="font-size:8px;color:var(--dim);margin-top:4px;
-             font-style:italic;line-height:1.4"></div>
+
+        <!-- ── Collapsible body ── -->
+        <div id="alphaBody" style="padding:8px 10px">
+
+          <!-- Preset selector -->
+          <select id="alphaPresetSel"
+            style="width:100%;font-size:10px;padding:4px 6px;border:1px solid var(--border);
+                   border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:5px"
+            onchange="onAlphaPresetChange()">
+            <option value="Portugal">🇵🇹 Portugal (ANEPC calibrated)</option>
+            <option value="California">🇺🇸 California</option>
+            <option value="Australia">🇦🇺 Australia</option>
+            <option value="Canada">🇨🇦 Canada</option>
+            <option value="Mediterranean">🌍 Mediterranean (W. Europe)</option>
+            <option value="Greece">🇬🇷 Greece / E. Mediterranean</option>
+            <option value="Custom">✏ Custom…</option>
+          </select>
+
+          <!-- Source citation -->
+          <div id="alphaSourceNote"
+            style="font-size:8px;color:var(--dim);margin-bottom:6px;font-style:italic;line-height:1.4"></div>
+
+          <!-- Custom input (shown only when Custom selected) -->
+          <div id="alphaCustomRow" style="display:none;margin-bottom:6px">
+            <input id="alphaNameInput" type="text" placeholder="Save as preset name (optional)"
+              style="width:100%;font-size:10px;padding:3px 6px;border:1px solid var(--border);
+                     border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:3px">
+            <div style="font-size:8.5px;color:var(--dim);margin-bottom:2px">
+              12 values Jan–Dec, comma-separated (0.0–1.0)
+            </div>
+            <input id="alphaCustomInput" type="text" placeholder="0.20,0.20,0.30,…"
+              style="width:100%;font-size:10px;padding:3px 6px;border:1px solid var(--border);
+                     border-radius:4px;background:var(--surface);color:var(--text);
+                     font-family:var(--mono)">
+            <div id="alphaCustomError"
+              style="display:none;font-size:9px;color:#b91c1c;margin-top:2px"></div>
+          </div>
+
+          <!-- Apply button -->
+          <button id="alphaApplyBtn" onclick="applyAlphaPreset()"
+            style="width:100%;font-size:10px;padding:4px 8px;background:var(--accent);
+                   color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;
+                   margin-bottom:8px;letter-spacing:.03em">
+            ⚙ Apply α regional
+          </button>
+
+          <!-- ── α Sensitivity chart & table ── -->
+          <div id="alphaSensRow" style="border-top:1px solid var(--border);padding-top:8px;display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:8.5px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:.05em;color:var(--dim)">α Sensitivity · 90d ERA5</span>
+              <span style="font-size:8.5px;color:var(--dim)" id="alphaSensMonth"></span>
+            </div>
+            <div id="alphaSensChart" style="height:120px;width:100%"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:2px;
+                        font-size:8px;color:var(--dim)">
+              <span>α=0</span>
+              <span id="alphaSensCurrentLbl" style="color:var(--accent);font-weight:700"></span>
+              <span>α=0.99</span>
+            </div>
+            <div id="alphaSensTable" style="margin-top:5px;font-size:9px"></div>
+            <div id="alphaSensStats" style="margin-top:4px;font-size:8.5px"></div>
+          </div>
+
+        </div><!-- end alphaBody -->
       </div>
 
   <button id="btnFixar" onclick="fixarPonto()">📌 Fix for comparison</button>
@@ -910,7 +953,7 @@ const ALPHA_PRESETS = {
   'Canada':        { flag:'🇨🇦', label:'Canada',        alpha:[0.08,0.08,0.12,0.22,0.45,0.68,0.72,0.68,0.40,0.18,0.08,0.08], source:'Stocks et al. 1998 · Canadian FWI' },
   'Mediterranean': { flag:'🌍',  label:'Mediterranean', alpha:[0.18,0.18,0.28,0.40,0.62,0.65,0.78,0.78,0.82,0.62,0.35,0.20], source:'Ruffault et al. 2020 · Turco et al. 2019' },
 };
-const ALPHA_LS_KEY = 'drisco_alpha_preset';
+const ALPHA_LS_KEY = 'firemeteo_alpha_preset';  // separate from PT dashboard
 
 function alphaPresetLoad() {
   try {
@@ -926,8 +969,16 @@ function alphaPresetSave(key, alpha) {
 }
 function alphaValidateCustom(str) {
   const vals = str.split(',').map(v => parseFloat(v.trim()));
-  if (vals.length !== 12) return null;
-  if (vals.some(v => isNaN(v) || v < 0 || v > 1)) return null;
+  const errEl = document.getElementById('alphaCustomError');
+  if (vals.length !== 12) {
+    if (errEl) { errEl.textContent = `⚠ Need 12 values, got ${vals.length}`; errEl.style.display='block'; }
+    return null;
+  }
+  if (vals.some(v => isNaN(v) || v < 0 || v > 1)) {
+    if (errEl) { errEl.textContent = '⚠ All values must be between 0.0 and 1.0'; errEl.style.display='block'; }
+    return null;
+  }
+  if (errEl) errEl.style.display = 'none';
   return vals;
 }
 
@@ -1015,7 +1066,10 @@ function initFromURLorLS() {
   lsRestorePoint();
 }
 
+let _mapLat=NaN, _mapLng=NaN;  // module-level, always current
+
 function selectPoint(lat,lng){
+  _mapLat=lat; _mapLng=lng;  // always store before anything else
   if(marker)map.removeLayer(marker);
   marker=L.marker([lat,lng],{icon:mIcon}).addTo(map);
   document.getElementById('maphint').classList.add('hidden');
@@ -1080,7 +1134,7 @@ async function queryAll(lat,lng){
     setStatus('active','Dados carregados');
     renderPanel(icnf,meteo);
     renderAreasArdidasBlock(fires);
-    if(meteo?.daily){chartData={meteo,lat,lng};renderAll(meteo);draw72h(meteo);}
+    if(meteo?.daily){chartData={meteo,lat,lng};window._lastMeteo=meteo;renderAll(meteo);draw72h(meteo);}
     lsSavePoint(lat, lng, document.getElementById('iNome').value.trim());
     
     const _anosStr=(icnf?.anos_unico||icnf?.anos_c_inc||'').toString();
@@ -2154,10 +2208,10 @@ function alphaUIInit() {
     document.getElementById('alphaCustomRow').style.display = 'block';
     document.getElementById('alphaCustomInput').value = _activePreset.alpha.join(',');
   }
-  alphaUpdateBadge();
+  alphaUpdateBadge(); setTimeout(drawAlphaSensChart, 200);
   const note = document.getElementById('alphaSourceNote');
   if (note && ALPHA_PRESETS[_activePreset.key]) note.textContent = ALPHA_PRESETS[_activePreset.key].source;
-  document.getElementById('alphaPresetRow').style.display = 'block';
+  // alphaPresetRow is always visible now
 }
 
 function alphaUpdateBadge() {
@@ -2165,6 +2219,7 @@ function alphaUpdateBadge() {
   const preset = ALPHA_PRESETS[p.key];
   document.getElementById('alphaActiveFlag').textContent  = preset ? preset.flag : '✏';
   document.getElementById('alphaActiveLabel').textContent = p.key;
+  setTimeout(drawAlphaSensChart, 100);
 }
 
 function onAlphaPresetChange() {
@@ -2185,30 +2240,18 @@ function applyAlphaPreset() {
     const errEl = document.getElementById('alphaCustomError');
     newAlpha = alphaValidateCustom(raw);
     if (!newAlpha) {
-      errEl.textContent = '⚠ Required: 12 values between 0.0 and 1.0, comma-separated';
-      errEl.style.display = 'block';
-      return;
+      return;  // error shown by alphaValidateCustom
     }
     errEl.style.display = 'none';
   } else {
     newAlpha = ALPHA_PRESETS[key].alpha.slice();
   }
 
-  // Check if actually different
-  const same = ALPHA_MENSILE.length === newAlpha.length &&
-               ALPHA_MENSILE.every((v,i) => Math.abs(v - newAlpha[i]) < 0.001);
-  if (same) { showToast('α already active — no change', 1800); return; }
-
-  // Confirm dialog
+  // Apply always — user explicitly clicked Apply
   const saveAsName = (key === 'Custom') ? (document.getElementById('alphaNameInput')?.value||'').trim() : null;
   const oldKey  = _activePreset.key;
   const newFlag = ALPHA_PRESETS[key]?.flag || (saveAsName ? '★' : '✏');
   const newLbl  = saveAsName || key;
-  const msg = `Change regional α parameters?\n\nFrom: ${ALPHA_PRESETS[oldKey]?.flag||'✏'} ${oldKey}\nTo: ${newFlag} ${newLbl}\n\n⚠ HDWc will be recalculated with a new ERA5 query.\nOperational thresholds are preserved.`;
-
-  if (!confirm(msg)) return;
-
-  // Apply
   ALPHA_MENSILE  = newAlpha.slice();
   _activePreset  = { key: newLbl, alpha: newAlpha, custom: key === 'Custom' };
   alphaPresetSave(newLbl, newAlpha);
@@ -2226,13 +2269,16 @@ function applyAlphaPreset() {
   if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
   else if (note) note.textContent = saveAsName ? `★ Saved as "${saveAsName}"` : `Custom: [${newAlpha.join(', ')}]`;
 
-  showToast(`α regional: ${newFlag} ${newLbl} — recalculating…`, 2500);
+  showToast(`✓ α changed: ${ALPHA_PRESETS[_activePreset.key]?.flag||newFlag} ${newLbl} — recalculating HDWc…`, 3000);
 
-  // Trigger full recalculation (new warmup query via selectPoint)
-  const lat = parseFloat(document.getElementById('iLat').value);
-  const lng = parseFloat(document.getElementById('iLon').value);
+  // Trigger full recalculation using module-level coords (reliable)
+  const lat = _mapLat;
+  const lng = _mapLng;
+  console.log('[ALPHA] ALPHA_MENSILE[2]=', ALPHA_MENSILE[2], 'lat=', lat, 'lng=', lng);
   if (!isNaN(lat) && !isNaN(lng)) {
     setTimeout(() => selectPoint(lat, lng), 300);
+  } else {
+    showToast('α updated — select a point on the map to recalculate.', 3000);
   }
 }
 
@@ -2249,6 +2295,7 @@ function renderAll(meteo){
   const hdwCum=calcHDWCum(hdwArr,dates,wu_hdw,wu_dates);
 
   setTimeout(()=>{
+    drawAlphaSensitivity(meteo);
     drawTemp(meteo,todayIdx,hdwArr,hdwCum);
     drawHDW(meteo,todayIdx,hdwArr,hdwCum);
     drawPrec(meteo,todayIdx);
@@ -5265,6 +5312,353 @@ function addLocalGeoJSON(input) {
   };
   reader.onerror = () => showToast('File read error', 3000);
   reader.readAsText(file);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// α SENSITIVITY ANALYSIS — E[HDWc] vs α using 90-day ERA5 distribution
+// ═══════════════════════════════════════════════════════════════════════
+
+// Theory (geometric series at stationarity):
+//   E[HDWc]  = μ_HDW / (1 - α)
+//   SD[HDWc] = σ_HDW / √(1 - α²)
+//   Min est  = max(0, E - 1.5·SD)
+//   Max est  = E + 1.5·SD
+// These are asymptotic values — gives upper bound on monthly expected range.
+
+function drawAlphaSensitivity(meteo) {
+  const row = document.getElementById('alphaSensRow');
+  if (!row) return;
+
+  // ── Get 90-day ERA5 HDW values ──────────────────────────────────────
+  const wu = getWarmup(meteo);
+  if (!wu.hdw || wu.hdw.length < 7) { row.style.display='none'; return; }
+
+  const hdwVals = wu.hdw.filter(v => v != null && v >= 0);
+  if (!hdwVals.length) return;
+
+  // ── Statistics ──────────────────────────────────────────────────────
+  const n    = hdwVals.length;
+  const mu   = hdwVals.reduce((s,v)=>s+v,0) / n;
+  const vari = hdwVals.reduce((s,v)=>s+(v-mu)**2,0) / n;
+  const sig  = Math.sqrt(vari);
+
+  // Current month α
+  const curMonth = new Date().getMonth();
+  const curAlpha = ALPHA_MENSILE[curMonth];
+
+  // ── Build α curve (100 points 0.01→0.99) ────────────────────────────
+  const alphas = Array.from({length:99}, (_,i) => (i+1)/100);
+  const means  = alphas.map(a => mu  / (1 - a));
+  const sds    = alphas.map(a => sig / Math.sqrt(1 - a*a));
+  const uppers = alphas.map((a,i) => means[i] + 1.5*sds[i]);
+  const lowers = alphas.map((a,i) => Math.max(0, means[i] - 1.5*sds[i]));
+
+  // ── Current α vertical marker ────────────────────────────────────────
+  const curMean  = mu  / (1 - curAlpha);
+  const curSD    = sig / Math.sqrt(1 - curAlpha*curAlpha);
+  const curUpper = curMean + 1.5*curSD;
+  const curLower = Math.max(0, curMean - 1.5*curSD);
+
+  // ── Monthly summary table ────────────────────────────────────────────
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const tableRows = ALPHA_MENSILE.map((a, m) => {
+    const eMean  = Math.round(mu  / (1 - a));
+    const eSD    = sig / Math.sqrt(1 - a*a);
+    const eMin   = Math.round(Math.max(0, eMean - 1.5*eSD));
+    const eMax   = Math.round(eMean + 1.5*eSD);
+    const isCur  = m === curMonth;
+    return `<tr style="${isCur?'background:rgba(232,93,47,.08);font-weight:700':''}">
+      <td style="padding:1px 5px;color:var(--dim)">${MONTH_NAMES[m]}</td>
+      <td style="padding:1px 5px;text-align:center;font-family:var(--mono)">${a.toFixed(2)}</td>
+      <td style="padding:1px 5px;text-align:right;color:#6b7280">${eMin}</td>
+      <td style="padding:1px 5px;text-align:right;color:var(--accent)">${eMean}</td>
+      <td style="padding:1px 5px;text-align:right;color:#b91c1c">${eMax}</td>
+    </tr>`;
+  }).join('');
+
+  const table = document.getElementById('alphaSensTable');
+  if (table) {
+    table.innerHTML = `
+      <div style="font-size:8.5px;font-weight:700;color:var(--dim);
+           text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">
+        Monthly HDWc range estimate (μ HDW=${mu.toFixed(1)}, σ=${sig.toFixed(1)})
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:9px">
+        <thead><tr style="color:var(--dim);border-bottom:1px solid var(--border)">
+          <th style="padding:1px 5px;text-align:left">Month</th>
+          <th style="padding:1px 5px">α</th>
+          <th style="padding:1px 5px;text-align:right">Min</th>
+          <th style="padding:1px 5px;text-align:right">E[HDWc]</th>
+          <th style="padding:1px 5px;text-align:right">Max</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      <div style="font-size:8px;color:var(--dim);margin-top:3px;font-style:italic">
+        ±1.5σ band · asymptotic stationary estimate · 90d ERA5 sample
+      </div>`;
+  }
+
+  // ── Plotly chart ─────────────────────────────────────────────────────
+  const chartEl = document.getElementById('alphaSensChart');
+  if (!chartEl) return;
+
+  const traces = [
+    // Confidence band (filled)
+    { x: alphas, y: uppers, type:'scatter', mode:'lines',
+      line:{width:0}, showlegend:false, hoverinfo:'skip',
+      name:'upper' },
+    { x: alphas, y: lowers, type:'scatter', mode:'lines',
+      fill:'tonexty', fillcolor:'rgba(232,93,47,0.15)',
+      line:{width:0}, showlegend:false, hoverinfo:'skip',
+      name:'lower' },
+    // Mean curve
+    { x: alphas, y: means, type:'scatter', mode:'lines',
+      line:{color:'#e85d2f', width:2},
+      name:'E[HDWc]',
+      hovertemplate:'α=%{x:.2f}<br>E[HDWc]=%{y:.0f}<extra></extra>' },
+    // Current α marker
+    { x: [curAlpha, curAlpha], y: [0, curUpper*1.1],
+      type:'scatter', mode:'lines',
+      line:{color:'#7c3aed', width:1.5, dash:'dot'},
+      showlegend:false, hoverinfo:'skip' },
+    { x: [curAlpha], y: [curMean],
+      type:'scatter', mode:'markers',
+      marker:{color:'#7c3aed', size:7, symbol:'circle'},
+      showlegend:false,
+      hovertemplate:'Current α=' + curAlpha.toFixed(2) + '<br>E[HDWc]=%{y:.0f}<extra></extra>' },
+  ];
+
+  const layout = {
+    height: 120, margin:{t:8,r:8,b:24,l:36},
+    xaxis:{title:'α',titlefont:{size:8},tickfont:{size:8},range:[0,1],
+           gridcolor:'#e5e7eb',zeroline:false},
+    yaxis:{title:'HDWc',titlefont:{size:8},tickfont:{size:8},
+           gridcolor:'#e5e7eb',zeroline:false},
+    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    showlegend:false,
+    font:{size:8},
+    shapes:[{
+      type:'line', x0:curAlpha, x1:curAlpha, y0:0, y1:1,
+      xref:'x', yref:'paper',
+      line:{color:'#7c3aed',width:1,dash:'dot'}
+    }]
+  };
+
+  Plotly.react('alphaSensChart', traces, layout,
+    {responsive:true, displayModeBar:false});
+
+  // Update labels
+  const lbl = document.getElementById('alphaSensCurrentLbl');
+  if (lbl) lbl.textContent = 'α=' + curAlpha.toFixed(2) +
+    ' → E=' + Math.round(curMean) +
+    ' [' + Math.round(curLower) + '–' + Math.round(curUpper) + ']';
+  const mLbl = document.getElementById('alphaSensMonth');
+  if (mLbl) mLbl.textContent = MONTH_NAMES[curMonth];
+
+  row.style.display = 'block';
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// α SENSITIVITY ANALYSIS — E[HDWc](α) curve with ±1σ bands
+// Uses ERA5 90-day warmup HDW daily values already in memory
+// ═══════════════════════════════════════════════════════════════════════════
+
+function computeAlphaSensitivity() {
+  // ── 1. Collect HDW daily values from warmup + forecast ──────────────
+  // Use _lastMeteo which contains both _histWarmup and daily forecast
+  if (!window._lastMeteo) return null;
+  const meteo = window._lastMeteo;
+
+  // Build HDW daily array from warmup (90 days ERA5)
+  const wu = getWarmup(meteo);
+  let hdwSamples = [];
+  if (wu.hdw && wu.hdw.length) {
+    hdwSamples = wu.hdw.filter(v => v != null && v >= 0);
+  }
+  // If warmup not available, fall back to 16-day forecast
+  if (hdwSamples.length < 7) {
+    const d = meteo.daily;
+    if (d && d.time) {
+      for (let i = 0; i < d.time.length; i++) {
+        const h = calcHDW(d.temperature_2m_max[i], d.relative_humidity_2m_mean[i],
+                          d.windspeed_10m_max[i], d.windgusts_10m_max?.[i]);
+        if (h != null) hdwSamples.push(h);
+      }
+    }
+  }
+  if (hdwSamples.length < 3) return null;
+
+  // ── 2. Compute μ and σ of HDW distribution ───────────────────────────
+  const n = hdwSamples.length;
+  const mu  = hdwSamples.reduce((a,b)=>a+b,0) / n;
+  const sig = Math.sqrt(hdwSamples.reduce((a,b)=>a+(b-mu)**2,0) / n);
+
+  // ── 3. Compute E[HDWc](α), Std[HDWc](α) for α ∈ [0, 0.99] ──────────
+  // Analytical formulas for geometric accumulator at stationarity:
+  //   E[HDWc]   = μ / (1 - α)
+  //   Std[HDWc] = σ / sqrt(1 - α²)
+  // These are exact for i.i.d. HDW — approximate for autocorrelated series
+  const alphaVals = [], eMean = [], eHigh = [], eLow = [];
+  for (let a = 0; a <= 0.99; a += 0.01) {
+    const ea = parseFloat(a.toFixed(2));
+    const mean = mu / (1 - ea);
+    const std  = sig / Math.sqrt(1 - ea * ea);
+    alphaVals.push(ea);
+    eMean.push(parseFloat(mean.toFixed(1)));
+    eHigh.push(parseFloat((mean + std).toFixed(1)));
+    eLow.push(parseFloat(Math.max(0, mean - std).toFixed(1)));
+  }
+
+  // ── 4. Monthly min/max/mean from per-month simulation ────────────────
+  // Simulate HDWc accumulation over 90 days using actual monthly α values
+  // This gives realistic seasonal intervals
+  const monthlyStats = computeMonthlyIntervals(hdwSamples, meteo);
+
+  return { alphaVals, eMean, eHigh, eLow, mu, sig, n, monthlyStats };
+}
+
+function computeMonthlyIntervals(hdwSamples, meteo) {
+  // Run N Monte Carlo simulations varying α ±30% from monthly value
+  // Returns per-month { mean, min, max } expected HDWc
+  const results = {};
+  const today = new Date();
+
+  // For each of the 12 months, compute E[HDWc] using that month's α
+  for (let m = 0; m < 12; m++) {
+    const alpha = ALPHA_MENSILE[m];
+    const mean  = hdwSamples.reduce((a,b)=>a+b,0) / hdwSamples.length / (1 - alpha);
+    const sig   = Math.sqrt(hdwSamples.reduce((s,v)=>s+(v-mean*(1-alpha))**2,0)/hdwSamples.length);
+    const std   = sig / Math.sqrt(1 - alpha * alpha);
+    const mName = ['Jan','Feb','Mar','Apr','May','Jun',
+                   'Jul','Aug','Sep','Oct','Nov','Dec'][m];
+    results[mName] = {
+      mean:  parseFloat(mean.toFixed(1)),
+      high:  parseFloat((mean + std).toFixed(1)),
+      low:   parseFloat(Math.max(0, mean - std).toFixed(1)),
+      alpha: alpha,
+    };
+  }
+  return results;
+}
+
+function drawAlphaSensChart() {
+  const chartEl = document.getElementById('alphaSensChart');
+  const statsEl = document.getElementById('alphaSensTable');
+  const rowEl   = document.getElementById('alphaSensRow');
+  if (!chartEl || !rowEl) return;
+
+  const data = computeAlphaSensitivity();
+  if (!data) { rowEl.style.display = 'none'; return; }
+  rowEl.style.display = 'block';
+
+  const { alphaVals, eMean, eHigh, eLow, mu, sig, n, monthlyStats } = data;
+  const alphaActive = ALPHA_MENSILE[new Date().getMonth()];
+
+  // ── Plotly traces ────────────────────────────────────────────────────
+  const traces = [
+    // ±1σ band
+    {
+      x: [...alphaVals, ...alphaVals.slice().reverse()],
+      y: [...eHigh, ...eLow.slice().reverse()],
+      fill: 'toself', fillcolor: 'rgba(232,93,47,0.12)',
+      line: { width: 0 }, showlegend: false, hoverinfo: 'skip', type: 'scatter'
+    },
+    // E[HDWc] mean curve
+    {
+      x: alphaVals, y: eMean, type: 'scatter', mode: 'lines',
+      name: 'E[HDWc]',
+      line: { color: '#e85d2f', width: 2 },
+      hovertemplate: 'α=%{x:.2f}<br>E[HDWc]=%{y:.1f}<extra></extra>'
+    },
+    // Current α marker
+    {
+      x: [alphaActive],
+      y: [parseFloat((mu / (1 - alphaActive)).toFixed(1))],
+      type: 'scatter', mode: 'markers',
+      name: 'Current α',
+      marker: { color: '#e85d2f', size: 8, symbol: 'circle',
+                line: { color: '#fff', width: 1.5 } },
+      hovertemplate: 'α₀=%{x:.2f}<br>E[HDWc]=%{y:.1f}<extra></extra>'
+    },
+    // Linearization tangent line around current α
+    {
+      x: [Math.max(0, alphaActive - 0.2), Math.min(0.99, alphaActive + 0.2)],
+      y: [
+        parseFloat((mu/(1-alphaActive) + mu/(1-alphaActive)**2 * (-0.2)).toFixed(1)),
+        parseFloat((mu/(1-alphaActive) + mu/(1-alphaActive)**2 * ( 0.2)).toFixed(1)),
+      ],
+      type: 'scatter', mode: 'lines',
+      name: 'Local tangent',
+      line: { color: '#6366f1', width: 1.5, dash: 'dash' },
+      hoverinfo: 'skip'
+    }
+  ];
+
+  const layout = {
+    height: 140, margin: { t: 6, r: 8, b: 30, l: 42 },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { size: 9, color: 'var(--text, #374151)' },
+    xaxis: {
+      title: { text: 'α', font: { size: 9 }, standoff: 4 },
+      range: [0, 1], tickfont: { size: 8 },
+      gridcolor: 'rgba(156,163,175,0.2)', zeroline: false
+    },
+    yaxis: {
+      title: { text: 'E[HDWc]', font: { size: 9 }, standoff: 2 },
+      tickfont: { size: 8 },
+      gridcolor: 'rgba(156,163,175,0.2)', zeroline: false
+    },
+    legend: { font: { size: 8 }, x: 0.01, y: 0.99,
+              bgcolor: 'transparent', orientation: 'h' },
+    showlegend: true,
+  };
+
+  Plotly.react(chartEl, traces, layout, { displayModeBar: false, responsive: true });
+
+  // Update label elements
+  const lbl = document.getElementById('alphaSensCurrentLbl');
+  const monthEl = document.getElementById('alphaSensMonth');
+  const eAtCurrent = parseFloat((mu / (1 - alphaActive)).toFixed(0));
+  const sdAtCurrent = parseFloat((sig / Math.sqrt(1 - alphaActive**2)).toFixed(0));
+  if (lbl) lbl.textContent = `α=${alphaActive.toFixed(2)} → E=${eAtCurrent} [${Math.max(0,eAtCurrent-sdAtCurrent).toFixed(0)}–${(eAtCurrent+sdAtCurrent).toFixed(0)}]`;
+  if (monthEl) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    monthEl.textContent = months[new Date().getMonth()];
+  }
+
+  // ── Monthly stats table ───────────────────────────────────────────────
+  if (statsEl && monthlyStats) { statsEl.innerHTML = '';
+    const rows = Object.entries(monthlyStats).map(([m, v]) =>
+      `<span style="display:inline-flex;gap:3px;align-items:center;
+                    padding:1px 4px;border-radius:3px;
+                    background:rgba(232,93,47,${(v.alpha*0.5).toFixed(2)})">
+        <b style="min-width:22px">${m}</b>
+        <span style="color:var(--dim)">μ</span><b>${v.mean.toFixed(0)}</b>
+        <span style="color:var(--dim)">±</span><span>${(v.high-v.mean).toFixed(0)}</span>
+        <span style="font-size:8px;opacity:.6">α=${v.alpha.toFixed(2)}</span>
+      </span>`
+    ).join(' ');
+    statsEl.innerHTML =
+      `<div style="font-size:8.5px;font-weight:700;color:var(--dim);margin-bottom:3px">
+        Monthly E[HDWc] μ ± 1σ · n=${n} days · HDW̄=${mu.toFixed(1)} σ=${sig.toFixed(1)}
+       </div>
+       <div style="display:flex;flex-wrap:wrap;gap:3px">${rows}</div>`;
+  }
+}
+
+// drawAlphaSensChart is triggered by alphaUpdateBadge() (already patched above)
+// and by loadPoint via setTimeout(drawAlphaSensChart, 200)
+
+
+function toggleAlphaSection() {
+  const body = document.getElementById('alphaBody');
+  const chev = document.getElementById('alphaChevron');
+  if (!body) return;
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? 'block' : 'none';
+  if (chev) chev.textContent = collapsed ? '▼' : '▶';
 }
 
 </script>
