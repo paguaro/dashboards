@@ -826,6 +826,8 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-meteo',7)">Precip. mm</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',8)">HDW inst.</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',9)">HDWc</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',10)" title="Soil Moisture 3–9cm (média diária)">Solo 3–9</th>
+                <th title="Tendência solo: média 3gg vs 3gg anteriores">Trend</th>
               </tr>
             </thead>
             <tbody id="tbl-meteo-body"></tbody>
@@ -855,6 +857,7 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-hourly',5)">Dir.</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',6)">Precip. mm</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',7)">HDW inst.</th>
+                <th class="sortable" onclick="sortTable('tbl-hourly',8)" title="Soil Moisture 0–1cm">Solo 0–1</th>
               </tr>
             </thead>
             <tbody id="tbl-hourly-body"></tbody>
@@ -1391,7 +1394,7 @@ async function fetchMeteo(lat,lng){
   
   const pF=new URLSearchParams({latitude:lat,longitude:lng,
     daily:'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean,precipitation_probability_max,winddirection_10m_dominant',
-    hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation',
+    hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation,soil_moisture_0_to_1cm,soil_moisture_3_to_9cm,soil_moisture_9_to_27cm',
     forecast_days:16,timezone:'Europe/Lisbon'});
 
   
@@ -1795,12 +1798,13 @@ function ts72Redraw(startIdx, endIdx) {
   const ws    = sl72('windspeed_10m');
   const wg    = sl72('windgusts_10m');
   const wd    = sl72('winddirection_10m');
-  const prec  = sl72('precipitation');
+  const prec   = sl72('precipitation');
+  const soil01 = sl72('soil_moisture_0_to_1cm');
   const hdws  = times.map((_,i) => calcHDW(temps[i],rhs[i],ws[i],wg[i])||0);
 
   draw72Temp(times, temps, rhs, ws, wg, wd);
   draw72HDW(times, hdws, ws, wg, wd);
-  draw72Prec(times, prec, rhs);
+  draw72Prec(times, prec, rhs, soil01);
 
   // Rosa: filter by slider date range
   const startDate = times[0]?.split('T')[0]||null;
@@ -1946,7 +1950,8 @@ function draw72HDW(times, hdws, ws, wg, wd) {
 }
 
 // ── Precipitação + HR ─────────────────────────────────────────────────────
-function draw72Prec(times, prec, rhs) {
+function draw72Prec(times, prec, rhs, soil01) {
+  const hasSoil = soil01 && soil01.some(v=>v!=null);
   const traces = [
     {
       x:times, y:prec, name:'Precip. mm', type:'bar',
@@ -1957,13 +1962,19 @@ function draw72Prec(times, prec, rhs) {
       x:times, y:rhs, name:'RH %', type:'scatter', mode:'lines',
       line:{color:'#16a34a',width:1.5}, yaxis:'y2',
       hovertemplate:'HR: %{y:.0f}%<extra></extra>'
-    }
+    },
+    ...(hasSoil?[{
+      x:times, y:soil01, name:'Solo 0–1cm', type:'scatter', mode:'lines',
+      line:{color:'#92400e',width:1.5,dash:'dot'}, yaxis:'y3',
+      hovertemplate:'Solo 0–1cm: %{y:.3f} m³/m³<extra></extra>'
+    }]:[])
   ];
   const layout = {
     ...baseLayout72(times),
     height: 180, barmode:'overlay',
     yaxis:{title:{text:'mm',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
     yaxis2:{title:{text:'RH %',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,100],showgrid:false,zeroline:false},
+    ...(hasSoil?{yaxis3:{title:{text:'Solo m³/m³',font:{size:9},standoff:8},tickfont:{size:8},overlaying:'y',side:'right',position:1,anchor:'free',showgrid:false,zeroline:false,range:[0,0.5],tickformat:'.2f'}}:{})
   };
   Plotly.react('chart-72prec', traces, layout, plotlyBaseConfig('72prec'));
 }
@@ -2429,6 +2440,18 @@ function drawHDW(meteo,todayIdx,hdwArr,hdwCum){
 
 function drawPrec(meteo,todayIdx){
   const d=meteo.daily; const dates=d.time; const today=dates[todayIdx];
+  // Aggregate hourly soil moisture → daily means
+  function dailySoilMean(key){
+    const h=meteo.hourly; if(!h?.time||!h[key]) return dates.map(()=>null);
+    return dates.map(dt=>{
+      const vals=h.time.reduce((acc,ts,i)=>{if(ts.startsWith(dt)&&h[key][i]!=null)acc.push(h[key][i]);return acc;},[]);
+      return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:null;
+    });
+  }
+  const soil39 = dailySoilMean('soil_moisture_3_to_9cm');
+  const soil927= dailySoilMean('soil_moisture_9_to_27cm');
+  const hasSoil39 = soil39.some(v=>v!=null);
+  const hasSoil927= soil927.some(v=>v!=null);
   const traces=[
     {x:dates,y:d.precipitation_sum,name:'Precip. mm',type:'bar',
      marker:{color:'#3b82f6',opacity:.65},width:.7*86400000},
@@ -2436,10 +2459,19 @@ function drawPrec(meteo,todayIdx){
      line:{color:'#0891b2',width:2},marker:{size:4},yaxis:'y2'},
     ...(d.precipitation_probability_max?[{x:dates,y:d.precipitation_probability_max,name:'Prob. chuva %',type:'scatter',mode:'lines',
      line:{color:'#6366f1',width:1.5,dash:'dot'},yaxis:'y2'}]:[]),
+    ...(hasSoil39?[{x:dates,y:soil39,name:'Solo 3–9cm',type:'scatter',mode:'lines+markers',
+     line:{color:'#92400e',width:1.5,dash:'dash'},marker:{size:3},yaxis:'y3',
+     hovertemplate:'Solo 3–9cm: %{y:.3f} m³/m³<extra></extra>'}]:[]),
+    ...(hasSoil927?[{x:dates,y:soil927,name:'Solo 9–27cm',type:'scatter',mode:'lines+markers',
+     line:{color:'#d97706',width:1.5,dash:'dot'},marker:{size:3},yaxis:'y3',
+     hovertemplate:'Solo 9–27cm: %{y:.3f} m³/m³<extra></extra>'}]:[]),
   ];
   const layout=plotlyTimeLayout('mm','%');
   layout.yaxis2.range=[0,105];
   layout.shapes=[todayLine(today)];
+  if(hasSoil39||hasSoil927){
+    layout.yaxis3={title:{text:'Solo m³/m³',font:{size:9},standoff:8},tickfont:{size:8},overlaying:'y',side:'right',position:1,anchor:'free',showgrid:false,zeroline:false,range:[0,0.5],tickformat:'.2f'};
+  }
   applyAnnotations('chart-prec',layout);
   Plotly.react('chart-prec',traces,layout,plotlyBaseConfig('precipitacao_hr'));
 }
@@ -2768,6 +2800,39 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
   const d=meteo.daily; const dates=d.time;
   const today=dates[todayIdx];
   document.getElementById('tbl-meteo-sub').textContent=`${dates.length} days · clique coluna para ordenar`;
+
+  // ── Daily soil moisture (mean from hourly) ────────────────────────────────
+  function dailySoilArr(key){
+    const h=meteo.hourly; if(!h?.time||!h[key]) return dates.map(()=>null);
+    return dates.map(dt=>{
+      const vals=h.time.reduce((acc,ts,i)=>{if(ts.startsWith(dt)&&h[key][i]!=null)acc.push(h[key][i]);return acc;},[]);
+      return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:null;
+    });
+  }
+  const soil39arr = dailySoilArr('soil_moisture_3_to_9cm');
+
+  // ── Soil traffic light ────────────────────────────────────────────────────
+  function soilColor(v){
+    if(v==null) return '';
+    if(v<0.05)  return 'background:#fee2e2;color:#991b1b';  // very dry – red
+    if(v<0.10)  return 'background:#ffedd5;color:#9a3412';  // dry – orange
+    if(v<0.20)  return 'background:#fefce8;color:#713f12';  // moderate – yellow
+    return               'background:#dcfce7;color:#166534'; // moist – green
+  }
+
+  // ── Soil trend (avg last 3d vs prev 3d) ───────────────────────────────────
+  function soilTrend(idx){
+    const w=3;
+    const cur = soil39arr.slice(Math.max(0,idx-w+1),idx+1).filter(v=>v!=null);
+    const prv = soil39arr.slice(Math.max(0,idx-2*w+1),Math.max(0,idx-w+1)).filter(v=>v!=null);
+    if(!cur.length||!prv.length) return '<span style="color:#9ca3af">—</span>';
+    const avg = a=>a.reduce((s,v)=>s+v,0)/a.length;
+    const diff = avg(cur)-avg(prv);
+    if(diff>0.005)  return '<span style="color:#16a34a;font-size:13px" title="Em subida">↑</span>';
+    if(diff<-0.005) return '<span style="color:#dc2626;font-size:13px" title="Em descida">↓</span>';
+    return '<span style="color:#d97706;font-size:13px" title="Estável">→</span>';
+  }
+
   const tbody=document.getElementById('tbl-meteo-body');
   tbody.innerHTML=dates.map((dt,i)=>{
     const isToday=dt===today;
@@ -2775,6 +2840,8 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
     const hdw=hdwArr[i]; const hc=hdwCum[i];
     const hcl=hdw!=null?hdwInstClass(hdw):{label:'—',td:''};
     const rowStyle=isToday?'background:#fff8f5;border-left:3px solid var(--accent)':(isFut?'color:#6b7280':'');
+    const s39=soil39arr[i];
+    const soilStyle=soilColor(s39);
     return`<tr style="${rowStyle}">
       <td class="td-date" data-iso="${dt}">${new Date(dt+'T12:00:00').toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'2-digit'})}${isToday?' ●':''}</td>
       <td style="color:#e85d2f;font-weight:600">${d.temperature_2m_max[i]!=null?d.temperature_2m_max[i].toFixed(1):'—'}</td>
@@ -2786,6 +2853,8 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
       <td style="color:#3b82f6">${d.precipitation_sum[i]!=null?d.precipitation_sum[i].toFixed(1):'—'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'—'}</td>
       <td class="${hdwCumClass(hc||0).label==='MUITO BAIXO'?'td-hdw-mbx':hdwCumClass(hc||0).label==='BAIXO'?'td-hdw-bx':'td-hdw-alt'}">${hc!=null?hc.toFixed(1):'—'}</td>
+      <td style="font-family:var(--mono);font-size:9px;text-align:center;${soilStyle}">${s39!=null?s39.toFixed(3):'—'}</td>
+      <td style="text-align:center">${soilTrend(i)}</td>
     </tr>`;
   }).join('');
 }
@@ -3635,7 +3704,7 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
   const h=meteo.hourly;
   if(!h?.time){
     document.getElementById('tbl-hourly-body').innerHTML=
-      '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:12px">Dados horários não disponíveis</td></tr>';
+      '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:12px">Dados horários não disponíveis</td></tr>';
     return;
   }
   const today=new Date().toISOString().split('T')[0];
@@ -3661,10 +3730,13 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
     const wg=h.windgusts_10m?.[i];
     const wd=h.winddirection_10m?.[i];
     const pr=h.precipitation?.[i];
+    const s01=h.soil_moisture_0_to_1cm?.[i];
     const hdw=(t!=null&&rh!=null&&ws!=null)?calcHDW(t,rh,ws,wg):null;
     const hcl=hdw!=null?hdwInstClass(hdw):{label:'—',td:''};
     const rowStyle=isToday?'background:#fff8f5;border-left:3px solid var(--accent)':(isFut?'color:#6b7280':'');
     const dateLabel=new Date(dt+'T12:00:00').toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'2-digit'});
+    // Soil 0-1cm colore (secco=arancio, umido=verde)
+    const soilStyle01=s01==null?'':(s01<0.05?'color:#dc2626;font-weight:600':s01<0.15?'color:#d97706':'color:#16a34a');
     return`<tr style="${rowStyle}" data-ts="${ts}">
       <td class="td-date" data-iso="${ts}" style="font-family:var(--mono);font-size:9px;white-space:nowrap">${dateLabel} ${hour.slice(0,5)}${isToday?' ●':''}</td>
       <td style="color:#e85d2f;font-weight:600">${t!=null?t.toFixed(1):'—'}</td>
@@ -3674,6 +3746,7 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
       <td style="color:#6b7280;font-size:9px">${wd!=null?windDirLabel(wd):'—'}</td>
       <td style="color:#3b82f6">${pr!=null?pr.toFixed(1):'—'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'—'}</td>
+      <td style="font-family:var(--mono);font-size:9px;${soilStyle01}">${s01!=null?s01.toFixed(3):'—'}</td>
     </tr>`;
   }).join('');
 }
@@ -3685,7 +3758,7 @@ function exportCSVHourly(){
   const dt=new Date().toISOString().split('T')[0];
   const bom='﻿';
   const sep=';';
-  const header=['Data/Hora','T °C','RH %','Wind km/h','Gust km/h','Dir.','Precip mm','HDW inst.'].join(sep);
+  const header=['Data/Hora','T °C','RH %','Wind km/h','Gust km/h','Dir.','Precip mm','HDW inst.','Solo 0-1cm m3/m3'].join(sep);
   const rows=h.time.map((ts,i)=>{
     const t=h.temperature_2m?.[i];
     const rh=h.relativehumidity_2m?.[i];
@@ -3693,6 +3766,7 @@ function exportCSVHourly(){
     const wg=h.windgusts_10m?.[i];
     const wd=h.winddirection_10m?.[i];
     const pr=h.precipitation?.[i];
+    const s01=h.soil_moisture_0_to_1cm?.[i];
     const hdw=(t!=null&&rh!=null&&ws!=null)?calcHDW(t,rh,ws,wg).toFixed(2):'';    return[
       ts,
       t!=null?t.toFixed(1):'',
@@ -3701,7 +3775,8 @@ function exportCSVHourly(){
       wg!=null?wg.toFixed(1):'',
       wd!=null?windDirLabel(wd):'',
       pr!=null?pr.toFixed(1):'',
-      hdw
+      hdw,
+      s01!=null?s01.toFixed(4):''
     ].join(sep);
   });
   const csv=bom+header+'\r\n'+rows.join('\r\n');
