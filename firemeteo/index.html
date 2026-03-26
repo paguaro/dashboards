@@ -313,7 +313,7 @@ tr:hover{background:#f9fafb}
     <div><div class="hdr-title">Fire Risk</div><div class="hdr-sub">EFFIS + Open-Meteo · Operational</div></div>
   </div>
   <div style="flex:1"></div>
-  <span class="hdr-badge">v5.0</span>
+  <span class="hdr-badge">v6.0</span>
   <span class="hdr-nome" id="hdrNome" style="display:none"></span>
   <div id="hdrSemaforo"><div class="sem-dot" id="semDot"></div><span id="semLabel">—</span></div>
   <div id="hdrPeakDay" style="display:none;font-family:var(--mono);font-size:12px;font-weight:700;padding:5px 13px;border-radius:12px;border:1.5px solid transparent;white-space:nowrap;letter-spacing:.01em"></div>
@@ -470,6 +470,18 @@ tr:hover{background:#f9fafb}
           <!-- Source citation -->
           <div id="alphaSourceNote"
             style="font-size:8px;color:var(--dim);margin-bottom:6px;font-style:italic;line-height:1.4"></div>
+        <div id="soglieCustomRow" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Soglie HDWc custom</div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+            <label style="cursor:pointer;font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text)">
+              ⬆ JSON
+              <input type="file" accept=".json" style="display:none" onchange="uploadSoglieJSON(this)">
+            </label>
+            <span id="soglieCustomLabel" style="font-size:9px;color:var(--dim);flex:1;min-width:60px">nenhum ficheiro</span>
+            <button id="soglieCustomClear" onclick="clearCustomSoglie()" style="display:none;font-size:9px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:none;cursor:pointer;color:var(--dim)">✕</button>
+          </div>
+          <div style="font-size:8px;color:var(--dim);margin-top:3px">JSON: {mesi:{jan:{p10,p25,p50,p75,p90,p95}…}, hdwc_peak:{p25…p95}}</div>
+        </div>
 
           <!-- Custom input (shown only when Custom selected) -->
           <div id="alphaCustomRow" style="display:none;margin-bottom:6px">
@@ -486,6 +498,9 @@ tr:hover{background:#f9fafb}
             <div id="alphaCustomError"
               style="display:none;font-size:9px;color:#b91c1c;margin-top:2px"></div>
           </div>
+
+          <!-- Saved presets list with delete controls -->
+          <div id="namedPresetsList" style="margin-bottom:4px"></div>
 
           <!-- Apply button -->
           <button id="alphaApplyBtn" onclick="applyAlphaPreset()"
@@ -826,8 +841,6 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-meteo',7)">Precip. mm</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',8)">HDW inst.</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',9)">HDWc</th>
-                <th class="sortable" onclick="sortTable('tbl-meteo',10)" title="Soil Moisture 3–9cm (média diária)">Solo 3–9</th>
-                <th title="Tendência solo: média 3gg vs 3gg anteriores">Trend</th>
               </tr>
             </thead>
             <tbody id="tbl-meteo-body"></tbody>
@@ -857,7 +870,6 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-hourly',5)">Dir.</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',6)">Precip. mm</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',7)">HDW inst.</th>
-                <th class="sortable" onclick="sortTable('tbl-hourly',8)" title="Soil Moisture 0–1cm">Solo 0–1</th>
               </tr>
             </thead>
             <tbody id="tbl-hourly-body"></tbody>
@@ -959,19 +971,16 @@ const ALPHA_PRESETS = {
 const ALPHA_LS_KEY = 'firemeteo_alpha_preset';  // separate from PT dashboard
 
 function alphaPresetLoad() {
+  const FM_DEFAULT = 'Greece'; // firemeteo default region
   try {
     const s = JSON.parse(localStorage.getItem(ALPHA_LS_KEY)||'null');
-    if (!s) return { key:'Portugal', alpha:ALPHA_PRESETS['Portugal'].alpha.slice(), custom:false };
-    // Built-in preset — ignore stored alpha, always use canonical values
+    if (!s) return { key:FM_DEFAULT, alpha:ALPHA_PRESETS[FM_DEFAULT].alpha.slice(), custom:false };
     if (s.key && ALPHA_PRESETS[s.key]) return { key:s.key, alpha:ALPHA_PRESETS[s.key].alpha.slice(), custom:false };
-    // Anonymous custom
-    if (s.key==='Custom' && Array.isArray(s.alpha) && s.alpha.length===12) return { key:'Custom', alpha:s.alpha.slice(), custom:true };
-    // Named saved preset — key not in ALPHA_PRESETS but alpha array is valid
-    if (s.key && Array.isArray(s.alpha) && s.alpha.length===12
-        && s.alpha.every(v => typeof v==='number' && v>=0 && v<=1))
-      return { key:s.key, alpha:s.alpha.slice(), custom:true };
+    if (s.key==='Custom' && Array.isArray(s.alpha) && s.alpha.length===12) return { key:'Custom', alpha:s.alpha, custom:true };
+    // Named saved preset: alpha stored in LS, key not in ALPHA_PRESETS
+    if (s.key && Array.isArray(s.alpha) && s.alpha.length===12) return { key:s.key, alpha:s.alpha.slice(), custom:true };
   } catch(e) {}
-  return { key:'Portugal', alpha:ALPHA_PRESETS['Portugal'].alpha.slice(), custom:false };
+  return { key:FM_DEFAULT, alpha:ALPHA_PRESETS[FM_DEFAULT].alpha.slice(), custom:false };
 }
 function alphaPresetSave(key, alpha) {
   try { localStorage.setItem(ALPHA_LS_KEY, JSON.stringify({key, alpha})); } catch(e) {}
@@ -997,7 +1006,82 @@ let ALPHA_MENSILE  = _activePreset.alpha.slice();
 
 const HDW_P75_MENSILE = [18, 18, 40, 56, 120, 120, 119, 113, 55, 35, 18, 18];
 
-const HDWC_SOGLIE = {"generato":"2026-03-13T20:33:18.800614","periodo":"2000-2025","regioes":["(40.2,-8.4)","(39.75,-8.8)","(40.35,-7.6)","(40.66,-7.9)","(41.7,-7.5)","(37.18,-8.1)","(37.9,-7.9)","(41.1,-7.5)","(38.57,-7.91)"],"n_anni":26,"window_days":37,"alpha":[0.2,0.2,0.3,0.42,0.77,0.92,0.6,0.6,0.5,0.65,0.38,0.22],"nota":"Valori comparabili col dashboard nella stessa data/stagione \u00b7 scalato x1.20 per HDWeff 70/30","mesi":{"jan":{"p10":7.8,"p25":7.9,"p50":11.8,"p75":19.6,"p90":22.7,"p95":30.4,"media":14.6,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":7.0,"p25":9.7,"p50":15.6,"p75":21.0,"p90":25.2,"p95":27.1,"media":15.7,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":15.8,"p25":22.0,"p50":24.7,"p75":46.8,"p90":68.6,"p95":100.4,"media":36.7,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":26.4,"p25":31.4,"p50":51.4,"p75":78.2,"p90":86.5,"p95":89.3,"media":55.2,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":152.4,"p25":209.2,"p50":282.0,"p75":355.7,"p90":372.1,"p95":378.8,"media":268.8,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":666.0,"p25":770.4,"p50":913.2,"p75":1023.5,"p90":1048.2,"p95":1098.8,"media":877.8,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":202.4,"p25":207.0,"p50":225.2,"p75":288.1,"p90":332.4,"p95":337.6,"media":259.8,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":130.3,"p25":145.7,"p50":179.8,"p75":247.2,"p90":288.5,"p95":311.0,"media":198.6,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":39.6,"p25":52.4,"p50":93.6,"p75":134.4,"p90":176.4,"p95":288.6,"media":110.8,"label":"30/Set","mmdd":"09-30"},"out":{"p10":34.1,"p25":40.3,"p50":51.1,"p75":67.6,"p90":91.8,"p95":143.9,"media":66.1,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":9.2,"p25":11.3,"p50":14.9,"p75":21.4,"p90":26.8,"p95":31.3,"media":17.4,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":5.3,"p25":5.9,"p50":8.9,"p75":17.6,"p90":29.6,"p95":31.1,"media":13.6,"label":"31/Dez","mmdd":"12-31"}},"hdwc_peak":{"p25":685.4,"p50":877.8,"p75":1019.9,"p90":1042.0,"p95":1086.2},"hdwc_oggi":{"data":"13/03","mmdd":"03-13","p10":16.6,"p25":22.7,"p50":26.2,"p75":32.3,"p90":47.8,"p95":58.7,"media":29.3}};
+const HDWC_SOGLIE_PRESETS = {
+  "Portugal":{mesi:{"jan":{"p10":7.8,"p25":7.9,"p50":11.8,"p75":19.6,"p90":22.7,"p95":30.4,"media":14.6,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":7.0,"p25":9.7,"p50":15.6,"p75":21.0,"p90":25.2,"p95":27.1,"media":15.7,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":15.8,"p25":22.0,"p50":24.7,"p75":46.8,"p90":68.6,"p95":100.4,"media":36.7,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":26.4,"p25":31.4,"p50":51.4,"p75":78.2,"p90":86.5,"p95":89.3,"media":55.2,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":152.4,"p25":209.2,"p50":282.0,"p75":355.7,"p90":372.1,"p95":378.8,"media":268.8,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":666.0,"p25":770.4,"p50":913.2,"p75":1023.5,"p90":1048.2,"p95":1098.8,"media":877.8,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":202.4,"p25":207.0,"p50":225.2,"p75":288.1,"p90":332.4,"p95":337.6,"media":259.8,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":130.3,"p25":145.7,"p50":179.8,"p75":247.2,"p90":288.5,"p95":311.0,"media":198.6,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":39.6,"p25":52.4,"p50":93.6,"p75":134.4,"p90":176.4,"p95":288.6,"media":110.8,"label":"30/Set","mmdd":"09-30"},"out":{"p10":34.1,"p25":40.3,"p50":51.1,"p75":67.6,"p90":91.8,"p95":143.9,"media":66.1,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":9.2,"p25":11.3,"p50":14.9,"p75":21.4,"p90":26.8,"p95":31.3,"media":17.4,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":5.3,"p25":5.9,"p50":8.9,"p75":17.6,"p90":29.6,"p95":31.1,"media":13.6,"label":"31/Dez","mmdd":"12-31"}},hdwc_peak:{"p25":685.4,"p50":877.8,"p75":1019.9,"p90":1042.0,"p95":1086.2}},
+  "Australia":{mesi:{"jan":{"p10":1746.0,"p25":1423.4,"p50":1633.9,"p75":1986.6,"p90":1735.7,"p95":1921.4,"media":2021.6,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":1066.5,"p25":1158.7,"p50":1393.7,"p75":1392.4,"p90":1312.3,"p95":1179.0,"media":1402.7,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":651.5,"p25":760.4,"p50":693.6,"p75":1041.1,"p90":1282.6,"p95":1645.4,"media":1030.5,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":144.4,"p25":161.9,"p50":242.5,"p75":346.3,"p90":346.2,"p95":338.1,"media":260.4,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":62.3,"p25":91.0,"p50":133.6,"p75":185.9,"p90":214.9,"p95":222.3,"media":127.3,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":40.1,"p25":52.7,"p50":73.1,"p75":96.0,"p90":116.2,"p95":133.5,"media":70.2,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":1.9,"p25":2.4,"p50":3.3,"p75":5.5,"p90":7.9,"p95":8.8,"media":3.9,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":2.2,"p25":3.0,"p50":4.7,"p75":8.4,"p90":11.9,"p95":14.8,"media":5.2,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":3.3,"p25":5.1,"p50":10.7,"p75":18.2,"p90":28.1,"p95":50.9,"media":12.7,"label":"30/Set","mmdd":"09-30"},"out":{"p10":88.6,"p25":104.4,"p50":129.5,"p75":163.4,"p90":217.3,"p95":333.6,"media":167.5,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":292.3,"p25":309.1,"p50":346.8,"p75":416.7,"p90":448.3,"p95":463.9,"media":405.0,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":1317.0,"p25":1109.8,"p50":1190.9,"p75":1672.7,"p90":2059.8,"p95":1824.2,"media":1819.8,"label":"31/Dez","mmdd":"12-31"}},hdwc_peak:{"p25":1218.7,"p50":1522.7,"p75":1732.3,"p90":1709.4,"p95":1740.6}},
+  "California":{mesi:{"jan":{"p10":11.1,"p25":11.6,"p50":17.5,"p75":28.2,"p90":32.4,"p95":42.5,"media":21.6,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":10.0,"p25":13.8,"p50":21.9,"p75":29.3,"p90":36.5,"p95":39.2,"media":22.1,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":21.6,"p25":30.0,"p50":33.9,"p75":64.8,"p90":99.3,"p95":143.4,"media":50.3,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":37.2,"p25":44.2,"p50":70.1,"p75":109.2,"p90":118.2,"p95":120.7,"media":75.3,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":150.3,"p25":207.2,"p50":281.7,"p75":352.1,"p90":380.0,"p95":384.0,"media":268.5,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":1068.6,"p25":1190.4,"p50":1335.9,"p75":1425.5,"p90":1405.0,"p95":1447.9,"media":1284.1,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":427.9,"p25":423.9,"p50":444.1,"p75":543.7,"p90":601.1,"p95":600.2,"media":512.3,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":479.1,"p25":508.4,"p50":591.1,"p75":768.0,"p90":842.6,"p95":880.5,"media":652.9,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":114.6,"p25":145.7,"p50":251.4,"p75":344.6,"p90":427.4,"p95":667.3,"media":297.6,"label":"30/Set","mmdd":"09-30"},"out":{"p10":149.7,"p25":167.8,"p50":198.1,"p75":239.3,"p90":309.9,"p95":472.6,"media":256.3,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":19.4,"p25":22.5,"p50":28.6,"p75":39.5,"p90":49.0,"p95":54.4,"media":33.4,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":9.8,"p25":10.6,"p50":14.9,"p75":28.3,"p90":47.4,"p95":50.4,"media":22.8,"label":"31/Dez","mmdd":"12-31"}},hdwc_peak:{"p25":1526.0,"p50":1919.3,"p75":2199.8,"p90":2170.4,"p95":2214.8}},
+  "Canada":{mesi:{"jan":{"p10":1.8,"p25":2.1,"p50":3.6,"p75":6.6,"p90":8.6,"p95":11.8,"media":4.5,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":1.5,"p25":2.3,"p50":4.0,"p75":6.1,"p90":8.6,"p95":10.0,"media":4.1,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":5.7,"p25":8.4,"p50":9.7,"p75":18.1,"p90":28.4,"p95":41.3,"media":14.3,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":13.7,"p25":17.2,"p50":29.9,"p75":47.8,"p90":55.1,"p95":58.2,"media":32.1,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":89.1,"p25":126.8,"p50":177.2,"p75":235.1,"p90":256.7,"p95":260.7,"media":168.9,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":747.3,"p25":841.2,"p50":961.5,"p75":1033.1,"p90":1013.1,"p95":1056.6,"media":924.2,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":116.4,"p25":121.8,"p50":135.9,"p75":178.8,"p90":211.3,"p95":219.1,"media":156.8,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":61.2,"p25":71.1,"p50":91.4,"p75":131.5,"p90":157.4,"p95":175.7,"media":101.0,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":6.1,"p25":9.0,"p50":18.4,"p75":30.6,"p90":45.2,"p95":80.8,"media":21.8,"label":"30/Set","mmdd":"09-30"},"out":{"p10":8.6,"p25":11.4,"p50":16.1,"p75":23.9,"p90":37.5,"p95":63.7,"media":20.8,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":2.4,"p25":3.1,"p50":4.3,"p75":6.5,"p90":8.7,"p95":10.0,"media":5.0,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":3.2,"p25":3.3,"p50":4.2,"p75":7.1,"p90":10.3,"p95":10.4,"media":6.4,"label":"31/Dez","mmdd":"12-31"}},hdwc_peak:{"p25":443.9,"p50":580.5,"p75":692.9,"p90":725.8,"p95":778.4}},
+  "Mediterranean":{mesi:{"jan":{"p10":8.4,"p25":8.5,"p50":13.3,"p75":22.1,"p90":25.3,"p95":34.1,"media":16.4,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":7.8,"p25":10.7,"p50":17.3,"p75":22.8,"p90":29.6,"p95":32.0,"media":17.4,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":19.7,"p25":27.2,"p50":30.0,"p75":54.7,"p90":82.5,"p95":122.5,"media":44.5,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":31.6,"p25":38.1,"p50":61.4,"p75":92.0,"p90":100.8,"p95":105.7,"media":65.9,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":157.3,"p25":215.4,"p50":292.0,"p75":370.9,"p90":392.4,"p95":400.2,"media":278.3,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":794.3,"p25":907.7,"p50":1057.1,"p75":1154.2,"p90":1172.4,"p95":1222.9,"media":1016.1,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":216.4,"p25":219.4,"p50":238.7,"p75":303.1,"p90":349.3,"p95":356.6,"media":275.4,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":142.8,"p25":159.7,"p50":194.2,"p75":269.9,"p90":317.8,"p95":345.3,"media":214.5,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":37.4,"p25":49.5,"p50":89.5,"p75":129.9,"p90":171.5,"p95":278.2,"media":106.0,"label":"30/Set","mmdd":"09-30"},"out":{"p10":38.7,"p25":46.1,"p50":57.6,"p75":73.5,"p90":101.5,"p95":162.6,"media":74.5,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":10.8,"p25":12.8,"p50":16.6,"p75":23.6,"p90":29.9,"p95":34.4,"media":19.4,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":7.8,"p25":8.2,"p50":11.5,"p75":21.3,"p90":34.3,"p95":35.3,"media":17.6,"label":"31/Dez","mmdd":"12-31"}},hdwc_peak:{"p25":727.9,"p50":931.6,"p75":1100.7,"p90":1126.6,"p95":1179.2}},
+  // Greece / E. Mediterranean: Mediterranean soglie scaled +15% for Jun-Sep to reflect higher α (0.88-0.90 vs 0.78-0.82)
+  // Proxy calibration — replace with Greece-specific data when available
+  "Greece":{mesi:{"jan":{"p10":8.4,"p25":8.5,"p50":13.3,"p75":22.1,"p90":25.3,"p95":34.1,"media":16.4,"label":"31/Jan","mmdd":"01-31"},"feb":{"p10":7.8,"p25":10.7,"p50":17.3,"p75":22.8,"p90":29.6,"p95":32.0,"media":17.4,"label":"28/Fev","mmdd":"02-28"},"mar":{"p10":19.7,"p25":27.2,"p50":30.0,"p75":54.7,"p90":82.5,"p95":122.5,"media":44.5,"label":"31/Mar","mmdd":"03-31"},"apr":{"p10":31.6,"p25":38.1,"p50":61.4,"p75":92.0,"p90":100.8,"p95":105.7,"media":65.9,"label":"30/Abr","mmdd":"04-30"},"mai":{"p10":181.0,"p25":247.7,"p50":335.8,"p75":426.5,"p90":451.3,"p95":460.2,"media":320.0,"label":"31/Mai","mmdd":"05-31"},"jun":{"p10":913.4,"p25":1043.9,"p50":1215.7,"p75":1327.3,"p90":1348.3,"p95":1406.3,"media":1168.5,"label":"30/Jun","mmdd":"06-30"},"jul":{"p10":248.9,"p25":252.3,"p50":274.5,"p75":348.6,"p90":401.7,"p95":410.1,"media":316.7,"label":"31/Jul","mmdd":"07-31"},"ago":{"p10":164.2,"p25":183.7,"p50":223.3,"p75":310.4,"p90":365.5,"p95":397.1,"media":246.7,"label":"31/Ago","mmdd":"08-31"},"set":{"p10":43.0,"p25":56.9,"p50":102.9,"p75":149.4,"p90":197.2,"p95":319.9,"media":121.9,"label":"30/Set","mmdd":"09-30"},"out":{"p10":38.7,"p25":46.1,"p50":57.6,"p75":73.5,"p90":101.5,"p95":162.6,"media":74.5,"label":"31/Out","mmdd":"10-31"},"nov":{"p10":10.8,"p25":12.8,"p50":16.6,"p75":23.6,"p90":29.9,"p95":34.4,"media":19.4,"label":"30/Nov","mmdd":"11-30"},"dez":{"p10":7.8,"p25":8.2,"p50":11.5,"p75":21.3,"p90":34.3,"p95":35.3,"media":17.6,"label":"31/Dez","mmdd":"12-31"}},hdwc_peak:{"p25":836.1,"p50":1071.3,"p75":1265.8,"p90":1295.6,"p95":1356.1}},
+};
+// ── Soglie dinamiche per preset ──────────────────────────────────────────────
+let _customSoglie = null; // user-uploaded override (any preset)
+
+function getActiveSoglie() {
+  if (_customSoglie) return _customSoglie;
+  const key = (_activePreset && _activePreset.key) ? _activePreset.key : 'Greece';
+  // 1. Direct exact match
+  if (HDWC_SOGLIE_PRESETS[key]) return HDWC_SOGLIE_PRESETS[key];
+  // 2. Named preset with stored baseKey
+  if (typeof namedPresetsLoad === 'function') {
+    const savedEntry = namedPresetsLoad()[key];
+    if (savedEntry && savedEntry.baseKey && HDWC_SOGLIE_PRESETS[savedEntry.baseKey])
+      return HDWC_SOGLIE_PRESETS[savedEntry.baseKey];
+  }
+  // 3. Alpha-profile similarity match (custom arrays without explicit baseKey)
+  if (_activePreset && Array.isArray(_activePreset.alpha) && _activePreset.alpha.length === 12) {
+    const a = _activePreset.alpha;
+    let bestKey = 'Greece', bestDist = Infinity;
+    Object.keys(ALPHA_PRESETS).forEach(k => {
+      if (!HDWC_SOGLIE_PRESETS[k]) return;
+      const dist = ALPHA_PRESETS[k].alpha.reduce((s,v,i) => s+(v-a[i])**2, 0);
+      if (dist < bestDist) { bestDist=dist; bestKey=k; }
+    });
+    return HDWC_SOGLIE_PRESETS[bestKey];
+  }
+  return HDWC_SOGLIE_PRESETS['Greece'];
+}
+
+function uploadSoglieJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const obj = JSON.parse(e.target.result);
+      if (!obj.mesi || !obj.hdwc_peak) throw new Error('Missing mesi or hdwc_peak');
+      const required = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
+      const missing = required.filter(k => !obj.mesi[k]);
+      if (missing.length) throw new Error('Missing months: ' + missing.join(', '));
+      _customSoglie = obj;
+      document.getElementById('soglieCustomLabel').textContent =
+        '✓ ' + (obj.label || file.name.replace('.json',''));
+      document.getElementById('soglieCustomClear').style.display = 'inline-block';
+      showToast('✓ Soglie custom caricate — ricalcolo…', 2500);
+      const lat = parseFloat(document.getElementById('iLat')?.value);
+      const lng = parseFloat(document.getElementById('iLon')?.value);
+      if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
+    } catch(err) {
+      showToast('⚠ JSON soglie non valido: ' + err.message, 4000);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function clearCustomSoglie() {
+  _customSoglie = null;
+  document.getElementById('soglieCustomLabel').textContent = 'nenhum ficheiro';
+  document.getElementById('soglieCustomClear').style.display = 'none';
+  showToast('Soglie custom rimosse — preset attivo', 2000);
+  const lat = parseFloat(document.getElementById('iLat')?.value);
+  const lng = parseFloat(document.getElementById('iLon')?.value);
+  if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
+}
+// ── fine soglie dinamiche ─────────────────────────────────────────────────────
+
 
 const CLASSI_RETORNO = [
   
@@ -1141,6 +1225,13 @@ async function queryAll(lat,lng){
     document.getElementById('sqtime').textContent=`${ms}ms`;
     document.getElementById('pfooter').textContent=new Date().toLocaleTimeString('pt-PT');
     setStatus('active','Dados carregados');
+    // Race-guard: if applyAlphaPreset fired during fetch, restore it before any render
+    if (window._alphaApplied && window._alphaApplied.key !== _activePreset.key) {
+      ALPHA_MENSILE = window._alphaApplied.alpha.slice();
+      _activePreset = { key: window._alphaApplied.key,
+                        alpha: window._alphaApplied.alpha.slice(),
+                        custom: !ALPHA_PRESETS[window._alphaApplied.key] };
+    }
     renderPanel(icnf,meteo);
     renderAreasArdidasBlock(fires);
     if(meteo?.daily){chartData={meteo,lat,lng};window._lastMeteo=meteo;renderAll(meteo);draw72h(meteo);}
@@ -1394,7 +1485,7 @@ async function fetchMeteo(lat,lng){
   
   const pF=new URLSearchParams({latitude:lat,longitude:lng,
     daily:'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean,precipitation_probability_max,winddirection_10m_dominant',
-    hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation,soil_moisture_0_to_1cm,soil_moisture_3_to_9cm,soil_moisture_9_to_27cm',
+    hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation',
     forecast_days:16,timezone:'Europe/Lisbon'});
 
   
@@ -1471,6 +1562,75 @@ function getWarmup(meteo){
   return{hdw,dates};
 }
 
+// ── HDWc v2 Engine · α dinamico ──────────────────────────────────────────────
+const HDW_V2 = {
+  rain_eff:     2,      tmax_class2:  30,     tmax_class3:  35,
+  hdw_class2:   60,     hdw_class3:   120,
+  alpha_min:    0.40,   alpha_max:    0.95,
+  delta_dry2:   0.005,  delta_dry3:   0.010,
+  delta_n1:     0.005,  delta_n2:     0.010,  delta_n3:     0.015,
+  delta_rel:   -0.010,
+};
+function calcNightScore_v2(tmin) {
+  if (tmin == null) return 0;
+  if (tmin >= 25) return 3; if (tmin >= 20) return 2; if (tmin >= 18) return 1; return 0;
+}
+function classifyDay_v2(hdwEff, tmax, rain, ns) {
+  if ((rain || 0) >= HDW_V2.rain_eff) return 0;
+  if ((tmax || 0) >= HDW_V2.tmax_class3 || hdwEff >= HDW_V2.hdw_class3 || ns >= 2) return 3;
+  if ((tmax || 0) >= HDW_V2.tmax_class2 || hdwEff >= HDW_V2.hdw_class2 || ns >= 1) return 2;
+  return 1;
+}
+function calcAlpha_v2(alphaRef, dc, ns, streak) {
+  let da = 0;
+  if (streak >= 4) { if (dc === 2) da = HDW_V2.delta_dry2; else if (dc === 3) da = HDW_V2.delta_dry3; }
+  const dn = [0, HDW_V2.delta_n1, HDW_V2.delta_n2, HDW_V2.delta_n3][ns] || 0;
+  const dr = dc === 0 ? HDW_V2.delta_rel : 0;
+  const raw = alphaRef + da + dn + dr;
+  // Floor: use alphaRef as natural minimum on non-relief days (dynamic only adds memory).
+  // On relief days: allow dropping below alphaRef, bound at 0.
+  // This prevents the hard alpha_min=0.40 from swallowing the dynamic signal
+  // in low-alpha months (e.g. March PT aRef=0.30 < 0.40).
+  const floor = (dc === 0) ? 0 : alphaRef;
+  return Math.min(HDW_V2.alpha_max, Math.max(floor, raw));
+}
+function calcBeta_v2(rain) {
+  const r = rain || 0;
+  if (r >= 30) return 0.65; if (r >= 20) return 0.75;
+  if (r >= 10) return 0.85; if (r >= 2)  return 0.95; return 1.0;
+}
+function calcHDWCum_v2(hdwArr, dates, tmaxArr, tminArr, rainArr, warmupHdw=null, warmupDates=null) {
+  let prev = 0;
+  if (warmupHdw && warmupDates && warmupHdw.length) {
+    for (let i = 0; i < warmupHdw.length; i++) {
+      const m = parseInt(warmupDates[i].split('-')[1]) - 1;
+      prev = (warmupHdw[i] || 0) + ALPHA_MENSILE[m] * prev;
+    }
+  }
+  const cum=[], alphas=[], dayClasses=[], nightScores=[], dryStreaks=[];
+  let streak = 0;
+  for (let i = 0; i < hdwArr.length; i++) {
+    const m    = parseInt(dates[i].split('-')[1]) - 1;
+    const aRef = ALPHA_MENSILE[m];
+    const tmin = tminArr ? (tminArr[i] ?? null) : null;
+    const tmax = tmaxArr ? (tmaxArr[i] ?? 0)    : 0;
+    const rain = rainArr ? (rainArr[i] ?? 0)    : 0;
+    const hdwE = hdwArr[i] || 0;
+    const ns   = calcNightScore_v2(tmin);
+    const dc   = classifyDay_v2(hdwE, tmax, rain, ns);
+    streak     = (dc === 2 || dc === 3) ? streak + 1 : 0;
+    const alpha= calcAlpha_v2(aRef, dc, ns, streak);
+    const beta = calcBeta_v2(rain);
+    const cur  = beta * (hdwE + alpha * prev);
+    cum.push(parseFloat(cur.toFixed(2)));
+    alphas.push(parseFloat(alpha.toFixed(3)));
+    dayClasses.push(dc); nightScores.push(ns); dryStreaks.push(streak);
+    prev = cur;
+  }
+  return { cum, alphas, dayClasses, nightScores, dryStreaks };
+}
+// ── fine HDWc v2 Engine ───────────────────────────────────────────────────────
+
 function hdwColor(v){
   if(v>=150)return'#7f1d1d';if(v>=80)return'#b91c1c';
   if(v>=40) return'#e85d2f';if(v>=15)return'#d4740a';
@@ -1483,7 +1643,7 @@ function hdwCumClass(v){
   var hoje = new Date().toISOString().split('T')[0];
   var mKeys=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
   var mKey = mKeys[new Date().getMonth()];
-  var ms = HDWC_SOGLIE && HDWC_SOGLIE.mesi && HDWC_SOGLIE.mesi[mKey];
+  var ms = getActiveSoglie()?.mesi && getActiveSoglie().mesi[mKey];
   var p25 = ms ? (ms.p25||12)  : 12;
   var p50 = ms ? (ms.p50||36)  : 36;
   var p75 = ms ? (ms.p75||96)  : 96;
@@ -1500,7 +1660,7 @@ function hdwCumClass(v){
 function hdwCumClassPerc(v) {
   var mkeys=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
   var mkey=mkeys[new Date().getMonth()];
-  var m=HDWC_SOGLIE&&HDWC_SOGLIE.mesi&&HDWC_SOGLIE.mesi[mkey];
+  var m=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mkey];
   if(!m) return hdwCumClass(v);
   var label,color;
   if     (v>=(m.p95||Infinity)){label='EXTREME';color='#b91c1c';}
@@ -1536,12 +1696,11 @@ function renderPanel(icnf,meteo){
     const dates=d.time;
     const hdwArr=dates.map((_,i)=>calcHDW(d.temperature_2m_max[i],d.relative_humidity_2m_mean[i],d.windspeed_10m_max[i],d.windgusts_10m_max?.[i]));
     const {hdw:wu_hdw2,dates:wu_dates2}=getWarmup(meteo);
-    const hdwCum=calcHDWCum(hdwArr,dates,wu_hdw2,wu_dates2);
+    const {cum:hdwCum,alphas:hdwAlphas}=calcHDWCum_v2(hdwArr,dates,d.temperature_2m_max,d.temperature_2m_min,d.precipitation_sum,wu_hdw2,wu_dates2);
     const ti=Math.max(0,dates.indexOf(today));
     const hdwC=hdwCum[ti];
     const cc=hdwCumClassPerc(hdwC||0);
-    const monthN=parseInt(today.split('-')[1])-1;
-    const alpha=ALPHA_MENSILE[monthN];
+    const alpha=hdwAlphas[ti]??ALPHA_MENSILE[parseInt(today.split('-')[1])-1];
     const alphaColor=alpha>=.70?'#e85d2f':alpha>=.45?'#d4740a':'#15803d';
     const periodi=[];let inP=false,st=-1;
     hdwCum.forEach((v,i)=>{if(v>=80){if(!inP){inP=true;st=i;}}else{if(inP){periodi.push({start:st,end:i-1});inP=false;}}});
@@ -1553,7 +1712,7 @@ function renderPanel(icnf,meteo){
     document.getElementById('hdwcSummary').innerHTML=`
     <div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">🌡 Cumulative HDW · Today</span><span class="sblock-arrow">▼</span></div>
     <div class="sblock-body">
-      <div class="hdwc-badge" style="color:${cc.color};background:${cc.bg};border-color:${cc.border}">● HDWc: <strong>${hdwC!=null?hdwC.toFixed(1):'—'}</strong> · ${cc.label}${hdwcTrendHTML(hdwCum,ti)}${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[new Date().getMonth()];var ms=HDWC_SOGLIE&&HDWC_SOGLIE.mesi&&HDWC_SOGLIE.mesi[mk];var pk=Math.max.apply(null,hdwCum);if(!ms||pk<=ms.p95)return '';return '<span style="margin-left:6px;background:rgba(127,29,29,.15);border:1.5px solid rgba(127,29,29,.5);border-radius:4px;padding:2px 7px;color:#7f1d1d;font-family:var(--mono);font-size:9px;font-weight:700">&#9888; SEASONAL ANOMALY</span>';})()} </div>
+      <div class="hdwc-badge" style="color:${cc.color};background:${cc.bg};border-color:${cc.border}">● HDWc: <strong>${hdwC!=null?hdwC.toFixed(1):'—'}</strong> · ${cc.label}${hdwcTrendHTML(hdwCum,ti)}${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[new Date().getMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];var pk=Math.max.apply(null,hdwCum);if(!ms||pk<=ms.p95)return '';return '<span style="margin-left:6px;background:rgba(127,29,29,.15);border:1.5px solid rgba(127,29,29,.5);border-radius:4px;padding:2px 7px;color:#7f1d1d;font-family:var(--mono);font-size:9px;font-weight:700">&#9888; SEASONAL ANOMALY</span>';})()} </div>
       <div class="irow"><span class="l">HDW inst. today</span><span class="v" style="font-family:var(--mono)">${hdwArr[ti]!=null?hdwArr[ti].toFixed(1):'—'}</span></div>
       <div class="alpha-row"><span class="alpha-lbl">Memória α</span><div class="alpha-bar"><div class="alpha-fill" style="width:${(alpha*100).toFixed(0)}%;background:${alphaColor}"></div></div><span class="alpha-val">${alpha.toFixed(2)}</span></div>
       <div style="font-size:9px;color:var(--dim);margin-top:3px;font-family:var(--mono)">${wu_hdw2?'✓ Warmup: 21 days históricos':'⚠ Sem warmup histórico'}</div>
@@ -1798,13 +1957,12 @@ function ts72Redraw(startIdx, endIdx) {
   const ws    = sl72('windspeed_10m');
   const wg    = sl72('windgusts_10m');
   const wd    = sl72('winddirection_10m');
-  const prec   = sl72('precipitation');
-  const soil01 = sl72('soil_moisture_0_to_1cm');
+  const prec  = sl72('precipitation');
   const hdws  = times.map((_,i) => calcHDW(temps[i],rhs[i],ws[i],wg[i])||0);
 
   draw72Temp(times, temps, rhs, ws, wg, wd);
   draw72HDW(times, hdws, ws, wg, wd);
-  draw72Prec(times, prec, rhs, soil01);
+  draw72Prec(times, prec, rhs);
 
   // Rosa: filter by slider date range
   const startDate = times[0]?.split('T')[0]||null;
@@ -1950,8 +2108,7 @@ function draw72HDW(times, hdws, ws, wg, wd) {
 }
 
 // ── Precipitação + HR ─────────────────────────────────────────────────────
-function draw72Prec(times, prec, rhs, soil01) {
-  const hasSoil = soil01 && soil01.some(v=>v!=null);
+function draw72Prec(times, prec, rhs) {
   const traces = [
     {
       x:times, y:prec, name:'Precip. mm', type:'bar',
@@ -1962,19 +2119,13 @@ function draw72Prec(times, prec, rhs, soil01) {
       x:times, y:rhs, name:'RH %', type:'scatter', mode:'lines',
       line:{color:'#16a34a',width:1.5}, yaxis:'y2',
       hovertemplate:'HR: %{y:.0f}%<extra></extra>'
-    },
-    ...(hasSoil?[{
-      x:times, y:soil01, name:'Solo 0–1cm', type:'scatter', mode:'lines',
-      line:{color:'#92400e',width:1.5,dash:'dot'}, yaxis:'y3',
-      hovertemplate:'Solo 0–1cm: %{y:.3f} m³/m³<extra></extra>'
-    }]:[])
+    }
   ];
   const layout = {
     ...baseLayout72(times),
     height: 180, barmode:'overlay',
     yaxis:{title:{text:'mm',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
     yaxis2:{title:{text:'RH %',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,100],showgrid:false,zeroline:false},
-    ...(hasSoil?{yaxis3:{title:{text:'Solo m³/m³',font:{size:9},standoff:8},tickfont:{size:8},overlaying:'y',side:'right',position:1,anchor:'free',showgrid:false,zeroline:false,range:[0,0.5],tickformat:'.2f'}}:{})
   };
   Plotly.react('chart-72prec', traces, layout, plotlyBaseConfig('72prec'));
 }
@@ -2220,22 +2371,51 @@ function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
 function alphaUIInit() {
   const sel = document.getElementById('alphaPresetSel');
   if (!sel) return;
-  const key = _activePreset.key;
-  if (key in ALPHA_PRESETS) {
-    sel.value = key;
-  } else {
-    // Named or anonymous custom: show values in Custom input so Apply works
-    sel.value = 'Custom';
-    document.getElementById('alphaCustomRow').style.display = 'block';
-    document.getElementById('alphaCustomInput').value = _activePreset.alpha.join(',');
-    // Pre-fill name field if it's a named preset (not anonymous 'Custom')
-    const nameInput = document.getElementById('alphaNameInput');
-    if (nameInput && key !== 'Custom') nameInput.value = key;
+
+  // ── Secondary race-guard (renderAll path) ─────────────────────────────
+  // Primary guard runs in queryAll before renderPanel.
+  // This catches the rare case where renderAll fires before queryAll's guard.
+  if (window._alphaApplied && window._alphaApplied.key !== _activePreset.key) {
+    const _k = window._alphaApplied.key;
+    const _a = window._alphaApplied.alpha;
+    ALPHA_MENSILE = _a.slice();
+    _activePreset = { key: _k, alpha: _a.slice(), custom: !ALPHA_PRESETS[_k] };
   }
-  alphaUpdateBadge();
+
+  // ── Sync selector to current preset ───────────────────────────────────
+  const k = _activePreset.key;
+  if (k in ALPHA_PRESETS) {
+    sel.value = k;
+  } else {
+    // Named saved preset in dropdown?
+    const savedOpt = [...sel.options].find(o => o.value === '__saved__' + k);
+    // Always show 'Custom' for unnamed custom presets so user can edit
+    sel.value = savedOpt ? savedOpt.value : 'Custom';
+  }
+
+  // If Custom or non-standard: show input row populated with current alpha
+  if (sel.value === 'Custom') {
+    const cr = document.getElementById('alphaCustomRow');
+    if (cr) cr.style.display = 'block';
+    const ci = document.getElementById('alphaCustomInput');
+    if (ci) ci.value = _activePreset.alpha.join(',');
+  }
+
+  // ── Source note ────────────────────────────────────────────────────────
   const note = document.getElementById('alphaSourceNote');
-  if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
-  else if (note && key !== 'Custom') note.textContent = `★ Named preset "${key}" — active`;
+  if (note) {
+    if (ALPHA_PRESETS[k]) {
+      note.textContent = ALPHA_PRESETS[k].source;
+    } else {
+      const sog = getActiveSoglie();
+      const closest = Object.keys(ALPHA_PRESETS).find(r => HDWC_SOGLIE_PRESETS[r] === sog) || 'Greece';
+      note.textContent = `★ Custom · soglie: ${closest} (α-match)`;
+    }
+  }
+
+  alphaUpdateBadge();
+  setTimeout(drawAlphaSensChart, 200);
+  // alphaPresetRow is always visible now
 }
 
 function alphaUpdateBadge() {
@@ -2243,82 +2423,89 @@ function alphaUpdateBadge() {
   const preset = ALPHA_PRESETS[p.key];
   document.getElementById('alphaActiveFlag').textContent  = preset ? preset.flag : '✏';
   document.getElementById('alphaActiveLabel').textContent = p.key;
-  setTimeout(drawAlphaSensChart, 100);
 }
 
 function onAlphaPresetChange() {
   const key = document.getElementById('alphaPresetSel')?.value || '';
   const customRow = document.getElementById('alphaCustomRow');
   const note      = document.getElementById('alphaSourceNote');
-  if (key.startsWith('__saved__')) {
-    const name = key.slice(9);
-    const obj  = namedPresetsLoad();
-    if (obj[name]) {
-      if (customRow) {
-        customRow.style.display = 'block';
-        document.getElementById('alphaCustomInput').value = obj[name].alpha.join(',');
-        const ni = document.getElementById('alphaNameInput');
-        if (ni) ni.value = name;
-      }
-      if (note) note.textContent = `★ Named preset "${name}" — click Apply to activate`;
-    }
-  } else if (key === 'Custom') {
-    if (customRow) customRow.style.display = 'block';
-    if (note) note.textContent = 'Enter 12 monthly values (Jan–Dec)';
-  } else {
-    if (customRow) customRow.style.display = 'none';
-    if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
-    else if (note) note.textContent = '';
-  }
+  if (customRow) customRow.style.display = key === 'Custom' ? 'block' : 'none';
+  if (note && ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
+  else if (note) note.textContent = 'Enter 12 monthly values (Jan–Dec)';
 }
 
 function applyAlphaPreset() {
   const key  = document.getElementById('alphaPresetSel').value;
-  let newAlpha, newLbl, saveAsName = null;
+  let newAlpha;
 
-  if (key.startsWith('__saved__')) {
-    // Named preset selected from dropdown
-    const name = key.slice(9);
-    const obj  = namedPresetsLoad();
-    if (!obj[name]) { showToast('⚠ Preset not found — try reloading.', 2500); return; }
-    newAlpha = obj[name].alpha.slice();
-    newLbl   = name;
-  } else if (key === 'Custom') {
-    const raw   = document.getElementById('alphaCustomInput').value;
+  if (key === 'Custom') {
+    const raw = document.getElementById('alphaCustomInput').value;
     const errEl = document.getElementById('alphaCustomError');
     newAlpha = alphaValidateCustom(raw);
-    if (!newAlpha) return;
+    if (!newAlpha) {
+      return;  // error shown by alphaValidateCustom
+    }
     errEl.style.display = 'none';
-    saveAsName = (document.getElementById('alphaNameInput')?.value||'').trim() || null;
-    newLbl = saveAsName || 'Custom';
+  } else if (key.startsWith('__saved__')) {
+    // Named preset from local storage
+    const _nm = key.replace('__saved__', '');
+    const _obj = (typeof namedPresetsLoad === 'function') ? namedPresetsLoad() : {};
+    newAlpha = _obj[_nm]?.alpha?.slice();
+    if (!newAlpha) { showToast('⚠ Named preset not found: ' + _nm, 2500); return; }
   } else {
-    if (!ALPHA_PRESETS[key]) return;
+    if (!ALPHA_PRESETS[key]) { showToast('⚠ Unknown preset: ' + key, 2000); return; }
     newAlpha = ALPHA_PRESETS[key].alpha.slice();
-    newLbl   = key;
   }
 
-  ALPHA_MENSILE = newAlpha.slice();
-  _activePreset = { key: newLbl, alpha: newAlpha, custom: key === 'Custom' || key.startsWith('__saved__') };
+  // Apply: resolve display key and label
+  // saveAsName available for ALL preset types (standard, saved, custom)
+  const saveAsName = (document.getElementById('alphaNameInput')?.value||'').trim();
+  const baseFlag   = ALPHA_PRESETS[key]?.flag || '✏';
+  const newFlag    = saveAsName ? '★' : baseFlag;
+  // Display label: use saved name if provided, else the preset key
+  const newLbl     = saveAsName || (key.startsWith('__saved__') ? key.replace('__saved__','') : key);
+  const isCustom   = (key === 'Custom') || key.startsWith('__saved__') || !!saveAsName;
+
+  ALPHA_MENSILE  = newAlpha.slice();
+  _activePreset  = { key: newLbl, alpha: newAlpha.slice(), custom: isCustom };
+  // Always save to LS so page reload restores correctly
   alphaPresetSave(newLbl, newAlpha);
+  window._alphaApplied = { key: newLbl, alpha: newAlpha.slice() }; // race-condition guard
   alphaUpdateBadge();
 
-  // Persist to named presets library if user gave a name
-  if (saveAsName) {
+  // Persist as named preset when a name was explicitly given
+  if (saveAsName && typeof namedPresetsLoad === 'function') {
     const obj = namedPresetsLoad();
-    obj[saveAsName] = { alpha: newAlpha, flag: '★' };
+    // Store baseKey for correct soglie assignment
+    obj[saveAsName] = { alpha: newAlpha.slice(), flag: '★',
+                        baseKey: ALPHA_PRESETS[key] ? key : null };
     namedPresetsSave(obj);
     namedPresetsRender();
+    // Clear name input after save
+    const ni = document.getElementById('alphaNameInput'); if (ni) ni.value = '';
   }
 
   const note = document.getElementById('alphaSourceNote');
   if (note) {
-    if (ALPHA_PRESETS[key]) note.textContent = ALPHA_PRESETS[key].source;
-    else note.textContent = `★ "${newLbl}" — [${newAlpha.map(v=>v.toFixed(2)).join(', ')}]`;
+    if (saveAsName)
+      note.textContent = `★ Saved: "${saveAsName}"` + (ALPHA_PRESETS[key]?.source ? ` · ${ALPHA_PRESETS[key].source}` : '');
+    else if (ALPHA_PRESETS[key])
+      note.textContent = ALPHA_PRESETS[key].source;
+    else
+      note.textContent = `Custom α: [${newAlpha.map(v=>v.toFixed(2)).join(', ')}]`;
   }
-  showToast(`✓ α: ${newLbl} — recalculating HDWc…`, 3000);
-  const lat = _mapLat, lng = _mapLng;
-  if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
-  else showToast('α updated — select a point to recalculate.', 3000);
+
+  showToast(`✓ α: ${newFlag} ${newLbl} — recalculating…`, 2500);
+
+  // Trigger full recalculation using module-level coords (reliable)
+  const lat = _mapLat;
+  const lng = _mapLng;
+  console.log('[ALPHA] ALPHA_MENSILE[2]=', ALPHA_MENSILE[2], 'lat=', lat, 'lng=', lng);
+  if (!isNaN(lat) && !isNaN(lng)) {
+    setTimeout(() => selectPoint(lat, lng), 300);
+  } else {
+    showToast('α updated — select a point on the map to recalculate.', 3000);
+  }
 }
 
 
@@ -2331,7 +2518,7 @@ function renderAll(meteo){
   const todayIdx=Math.max(0,dates.indexOf(today));
   const hdwArr=dates.map((_,i)=>calcHDW(d.temperature_2m_max[i],d.relative_humidity_2m_mean[i],d.windspeed_10m_max[i],d.windgusts_10m_max?.[i]));
   const {hdw:wu_hdw,dates:wu_dates}=getWarmup(meteo);
-  const hdwCum=calcHDWCum(hdwArr,dates,wu_hdw,wu_dates);
+  const {cum:hdwCum}=calcHDWCum_v2(hdwArr,dates,d.temperature_2m_max,d.temperature_2m_min,d.precipitation_sum,wu_hdw,wu_dates);
 
   setTimeout(()=>{
     drawAlphaSensitivity(meteo);
@@ -2419,7 +2606,7 @@ function drawHDW(meteo,todayIdx,hdwArr,hdwCum){
   const traces=[
     {x:dates,y:hdwArr,name:'HDW inst.',type:'bar',
      marker:{color:hdwArr.map(v=>hdwColor(v||0)),opacity:.7},width:.7*86400000},
-    {x:dates,y:hdwCum,name:'HDWc cumulativo (HDWeff α sazonal)',type:'scatter',mode:'lines',
+    {x:dates,y:hdwCum,name:'HDWc cumulativo (HDWeff α dinamico)',type:'scatter',mode:'lines',
      line:{color:'#7c3aed',width:2.5}},
   ];
   
@@ -2440,18 +2627,6 @@ function drawHDW(meteo,todayIdx,hdwArr,hdwCum){
 
 function drawPrec(meteo,todayIdx){
   const d=meteo.daily; const dates=d.time; const today=dates[todayIdx];
-  // Aggregate hourly soil moisture → daily means
-  function dailySoilMean(key){
-    const h=meteo.hourly; if(!h?.time||!h[key]) return dates.map(()=>null);
-    return dates.map(dt=>{
-      const vals=h.time.reduce((acc,ts,i)=>{if(ts.startsWith(dt)&&h[key][i]!=null)acc.push(h[key][i]);return acc;},[]);
-      return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:null;
-    });
-  }
-  const soil39 = dailySoilMean('soil_moisture_3_to_9cm');
-  const soil927= dailySoilMean('soil_moisture_9_to_27cm');
-  const hasSoil39 = soil39.some(v=>v!=null);
-  const hasSoil927= soil927.some(v=>v!=null);
   const traces=[
     {x:dates,y:d.precipitation_sum,name:'Precip. mm',type:'bar',
      marker:{color:'#3b82f6',opacity:.65},width:.7*86400000},
@@ -2459,19 +2634,10 @@ function drawPrec(meteo,todayIdx){
      line:{color:'#0891b2',width:2},marker:{size:4},yaxis:'y2'},
     ...(d.precipitation_probability_max?[{x:dates,y:d.precipitation_probability_max,name:'Prob. chuva %',type:'scatter',mode:'lines',
      line:{color:'#6366f1',width:1.5,dash:'dot'},yaxis:'y2'}]:[]),
-    ...(hasSoil39?[{x:dates,y:soil39,name:'Solo 3–9cm',type:'scatter',mode:'lines+markers',
-     line:{color:'#92400e',width:1.5,dash:'dash'},marker:{size:3},yaxis:'y3',
-     hovertemplate:'Solo 3–9cm: %{y:.3f} m³/m³<extra></extra>'}]:[]),
-    ...(hasSoil927?[{x:dates,y:soil927,name:'Solo 9–27cm',type:'scatter',mode:'lines+markers',
-     line:{color:'#d97706',width:1.5,dash:'dot'},marker:{size:3},yaxis:'y3',
-     hovertemplate:'Solo 9–27cm: %{y:.3f} m³/m³<extra></extra>'}]:[]),
   ];
   const layout=plotlyTimeLayout('mm','%');
   layout.yaxis2.range=[0,105];
   layout.shapes=[todayLine(today)];
-  if(hasSoil39||hasSoil927){
-    layout.yaxis3={title:{text:'Solo m³/m³',font:{size:9},standoff:8},tickfont:{size:8},overlaying:'y',side:'right',position:1,anchor:'free',showgrid:false,zeroline:false,range:[0,0.5],tickformat:'.2f'};
-  }
   applyAnnotations('chart-prec',layout);
   Plotly.react('chart-prec',traces,layout,plotlyBaseConfig('precipitacao_hr'));
 }
@@ -2800,39 +2966,6 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
   const d=meteo.daily; const dates=d.time;
   const today=dates[todayIdx];
   document.getElementById('tbl-meteo-sub').textContent=`${dates.length} days · clique coluna para ordenar`;
-
-  // ── Daily soil moisture (mean from hourly) ────────────────────────────────
-  function dailySoilArr(key){
-    const h=meteo.hourly; if(!h?.time||!h[key]) return dates.map(()=>null);
-    return dates.map(dt=>{
-      const vals=h.time.reduce((acc,ts,i)=>{if(ts.startsWith(dt)&&h[key][i]!=null)acc.push(h[key][i]);return acc;},[]);
-      return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:null;
-    });
-  }
-  const soil39arr = dailySoilArr('soil_moisture_3_to_9cm');
-
-  // ── Soil traffic light ────────────────────────────────────────────────────
-  function soilColor(v){
-    if(v==null) return '';
-    if(v<0.05)  return 'background:#fee2e2;color:#991b1b';  // very dry – red
-    if(v<0.10)  return 'background:#ffedd5;color:#9a3412';  // dry – orange
-    if(v<0.20)  return 'background:#fefce8;color:#713f12';  // moderate – yellow
-    return               'background:#dcfce7;color:#166534'; // moist – green
-  }
-
-  // ── Soil trend (avg last 3d vs prev 3d) ───────────────────────────────────
-  function soilTrend(idx){
-    const w=3;
-    const cur = soil39arr.slice(Math.max(0,idx-w+1),idx+1).filter(v=>v!=null);
-    const prv = soil39arr.slice(Math.max(0,idx-2*w+1),Math.max(0,idx-w+1)).filter(v=>v!=null);
-    if(!cur.length||!prv.length) return '<span style="color:#9ca3af">—</span>';
-    const avg = a=>a.reduce((s,v)=>s+v,0)/a.length;
-    const diff = avg(cur)-avg(prv);
-    if(diff>0.005)  return '<span style="color:#16a34a;font-size:13px" title="Em subida">↑</span>';
-    if(diff<-0.005) return '<span style="color:#dc2626;font-size:13px" title="Em descida">↓</span>';
-    return '<span style="color:#d97706;font-size:13px" title="Estável">→</span>';
-  }
-
   const tbody=document.getElementById('tbl-meteo-body');
   tbody.innerHTML=dates.map((dt,i)=>{
     const isToday=dt===today;
@@ -2840,8 +2973,6 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
     const hdw=hdwArr[i]; const hc=hdwCum[i];
     const hcl=hdw!=null?hdwInstClass(hdw):{label:'—',td:''};
     const rowStyle=isToday?'background:#fff8f5;border-left:3px solid var(--accent)':(isFut?'color:#6b7280':'');
-    const s39=soil39arr[i];
-    const soilStyle=soilColor(s39);
     return`<tr style="${rowStyle}">
       <td class="td-date" data-iso="${dt}">${new Date(dt+'T12:00:00').toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'2-digit'})}${isToday?' ●':''}</td>
       <td style="color:#e85d2f;font-weight:600">${d.temperature_2m_max[i]!=null?d.temperature_2m_max[i].toFixed(1):'—'}</td>
@@ -2853,8 +2984,6 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
       <td style="color:#3b82f6">${d.precipitation_sum[i]!=null?d.precipitation_sum[i].toFixed(1):'—'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'—'}</td>
       <td class="${hdwCumClass(hc||0).label==='MUITO BAIXO'?'td-hdw-mbx':hdwCumClass(hc||0).label==='BAIXO'?'td-hdw-bx':'td-hdw-alt'}">${hc!=null?hc.toFixed(1):'—'}</td>
-      <td style="font-family:var(--mono);font-size:9px;text-align:center;${soilStyle}">${s39!=null?s39.toFixed(3):'—'}</td>
-      <td style="text-align:center">${soilTrend(i)}</td>
     </tr>`;
   }).join('');
 }
@@ -2955,7 +3084,7 @@ function renderCritTable(meteo,hdwArr,hdwCum,todayIdx){
       <td title="Wind at HDW peak hour (km/h)">${peakW_ms!=null?peakW_ms.toFixed(1):'—'}</td>
       <td class="${cls.td}" style="font-weight:700">${peakHDW.toFixed(1)}</td>
       <td><span class="crit-period-badge" style="color:${hdwColor(peakHDW)};border-color:${hdwColor(peakHDW)};background:${hdwColor(peakHDW)}18">${cls.label}</span></td>
-      <td class="${hcc.label==='MUITO BAIXO'||hcc.label==='BAIXO'?'td-hdw-mbx':'td-hdw-alt'}" title="HDWc diário (acumulador α sazonal, coerente com os gráficos)">${hc!=null?hc.toFixed(1):'—'}</td>
+      <td class="${hcc.label==='MUITO BAIXO'||hcc.label==='BAIXO'?'td-hdw-mbx':'td-hdw-alt'}" title="HDWc diário (acumulador α dinamico, coerente com os gráficos)">${hc!=null?hc.toFixed(1):'—'}</td>
       <td>${peakHDW>=150?'🔴 EXTREMO':peakHDW>=80?'🔴 ALTO':peakHDW>=40?'🟠 MODERADO':peakHDW>=15?'🟡 ATENÇÃO':'—'}</td>
     </tr>`;
   }).join('');
@@ -3704,7 +3833,7 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
   const h=meteo.hourly;
   if(!h?.time){
     document.getElementById('tbl-hourly-body').innerHTML=
-      '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:12px">Dados horários não disponíveis</td></tr>';
+      '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:12px">Dados horários não disponíveis</td></tr>';
     return;
   }
   const today=new Date().toISOString().split('T')[0];
@@ -3730,13 +3859,10 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
     const wg=h.windgusts_10m?.[i];
     const wd=h.winddirection_10m?.[i];
     const pr=h.precipitation?.[i];
-    const s01=h.soil_moisture_0_to_1cm?.[i];
     const hdw=(t!=null&&rh!=null&&ws!=null)?calcHDW(t,rh,ws,wg):null;
     const hcl=hdw!=null?hdwInstClass(hdw):{label:'—',td:''};
     const rowStyle=isToday?'background:#fff8f5;border-left:3px solid var(--accent)':(isFut?'color:#6b7280':'');
     const dateLabel=new Date(dt+'T12:00:00').toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'2-digit'});
-    // Soil 0-1cm colore (secco=arancio, umido=verde)
-    const soilStyle01=s01==null?'':(s01<0.05?'color:#dc2626;font-weight:600':s01<0.15?'color:#d97706':'color:#16a34a');
     return`<tr style="${rowStyle}" data-ts="${ts}">
       <td class="td-date" data-iso="${ts}" style="font-family:var(--mono);font-size:9px;white-space:nowrap">${dateLabel} ${hour.slice(0,5)}${isToday?' ●':''}</td>
       <td style="color:#e85d2f;font-weight:600">${t!=null?t.toFixed(1):'—'}</td>
@@ -3746,7 +3872,6 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
       <td style="color:#6b7280;font-size:9px">${wd!=null?windDirLabel(wd):'—'}</td>
       <td style="color:#3b82f6">${pr!=null?pr.toFixed(1):'—'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'—'}</td>
-      <td style="font-family:var(--mono);font-size:9px;${soilStyle01}">${s01!=null?s01.toFixed(3):'—'}</td>
     </tr>`;
   }).join('');
 }
@@ -3758,7 +3883,7 @@ function exportCSVHourly(){
   const dt=new Date().toISOString().split('T')[0];
   const bom='﻿';
   const sep=';';
-  const header=['Data/Hora','T °C','RH %','Wind km/h','Gust km/h','Dir.','Precip mm','HDW inst.','Solo 0-1cm m3/m3'].join(sep);
+  const header=['Data/Hora','T °C','RH %','Wind km/h','Gust km/h','Dir.','Precip mm','HDW inst.'].join(sep);
   const rows=h.time.map((ts,i)=>{
     const t=h.temperature_2m?.[i];
     const rh=h.relativehumidity_2m?.[i];
@@ -3766,7 +3891,6 @@ function exportCSVHourly(){
     const wg=h.windgusts_10m?.[i];
     const wd=h.winddirection_10m?.[i];
     const pr=h.precipitation?.[i];
-    const s01=h.soil_moisture_0_to_1cm?.[i];
     const hdw=(t!=null&&rh!=null&&ws!=null)?calcHDW(t,rh,ws,wg).toFixed(2):'';    return[
       ts,
       t!=null?t.toFixed(1):'',
@@ -3775,8 +3899,7 @@ function exportCSVHourly(){
       wg!=null?wg.toFixed(1):'',
       wd!=null?windDirLabel(wd):'',
       pr!=null?pr.toFixed(1):'',
-      hdw,
-      s01!=null?s01.toFixed(4):''
+      hdw
     ].join(sep);
   });
   const csv=bom+header+'\r\n'+rows.join('\r\n');
@@ -4068,7 +4191,7 @@ tr:nth-child(even):not(.tr-today){background:#fafafa}
     <h1>Fire Risk Report</h1>
     <div class="sub">EFFIS + Open-Meteo · Generated on ${dt} · α: ${ALPHA_PRESETS[_activePreset.key]?.flag||"✏"} ${_activePreset.key}</div>
   </div>
-  <div class="ver">v4.0 · Giuseppe Cornaglia</div>
+  <div class="ver">v6.0 · Giuseppe Cornaglia</div>
 </div>
 
 <div class="cards">
@@ -4102,7 +4225,7 @@ ${document.getElementById('tbl-crit-content')?.classList.contains('collapsed')?'
 ${simSection}
 
 <div class="footer">
-  <span>Fire Risk · EFFIS2022 + Open-Meteo · v5.0 · Giuseppe Cornaglia</span>
+  <span>Fire Risk · EFFIS2022 + Open-Meteo · v6.0 · Giuseppe Cornaglia</span>
   <span>${nome} · ${lat}, ${lon} · ${dt}</span>
 </div>
 <script>window.onload=function(){window.print();}<\/script>
@@ -4456,7 +4579,7 @@ async function runSimilarityAnalysis(lat,lng,fireYears,currentMeteo){
       const ti=Math.max(0,d.time.indexOf(t));
       const ha=d.time.map((_,i)=>calcHDW(d.temperature_2m_max[i],d.relative_humidity_2m_mean[i],d.windspeed_10m_max[i],d.windgusts_10m_max?.[i]));
       const {hdw:wh,dates:wd}=getWarmup(chartData.meteo);
-      return calcHDWCum(ha,d.time,wh,wd)[ti]||0;
+      return calcHDWCum_v2(ha,d.time,d.temperature_2m_max,d.temperature_2m_min,d.precipitation_sum,wh,wd).cum[ti]||0;
     })() : 0, _currentSimTopFire);
     _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear);
 
@@ -4742,10 +4865,10 @@ function hdwcTrendHTML(hdwCum, todayIdx){
 function hdwcPercentileHTML(hdwcVal) { return ''; } 
 
 function hdwcSoglieHTML(hdwcVal, hdwcPeak, hdwcPeakDate) {
-  if (!HDWC_SOGLIE?.mesi) return '';
+  if (!getActiveSoglie()?.mesi) return '';
   const mkeys = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
   const mkey  = mkeys[new Date().getMonth()];
-  const m     = HDWC_SOGLIE.mesi[mkey];
+  const m     = getActiveSoglie().mesi[mkey];
   if (!m) return '';
 
   const soglie = [
@@ -4839,7 +4962,7 @@ function fixarPonto(){
     const todayIdx = Math.max(0, d.time.indexOf(today));
     const {hdw:wu_hdw, dates:wu_dates} = getWarmup(chartData.meteo);
     const hdwArr = d.time.map((_,i)=>calcHDW(d.temperature_2m_max[i],d.relative_humidity_2m_mean[i],d.windspeed_10m_max[i],d.windgusts_10m_max?.[i]));
-    const hdwCum = calcHDWCum(hdwArr, d.time, wu_hdw, wu_dates);
+    const {cum:hdwCum} = calcHDWCum_v2(hdwArr, d.time, d.temperature_2m_max, d.temperature_2m_min, d.precipitation_sum, wu_hdw, wu_dates);
     const hdwC   = hdwCum[todayIdx] || 0;
     const hdwMax = Math.max(...hdwArr.filter(v=>v!=null));
     const trendHTML = hdwcTrendHTML(hdwCum, todayIdx);
@@ -4922,7 +5045,7 @@ function errorHTML(err){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// v5 INTERNATIONAL — Basemap · EFFIS · Custom WFS/GeoJSON · Named α Presets
+// v6 INTERNATIONAL — Basemap · EFFIS · Custom WFS/GeoJSON · Named α Presets
 // ═══════════════════════════════════════════════════════════════════════════
 
 const EFFIS_WMS        = 'https://maps.effis.emergency.copernicus.eu/effis';
@@ -5335,85 +5458,94 @@ function namedPresetsSave(obj){
   try{localStorage.setItem(NAMED_PRESETS_KEY,JSON.stringify(obj));}catch(e){}
 }
 function namedPresetsRender(){
-  const sel = document.getElementById('alphaPresetSel');
-  if (!sel) return;
-  // Remove old saved options from dropdown
-  [...sel.options].filter(o => o.dataset.saved).forEach(o => o.remove());
-  const obj = namedPresetsLoad();
-  const names = Object.keys(obj);
-  names.forEach(k => {
-    const opt = document.createElement('option');
-    opt.value = '__saved__' + k;
-    opt.textContent = `★ ${k}`;
-    opt.dataset.saved = '1';
-    const customOpt = [...sel.options].find(o => o.value === 'Custom');
-    sel.insertBefore(opt, customOpt);
-  });
-  // Render delete list below the select
-  let listEl = document.getElementById('namedPresetsList');
-  if (!listEl) {
-    listEl = document.createElement('div');
-    listEl.id = 'namedPresetsList';
-    listEl.style.cssText = 'margin-bottom:5px';
-    sel.parentNode.insertBefore(listEl, sel.nextSibling);
+  // ── Update <select> dropdown ─────────────────────────────────────────
+  const sel=document.getElementById('alphaPresetSel');
+  if(sel){
+    [...sel.options].filter(o=>o.dataset.saved).forEach(o=>o.remove());
+    const obj=namedPresetsLoad();
+    const customOpt=[...sel.options].find(o=>o.value==='Custom');
+    Object.keys(obj).forEach(k=>{
+      const opt=document.createElement('option');
+      opt.value='__saved__'+k; opt.textContent=`★ ${k}`; opt.dataset.saved='1';
+      sel.insertBefore(opt, customOpt);
+    });
   }
-  if (!names.length) { listEl.innerHTML = ''; return; }
-  listEl.innerHTML = names.map(k =>
-    `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:9.5px">
-      <span style="flex:1;color:var(--text);font-family:var(--mono);overflow:hidden;
-                   text-overflow:ellipsis;white-space:nowrap" title="${k}">★ ${k}</span>
-      <button onclick="deleteNamedPreset('${k.replace(/'/g,"\\'")}');" title="Delete preset"
-        style="font-size:9px;padding:1px 5px;border:1px solid #fca5a5;border-radius:3px;
-               background:#fef2f2;color:#b91c1c;cursor:pointer;flex-shrink:0;line-height:1.4">
-        ✕
-      </button>
-    </div>`
-  ).join('');
+
+  // ── Render saved-preset list with delete buttons ─────────────────────
+  const container = document.getElementById('namedPresetsList');
+  if(!container) return;
+  const obj = namedPresetsLoad();
+  const keys = Object.keys(obj);
+  if(!keys.length){ container.innerHTML=''; return; }
+  // Build delete list using data-attributes to avoid all escaping issues
+  const _frag = keys.map(k => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:3px;background:var(--surface2);margin-bottom:2px';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'flex:1;font-size:9px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    lbl.textContent = '★ ' + k;
+    const btn = document.createElement('button');
+    btn.style.cssText = 'font-size:9px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer;color:#b91c1c;flex-shrink:0';
+    btn.textContent = '✕';
+    btn.title = 'Delete preset';
+    btn.addEventListener('click', () => deleteNamedPreset(k));
+    div.appendChild(lbl); div.appendChild(btn);
+    return div;
+  });
+  container.innerHTML = '';
+  _frag.forEach(el => container.appendChild(el));
+  const purgeBtn = document.createElement('button');
+  purgeBtn.style.cssText = 'width:100%;font-size:9px;padding:2px 4px;margin-top:3px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer;color:var(--dim)';
+  purgeBtn.textContent = '🗑 Delete all';
+  purgeBtn.addEventListener('click', purgeAllNamedPresets);
+  container.appendChild(purgeBtn);
 }
 
-function deleteNamedPreset(name) {
-  if (!confirm(`Delete preset "${name}"?`)) return;
-  const obj = namedPresetsLoad();
-  delete obj[name];
-  namedPresetsSave(obj);
-  // If active preset was this one, reset to Portugal
-  if (_activePreset.key === name) {
-    _activePreset = { key:'Portugal', alpha:ALPHA_PRESETS['Portugal'].alpha.slice(), custom:false };
-    ALPHA_MENSILE = _activePreset.alpha.slice();
-    alphaPresetSave('Portugal', _activePreset.alpha);
+function deleteNamedPreset(name){
+  const obj=namedPresetsLoad(); if(!obj[name])return;
+  delete obj[name]; namedPresetsSave(obj);
+  if(_activePreset.key===name){
+    const def='Greece';
+    ALPHA_MENSILE=ALPHA_PRESETS[def].alpha.slice();
+    _activePreset={key:def,alpha:ALPHA_PRESETS[def].alpha.slice(),custom:false};
+    alphaPresetSave(def,ALPHA_PRESETS[def].alpha);
+    window._alphaApplied={key:def,alpha:ALPHA_PRESETS[def].alpha.slice()};
     alphaUpdateBadge();
-    showToast(`Preset "${name}" deleted — reset to Portugal`, 2500);
-  } else {
-    showToast(`Preset "${name}" deleted`, 1800);
   }
   namedPresetsRender();
+  showToast(`🗑 "${name}" deleted`,1800);
+}
+
+function purgeAllNamedPresets(){
+  namedPresetsSave({});
+  if(!ALPHA_PRESETS[_activePreset.key]){
+    const def='Greece';
+    ALPHA_MENSILE=ALPHA_PRESETS[def].alpha.slice();
+    _activePreset={key:def,alpha:ALPHA_PRESETS[def].alpha.slice(),custom:false};
+    alphaPresetSave(def,ALPHA_PRESETS[def].alpha);
+    window._alphaApplied={key:def,alpha:ALPHA_PRESETS[def].alpha.slice()};
+    alphaUpdateBadge();
+  }
+  namedPresetsRender();
+  showToast('🗑 All saved presets deleted',2000);
 }
 
 function loadNamedPreset(name){
   const obj=namedPresetsLoad();
   if(!obj[name])return;
-  ALPHA_MENSILE=obj[name].alpha.slice();
-  _activePreset={key:name,alpha:obj[name].alpha,custom:true};
-  alphaPresetSave(name,obj[name].alpha);
+  const entry=obj[name];
+  ALPHA_MENSILE=entry.alpha.slice();
+  _activePreset={key:name,alpha:entry.alpha.slice(),custom:true};
+  alphaPresetSave(name,entry.alpha);
+  window._alphaApplied={key:name,alpha:entry.alpha.slice()};
   alphaUpdateBadge();
-  showToast(`α regional: ★ ${name} — recalculating…`,2500);
+  showToast(`α: ★ ${name} — recalculating…`,2200);
   const lat=parseFloat(document.getElementById('iLat')?.value);
   const lng=parseFloat(document.getElementById('iLon')?.value);
   if(!isNaN(lat)&&!isNaN(lng)) setTimeout(()=>selectPoint(lat,lng),300);
 }
 
-// Add name input field to alpha custom row
-function _v5AddAlphaNameField(){
-  const customRow=document.getElementById('alphaCustomRow');
-  if(!customRow||document.getElementById('alphaNameRow'))return;
-  const nameRow=document.createElement('div');
-  nameRow.id='alphaNameRow';
-  nameRow.style.cssText='margin-bottom:4px';
-  nameRow.innerHTML=`<input id="alphaNameInput" type="text" placeholder="Save as preset name (optional)"
-    style="width:100%;font-size:10px;padding:4px 6px;border:1px solid var(--border);
-           border-radius:4px;background:var(--surface);color:var(--text)">`;
-  customRow.insertBefore(nameRow, customRow.firstChild);
-}
+// _v5AddAlphaNameField REMOVED — alphaNameInput already in static HTML
 
 // ── Hook into existing DOMContentLoaded ────────────────────────────────────
 const _origInit = window.onload || (() => {});
@@ -5424,7 +5556,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     _customLayersRestore();
     renderCustomLayerList();
     namedPresetsRender();
-    _v5AddAlphaNameField();
   }, 500);
 });
 
@@ -5790,7 +5921,23 @@ function drawAlphaSensChart() {
   }
 }
 
-// drawAlphaSensChart is triggered inside alphaUpdateBadge() above
+// Hook: redraw sensitivity chart whenever α is applied or point loads
+// Store original as expression BEFORE redefining (avoids hoisting-loop).
+const _alphaUpdateBadgeCore = (function() {
+  // Capture the function object defined earlier in this script (line ~2421)
+  // by searching the scope chain at evaluation time, not at hoist time.
+  return function() {
+    const p = _activePreset;
+    const preset = ALPHA_PRESETS[p.key];
+    document.getElementById('alphaActiveFlag').textContent  = preset ? preset.flag : '✏';
+    document.getElementById('alphaActiveLabel').textContent = p.key;
+  };
+})();
+
+function alphaUpdateBadge() {
+  _alphaUpdateBadgeCore();
+  setTimeout(drawAlphaSensChart, 100);
+}
 
 
 function toggleAlphaSection() {
