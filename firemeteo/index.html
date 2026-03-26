@@ -480,7 +480,7 @@ tr:hover{background:#f9fafb}
             <span id="soglieCustomLabel" style="font-size:9px;color:var(--dim);flex:1;min-width:60px">nenhum ficheiro</span>
             <button id="soglieCustomClear" onclick="clearCustomSoglie()" style="display:none;font-size:9px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:none;cursor:pointer;color:var(--dim)">✕</button>
           </div>
-          <div style="font-size:8px;color:var(--dim);margin-top:3px">JSON: {mesi:{jan:{p10,p25,p50,p75,p90,p95}…}, hdwc_peak:{p25…p95}}</div>
+          <div style="font-size:8px;color:var(--dim);margin-top:3px">Modalità A (completo): {label, alpha:[12], mesi:{…}, hdwc_peak:{…}} &nbsp;|&nbsp; Modalità B (solo α): {label, alpha:[12]}</div>
         </div>
 
           <!-- Custom input (shown only when Custom selected) -->
@@ -1044,6 +1044,14 @@ function getActiveSoglie() {
   return HDWC_SOGLIE_PRESETS['Greece'];
 }
 
+// ── Custom soglie persistence key ────────────────────────────────────────────
+const CUSTOM_SOGLIE_LS_KEY = 'firemeteo_custom_soglie';
+
+function _soglieUIUpdate(label) {
+  document.getElementById('soglieCustomLabel').textContent = '✓ ' + label;
+  document.getElementById('soglieCustomClear').style.display = 'inline-block';
+}
+
 function uploadSoglieJSON(input) {
   const file = input.files[0];
   if (!file) return;
@@ -1051,20 +1059,73 @@ function uploadSoglieJSON(input) {
   reader.onload = e => {
     try {
       const obj = JSON.parse(e.target.result);
-      if (!obj.mesi || !obj.hdwc_peak) throw new Error('Missing mesi or hdwc_peak');
-      const required = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
-      const missing = required.filter(k => !obj.mesi[k]);
-      if (missing.length) throw new Error('Missing months: ' + missing.join(', '));
-      _customSoglie = obj;
-      document.getElementById('soglieCustomLabel').textContent =
-        '✓ ' + (obj.label || file.name.replace('.json',''));
-      document.getElementById('soglieCustomClear').style.display = 'inline-block';
-      showToast('✓ Soglie custom caricate — ricalcolo…', 2500);
+
+      // ── Mode A: full preset (mesi + hdwc_peak, optional alpha) ──────────
+      if (obj.mesi && obj.hdwc_peak) {
+        const required = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
+        const missing = required.filter(k => !obj.mesi[k]);
+        if (missing.length) throw new Error('Missing months: ' + missing.join(', '));
+
+        const displayLabel = obj.label || file.name.replace(/\.json$/i,'');
+
+        // Apply soglie
+        _customSoglie = obj;
+        try { localStorage.setItem(CUSTOM_SOGLIE_LS_KEY, JSON.stringify({obj, label: displayLabel})); } catch(e) {}
+        _soglieUIUpdate(displayLabel);
+
+        // If JSON also carries alpha values → apply them atomically
+        if (Array.isArray(obj.alpha) && obj.alpha.length === 12 &&
+            obj.alpha.every(v => !isNaN(v) && v >= 0 && v <= 1)) {
+          const newAlpha = obj.alpha.slice();
+          const newKey   = displayLabel;
+          ALPHA_MENSILE  = newAlpha.slice();
+          _activePreset  = { key: newKey, alpha: newAlpha.slice(), custom: true };
+          alphaPresetSave(newKey, newAlpha);
+          window._alphaApplied = { key: newKey, alpha: newAlpha.slice() };
+          // Persist as named preset so it survives reload
+          if (typeof namedPresetsLoad === 'function') {
+            const np = namedPresetsLoad();
+            np[newKey] = { alpha: newAlpha.slice(), flag: '📄', baseKey: null, hasSoglie: true };
+            namedPresetsSave(np);
+            namedPresetsRender();
+          }
+          alphaUpdateBadge();
+          showToast(`✓ Preset "${displayLabel}" caricato — α + soglie — ricalcolo…`, 3000);
+        } else {
+          showToast(`✓ Soglie "${displayLabel}" caricate — ricalcolo…`, 2500);
+        }
+
+      // ── Mode B: alpha-only JSON {label, alpha:[12 values]} ──────────────
+      } else if (Array.isArray(obj.alpha) && obj.alpha.length === 12) {
+        if (obj.alpha.some(v => isNaN(v) || v < 0 || v > 1))
+          throw new Error('Alpha values must be between 0.0 and 1.0');
+        const displayLabel = obj.label || file.name.replace(/\.json$/i,'');
+        const newAlpha = obj.alpha.slice();
+        ALPHA_MENSILE  = newAlpha.slice();
+        _activePreset  = { key: displayLabel, alpha: newAlpha.slice(), custom: true };
+        alphaPresetSave(displayLabel, newAlpha);
+        window._alphaApplied = { key: displayLabel, alpha: newAlpha.slice() };
+        if (typeof namedPresetsLoad === 'function') {
+          const np = namedPresetsLoad();
+          np[displayLabel] = { alpha: newAlpha.slice(), flag: '📄', baseKey: null };
+          namedPresetsSave(np);
+          namedPresetsRender();
+        }
+        alphaUpdateBadge();
+        // Update file label area to confirm
+        _soglieUIUpdate(displayLabel + ' (α only)');
+        showToast(`✓ α "${displayLabel}" caricato — ricalcolo…`, 2500);
+
+      } else {
+        throw new Error('JSON deve contenere "mesi"+"hdwc_peak" oppure "alpha":[12 valori]');
+      }
+
       const lat = parseFloat(document.getElementById('iLat')?.value);
       const lng = parseFloat(document.getElementById('iLon')?.value);
       if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
+
     } catch(err) {
-      showToast('⚠ JSON soglie non valido: ' + err.message, 4000);
+      showToast('⚠ JSON non valido: ' + err.message, 4500);
     }
   };
   reader.readAsText(file);
@@ -1073,13 +1134,39 @@ function uploadSoglieJSON(input) {
 
 function clearCustomSoglie() {
   _customSoglie = null;
+  try { localStorage.removeItem(CUSTOM_SOGLIE_LS_KEY); } catch(e) {}
   document.getElementById('soglieCustomLabel').textContent = 'nenhum ficheiro';
   document.getElementById('soglieCustomClear').style.display = 'none';
-  showToast('Soglie custom rimosse — preset attivo', 2000);
+  showToast('Soglie custom rimosse — preset regionale attivo', 2000);
   const lat = parseFloat(document.getElementById('iLat')?.value);
   const lng = parseFloat(document.getElementById('iLon')?.value);
   if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
 }
+
+// Restore persisted custom soglie on page load (survives reload)
+(function _restoreCustomSoglie() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_SOGLIE_LS_KEY) || 'null');
+    if (!saved || !saved.obj || !saved.obj.mesi || !saved.obj.hdwc_peak) return;
+    // Only restore if the current active preset explicitly has paired soglie
+    // (prevents stale custom soglie from blocking regional preset changes)
+    const currentPreset = (function() {
+      try {
+        const s = JSON.parse(localStorage.getItem('firemeteo_alpha_preset') || 'null');
+        return s ? s.key : null;
+      } catch(e) { return null; }
+    })();
+    const namedObj = (function() {
+      try { return JSON.parse(localStorage.getItem('frd_named_alpha_presets') || '{}'); } catch(e) { return {}; }
+    })();
+    const hasPaired = currentPreset && namedObj[currentPreset] && namedObj[currentPreset].hasSoglie;
+    if (!hasPaired) return; // don't restore — current preset is a standard region
+    _customSoglie = saved.obj;
+    document.addEventListener('DOMContentLoaded', () => {
+      _soglieUIUpdate(saved.label || 'custom');
+    });
+  } catch(e) {}
+})();
 // ── fine soglie dinamiche ─────────────────────────────────────────────────────
 
 
@@ -2471,6 +2558,26 @@ function applyAlphaPreset() {
   // Always save to LS so page reload restores correctly
   alphaPresetSave(newLbl, newAlpha);
   window._alphaApplied = { key: newLbl, alpha: newAlpha.slice() }; // race-condition guard
+
+  // Clear custom soglie when switching to a standard region preset
+  // (keep only if the named preset explicitly has paired soglie)
+  const _hasPairedSoglie = (function() {
+    if (!saveAsName) return false;
+    const np = (typeof namedPresetsLoad === 'function') ? namedPresetsLoad() : {};
+    return !!(np[saveAsName] && np[saveAsName].hasSoglie);
+  })();
+  if (!_hasPairedSoglie) {
+    _customSoglie = null;
+    try { localStorage.removeItem(CUSTOM_SOGLIE_LS_KEY); } catch(e) {}
+    // Reset soglie UI label if it was showing a custom file
+    const lbl = document.getElementById('soglieCustomLabel');
+    if (lbl && lbl.textContent.startsWith('✓')) {
+      lbl.textContent = 'nenhum ficheiro';
+      const clr = document.getElementById('soglieCustomClear');
+      if (clr) clr.style.display = 'none';
+    }
+  }
+
   alphaUpdateBadge();
 
   // Persist as named preset when a name was explicitly given
@@ -2497,12 +2604,19 @@ function applyAlphaPreset() {
 
   showToast(`✓ α: ${newFlag} ${newLbl} — recalculating…`, 2500);
 
-  // Trigger full recalculation using module-level coords (reliable)
+  // ── Immediate re-render with cached data (no network wait) ─────────────
+  // This updates thresholds, HDWc badge and charts INSTANTLY on Apply click.
+  // The full selectPoint re-fetch follows to refresh warmup + forecasts.
+  if (window._lastMeteo) {
+    renderPanel(null, window._lastMeteo);
+    renderAll(window._lastMeteo);
+  }
+
+  // ── Full recalculation (new warmup + fresh forecast from network) ──────
   const lat = _mapLat;
   const lng = _mapLng;
-  console.log('[ALPHA] ALPHA_MENSILE[2]=', ALPHA_MENSILE[2], 'lat=', lat, 'lng=', lng);
   if (!isNaN(lat) && !isNaN(lng)) {
-    setTimeout(() => selectPoint(lat, lng), 300);
+    setTimeout(() => selectPoint(lat, lng), 400);
   } else {
     showToast('α updated — select a point on the map to recalculate.', 3000);
   }
@@ -5538,11 +5652,26 @@ function loadNamedPreset(name){
   _activePreset={key:name,alpha:entry.alpha.slice(),custom:true};
   alphaPresetSave(name,entry.alpha);
   window._alphaApplied={key:name,alpha:entry.alpha.slice()};
+  // Restore paired soglie if they were saved together
+  if (entry.hasSoglie) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CUSTOM_SOGLIE_LS_KEY)||'null');
+      if (saved && saved.obj) {
+        _customSoglie = saved.obj;
+        _soglieUIUpdate(saved.label || name);
+      }
+    } catch(e) {}
+  }
   alphaUpdateBadge();
-  showToast(`α: ★ ${name} — recalculating…`,2200);
+  showToast(`✓ Preset "${name}" — ricalcolo…`, 2200);
+  // Immediate re-render with cached data
+  if (window._lastMeteo) {
+    renderPanel(null, window._lastMeteo);
+    renderAll(window._lastMeteo);
+  }
   const lat=parseFloat(document.getElementById('iLat')?.value);
   const lng=parseFloat(document.getElementById('iLon')?.value);
-  if(!isNaN(lat)&&!isNaN(lng)) setTimeout(()=>selectPoint(lat,lng),300);
+  if(!isNaN(lat)&&!isNaN(lng)) setTimeout(()=>selectPoint(lat,lng),400);
 }
 
 // _v5AddAlphaNameField REMOVED — alphaNameInput already in static HTML
