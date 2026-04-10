@@ -15,7 +15,7 @@
 :root{
   --accent:#e85d2f;--bg:#f8fafc;--surface:#fff;--text:#111827;
   --dim:#6b7280;--border:#e5e7eb;--mono:'Courier New',monospace;
-  --header-h:52px;--tab-h:38px;--sheet-peek:64px;
+  --header-h:52px;--tab-h:38px;--sheet-peek:0px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
@@ -27,12 +27,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
         box-shadow:0 2px 8px rgba(0,0,0,.3)}
 #header .logo{font-size:16px;font-weight:700;color:#f9fafb;flex:1}
 #header .logo span{color:var(--accent)}
+#btnSheet{background:rgba(255,255,255,.12);border:none;border-radius:8px;
+          color:#f9fafb;width:34px;height:34px;font-size:17px;cursor:pointer;
+          display:flex;align-items:center;justify-content:center;
+          transition:background .2s,box-shadow .2s;flex-shrink:0}
+#btnSheet.sheet-active{background:var(--accent);box-shadow:0 0 0 2px rgba(251,146,60,.5)}
 #btnGPS{background:rgba(255,255,255,.12);border:none;border-radius:8px;
         color:#f9fafb;padding:7px 10px;font-size:16px;cursor:pointer;
         transition:background .15s}
 #btnGPS.active{background:rgba(232,93,47,.4)}
-#btnSheet{background:rgba(255,255,255,.12);border:none;border-radius:8px;
-          color:#f9fafb;padding:7px 10px;font-size:16px;cursor:pointer}
 #statusDot{width:8px;height:8px;border-radius:50%;background:#9ca3af;flex-shrink:0}
 #statusDot.active{background:#22c55e;box-shadow:0 0 6px #22c55e88}
 #statusDot.loading{background:#f59e0b;animation:pulse 1s infinite}
@@ -70,7 +73,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 
 /* ── Chart area ── */
 #chartArea{flex:1;min-height:0;position:relative;overflow:hidden}
-.chart-pane{position:absolute;top:0;left:0;right:0;bottom:calc(var(--sheet-peek) + 12px);display:none;flex-direction:column}
+.chart-pane{position:absolute;top:0;left:0;right:0;bottom:8px;display:none;flex-direction:column}
 .chart-pane.active{display:flex}
 .chart-wrap{flex:1;min-height:0;position:relative}
 .chart-wrap > div{height:100%!important;padding-bottom:0}
@@ -91,7 +94,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 #sheet{position:fixed;bottom:0;left:0;right:0;z-index:800;
        background:var(--surface);border-radius:16px 16px 0 0;
        box-shadow:0 -4px 24px rgba(0,0,0,.2);
-       transform:translateY(calc(100% - var(--sheet-peek)));
+       transform:translateY(100%);
        transition:transform .3s cubic-bezier(.32,.72,0,1);
        max-height:90dvh;display:flex;flex-direction:column}
 #sheet.open{transform:translateY(0)}
@@ -124,7 +127,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 #btnICNF.active{background:rgba(232,93,47,.08);border-color:var(--accent);color:var(--accent)}
 
 /* Toast */
-#toast{position:fixed;bottom:calc(var(--sheet-peek) + 10px);left:50%;
+#toast{position:fixed;bottom:16px;left:50%;
        transform:translateX(-50%) translateY(0);z-index:900;
        background:#1f2937;color:#f9fafb;padding:9px 18px;border-radius:24px;
        font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none;
@@ -190,7 +193,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   <div class="logo">🔥 <span>Risco</span> Incêndio</div>
   <div id="statusDot"></div>
   <button id="btnGPS" onclick="toggleGPS()" title="Usar GPS">📍</button>
-  <button id="btnSheet" onclick="toggleSheet()" title="Detalhes">☰</button>
+  <button id="btnSheet" onclick="toggleSheet()" title="Detalhes do ponto">ℹ️</button>
 </div>
 
 <!-- Map -->
@@ -306,7 +309,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 
 <div id="sheetBackdrop" onclick="closeSheet()"></div>
 <div id="sheet">
-  <div id="sheetHandle" onclick="toggleSheet()"></div>
+  <div id="sheetHandle"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;
        padding:0 16px 8px;flex-shrink:0">
     <div id="sheetTitle" style="font-size:11px;font-weight:700;color:var(--dim);
@@ -534,10 +537,12 @@ function switchTab(btn) {
 function toggleSheet() {
   const sheet = document.getElementById('sheet');
   const bd    = document.getElementById('sheetBackdrop');
+  const btn   = document.getElementById('btnSheet');
   const isOpen = sheet.classList.contains('open');
   if (isOpen) closeSheet();
   else {
     sheet.classList.add('open');
+    btn && btn.classList.add('sheet-active');
     bd.style.display = 'block';
     setTimeout(() => bd.style.opacity = '1', 10);
   }
@@ -545,7 +550,9 @@ function toggleSheet() {
 function closeSheet() {
   const sheet = document.getElementById('sheet');
   const bd    = document.getElementById('sheetBackdrop');
+  const btn   = document.getElementById('btnSheet');
   sheet.classList.remove('open');
+  btn && btn.classList.remove('sheet-active');
   bd.style.opacity = '0';
   setTimeout(() => bd.style.display = 'none', 280);
 }
@@ -1633,7 +1640,7 @@ function drawWindRose(hourly,mode,hourFilter,dateStart,dateEnd){
       polar:{
         radialaxis:{visible:true,gridcolor:'#d1d5db',linecolor:'#9ca3af',
           tickfont:{size:9,color:'#374151'},ticksuffix:' km/h',gridwidth:1},
-        angularaxis:{direction:'clockwise',rotation:90,tickfont:{size:11,color:'#111827'},
+        angularaxis:{direction:'clockwise',rotation:-90,tickfont:{size:11,color:'#111827'},
           linecolor:'#9ca3af',gridcolor:'#e5e7eb'},
         bgcolor:'rgba(248,250,252,0.6)',
       },
@@ -1760,7 +1767,7 @@ function drawWindRose(hourly,mode,hourFilter,dateStart,dateEnd){
       },
       angularaxis:{
         direction:'clockwise',
-        rotation:90,
+        rotation:-90,
         tickfont:{size:11,color:'#111827',weight:'bold'},
         linecolor:'#9ca3af',
         gridcolor:'#e5e7eb',
