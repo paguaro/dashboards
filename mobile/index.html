@@ -69,8 +69,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 
 /* ── Chart area ── */
-#chartArea{flex:1;min-height:0;position:relative;overflow:hidden;padding-bottom:calc(var(--sheet-peek) + 24px)}
-.chart-pane{position:absolute;inset:0;display:none;flex-direction:column}
+#chartArea{flex:1;min-height:0;position:relative;overflow:hidden}
+.chart-pane{position:absolute;top:0;left:0;right:0;bottom:calc(var(--sheet-peek) + 12px);display:none;flex-direction:column}
 .chart-pane.active{display:flex}
 .chart-wrap{flex:1;min-height:0;position:relative}
 .chart-wrap > div{height:100%!important;padding-bottom:0}
@@ -369,7 +369,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
         α Portugal · ANEPC 2014-2025<br>
         HDW_eff 70/30 gust-weight<br>
         Open-Meteo · ERA5 warmup 21d<br>
-        v4.0 mobile
+        v5.0 mobile
       </div>
     </div>
 
@@ -654,7 +654,7 @@ function renderRiskStrip(meteo) {
     calcHDW(d.temperature_2m_max[i], d.relative_humidity_2m_mean[i],
             d.windspeed_10m_max[i], d.windgusts_10m_max?.[i]));
   const {hdw:wu_hdw, dates:wu_dates} = getWarmup(meteo);
-  const hdwCum = calcHDWCum(hdwArr, d.time, wu_hdw, wu_dates);
+  const {cum:hdwCum} = calcHDWCum_v2(hdwArr, d.time, d.temperature_2m_max, d.temperature_2m_min, d.precipitation_sum, wu_hdw, wu_dates);
   const hdwcNow = hdwCum[todayIdx] || 0;
   _currentRV = NaN;
 
@@ -1074,6 +1074,75 @@ function getWarmup(meteo){
   const hdw=dates.map((_,i)=>calcHDW(hw.temperature_2m_max[i],hw.relative_humidity_2m_mean[i],hw.windspeed_10m_max[i],hw.windgusts_10m_max?.[i]));
   return{hdw,dates};
 }
+
+// ── HDWc v2 Engine · α dinamico ──────────────────────────────────────────────
+const HDW_V2 = {
+  rain_eff:     2,      tmax_class2:  30,     tmax_class3:  35,
+  hdw_class2:   60,     hdw_class3:   120,
+  alpha_min:    0.40,   alpha_max:    0.95,
+  delta_dry2:   0.005,  delta_dry3:   0.010,
+  delta_n1:     0.005,  delta_n2:     0.010,  delta_n3:     0.015,
+  delta_rel:   -0.010,
+};
+function calcNightScore_v2(tmin) {
+  if (tmin == null) return 0;
+  if (tmin >= 25) return 3; if (tmin >= 20) return 2; if (tmin >= 18) return 1; return 0;
+}
+function classifyDay_v2(hdwEff, tmax, rain, ns) {
+  if ((rain || 0) >= HDW_V2.rain_eff) return 0;
+  if ((tmax || 0) >= HDW_V2.tmax_class3 || hdwEff >= HDW_V2.hdw_class3 || ns >= 2) return 3;
+  if ((tmax || 0) >= HDW_V2.tmax_class2 || hdwEff >= HDW_V2.hdw_class2 || ns >= 1) return 2;
+  return 1;
+}
+function calcAlpha_v2(alphaRef, dc, ns, streak) {
+  let da = 0;
+  if (streak >= 4) { if (dc === 2) da = HDW_V2.delta_dry2; else if (dc === 3) da = HDW_V2.delta_dry3; }
+  const dn = [0, HDW_V2.delta_n1, HDW_V2.delta_n2, HDW_V2.delta_n3][ns] || 0;
+  const dr = dc === 0 ? HDW_V2.delta_rel : 0;
+  const raw = alphaRef + da + dn + dr;
+  // Floor: use alphaRef as natural minimum on non-relief days (dynamic only adds memory).
+  // On relief days: allow dropping below alphaRef, bound at 0.
+  // This prevents the hard alpha_min=0.40 from swallowing the dynamic signal
+  // in low-alpha months (e.g. March PT aRef=0.30 < 0.40).
+  const floor = (dc === 0) ? 0 : alphaRef;
+  return Math.min(HDW_V2.alpha_max, Math.max(floor, raw));
+}
+function calcBeta_v2(rain) {
+  const r = rain || 0;
+  if (r >= 30) return 0.65; if (r >= 20) return 0.75;
+  if (r >= 10) return 0.85; if (r >= 2)  return 0.95; return 1.0;
+}
+function calcHDWCum_v2(hdwArr, dates, tmaxArr, tminArr, rainArr, warmupHdw=null, warmupDates=null) {
+  let prev = 0;
+  if (warmupHdw && warmupDates && warmupHdw.length) {
+    for (let i = 0; i < warmupHdw.length; i++) {
+      const m = parseInt(warmupDates[i].split('-')[1]) - 1;
+      prev = (warmupHdw[i] || 0) + ALPHA_MENSILE[m] * prev;
+    }
+  }
+  const cum=[], alphas=[], dayClasses=[], nightScores=[], dryStreaks=[];
+  let streak = 0;
+  for (let i = 0; i < hdwArr.length; i++) {
+    const m    = parseInt(dates[i].split('-')[1]) - 1;
+    const aRef = ALPHA_MENSILE[m];
+    const tmin = tminArr ? (tminArr[i] ?? null) : null;
+    const tmax = tmaxArr ? (tmaxArr[i] ?? 0)    : 0;
+    const rain = rainArr ? (rainArr[i] ?? 0)    : 0;
+    const hdwE = hdwArr[i] || 0;
+    const ns   = calcNightScore_v2(tmin);
+    const dc   = classifyDay_v2(hdwE, tmax, rain, ns);
+    streak     = (dc === 2 || dc === 3) ? streak + 1 : 0;
+    const alpha= calcAlpha_v2(aRef, dc, ns, streak);
+    const beta = calcBeta_v2(rain);
+    const cur  = beta * (hdwE + alpha * prev);
+    cum.push(parseFloat(cur.toFixed(2)));
+    alphas.push(parseFloat(alpha.toFixed(3)));
+    dayClasses.push(dc); nightScores.push(ns); dryStreaks.push(streak);
+    prev = cur;
+  }
+  return { cum, alphas, dayClasses, nightScores, dryStreaks };
+}
+// ── fine HDWc v2 Engine ───────────────────────────────────────────────────────
 
 function hdwColor(v){
   if(v>=150)return'#7f1d1d';if(v>=80)return'#b91c1c';
@@ -1564,7 +1633,7 @@ function drawWindRose(hourly,mode,hourFilter,dateStart,dateEnd){
       polar:{
         radialaxis:{visible:true,gridcolor:'#d1d5db',linecolor:'#9ca3af',
           tickfont:{size:9,color:'#374151'},ticksuffix:' km/h',gridwidth:1},
-        angularaxis:{direction:'clockwise',tickfont:{size:11,color:'#111827'},
+        angularaxis:{direction:'clockwise',rotation:90,tickfont:{size:11,color:'#111827'},
           linecolor:'#9ca3af',gridcolor:'#e5e7eb'},
         bgcolor:'rgba(248,250,252,0.6)',
       },
@@ -1691,6 +1760,7 @@ function drawWindRose(hourly,mode,hourFilter,dateStart,dateEnd){
       },
       angularaxis:{
         direction:'clockwise',
+        rotation:90,
         tickfont:{size:11,color:'#111827',weight:'bold'},
         linecolor:'#9ca3af',
         gridcolor:'#e5e7eb',
