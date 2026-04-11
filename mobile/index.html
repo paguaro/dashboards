@@ -2507,10 +2507,20 @@ function openFSChart(paneId, title, chartId, barbId) {
   const traces  = srcEl.data;
   const layout  = JSON.parse(JSON.stringify(srcEl.layout || {}));
   layout.height = h;
-  layout.margin = { t:16, r:55, b:48, l:48 };
+  // Rimuovi width ereditato dal chart piccolo — causa troncatura asse dx in fullscreen
+  delete layout.width;
+  layout.autosize = true;
+  layout.margin = { t:16, r:60, b:48, l:48 };
+  // Resetta position esplicite sugli assi dx che dipendevano dalla larghezza originale
+  if (layout.yaxis2) { delete layout.yaxis2.position; }
+  if (layout.yaxis3) { delete layout.yaxis3.position; }
+  if (layout.yaxis4) { delete layout.yaxis4.position; }
 
   Plotly.react('fsChartDiv', traces, layout, {
     responsive:true, displayModeBar:false, scrollZoom:true, doubleClick:'reset'
+  }).then(() => {
+    // Forza resize al frame successivo per garantire larghezza corretta
+    requestAnimationFrame(() => Plotly.Plots.resize('fsChartDiv'));
   });
 
   // Draw barbs if applicable
