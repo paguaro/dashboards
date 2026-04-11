@@ -1453,10 +1453,10 @@ function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
     let off = 0;
     const SPACING = 5;
 
-    // Pennants (50 km/h)
+    // Pennants (50 km/h) — disegnate dalla base (dot) verso la punta
     for (let p=0; p<pennants; p++) {
-      const bx=tx-ax*off, by=ty-ay*off;
-      const ex=tx-ax*(off+SPACING), ey=ty-ay*(off+SPACING);
+      const bx=cx+ax*off, by=cy+ay*off;
+      const ex=cx+ax*(off+SPACING), ey=cy+ay*(off+SPACING);
       const tri = document.createElementNS('http://www.w3.org/2000/svg','polygon');
       tri.setAttribute('points',`${bx},${by} ${ex},${ey} ${bx+px*FEATHER_LEN},${by+py*FEATHER_LEN}`);
       tri.setAttribute('fill','#7f1d1d'); g_el.appendChild(tri);
@@ -1464,7 +1464,7 @@ function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
     }
     // Full feathers (10 km/h)
     for (let f=0; f<Math.min(full,5); f++) {
-      const bx=tx-ax*off, by=ty-ay*off;
+      const bx=cx+ax*off, by=cy+ay*off;
       const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
       ln.setAttribute('x1',bx); ln.setAttribute('y1',by);
       ln.setAttribute('x2',bx+px*FEATHER_LEN); ln.setAttribute('y2',by+py*FEATHER_LEN);
@@ -1473,7 +1473,7 @@ function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
     }
     // Half feather (5 km/h)
     if (half) {
-      const bx=tx-ax*off, by=ty-ay*off;
+      const bx=cx+ax*off, by=cy+ay*off;
       const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
       ln.setAttribute('x1',bx); ln.setAttribute('y1',by);
       ln.setAttribute('x2',bx+px*FEATHER_LEN*0.5); ln.setAttribute('y2',by+py*FEATHER_LEN*0.5);
