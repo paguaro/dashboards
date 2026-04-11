@@ -184,6 +184,46 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   cursor:pointer;display:flex;align-items:center;justify-content:center;
   box-shadow:0 1px 3px rgba(0,0,0,.1);
 }
+
+/* ── Desktop layout (≥768px): side-by-side map + charts ── */
+@media (min-width: 768px) {
+  body { flex-direction: column; }
+
+  /* Contenitore principale sotto l'header */
+  #mainWrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+  }
+
+  /* Mappa: colonna sinistra fissa */
+  #mapWrap {
+    width: 42% !important;
+    height: auto !important;
+    flex-shrink: 0;
+    align-self: stretch;
+  }
+  #map { width: 100%; height: 100%; }
+
+  /* Colonna destra: risk + tabs + chart */
+  #rightCol {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Il chart area prende tutto lo spazio rimanente */
+  #chartArea { flex: 1; min-height: 0; }
+
+  /* Mappa non deve shrink */
+  #mapOverlay { font-size: 12px; }
+
+  /* Barbs e chart wraps si adattano */
+  .chart-wrap > div { height: 100% !important; }
+}
 </style>
 </head>
 <body>
@@ -196,12 +236,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   <button id="btnSheet" onclick="toggleSheet()" title="Detalhes do ponto">ℹ️</button>
 </div>
 
+<div id="mainWrap">
 <!-- Map -->
 <div id="mapWrap">
   <div id="map"></div>
   <div id="mapOverlay">Tap on map to select a point</div>
 </div>
-
+<div id="rightCol">
 <!-- Risk strip -->
 <div id="riskStrip" style="flex-direction:column;padding:4px 14px">
   <div style="display:flex;align-items:center;gap:8px;width:100%">
@@ -288,6 +329,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
     </div>
   </div>
 </div>
+</div><!-- /rightCol -->
+</div><!-- /mainWrap -->
 
 <!-- Bottom Sheet -->
 
@@ -467,9 +510,11 @@ let _currentRV=NaN;
 
 // ── Map init ───────────────────────────────────────────────────────────────
 function initMap() {
-  // Responsive map height: 38% of screen
-  const mh = Math.round(window.innerHeight * 0.38);
-  document.getElementById('mapWrap').style.height = mh + 'px';
+  // Responsive map height: mobile=38%, desktop via CSS
+  if (window.innerWidth < 768) {
+    document.getElementById('mapWrap').style.height =
+      Math.round(window.innerHeight * 0.38) + 'px';
+  }
 
   map = L.map('map', {zoomControl:true, attributionControl:false}).setView([39.5,-8.0], 7);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -781,13 +826,29 @@ function showUI() {
 }
 
 function recalcLayout() {
+  const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const hh = document.getElementById('header').offsetHeight;
-  const rh = document.getElementById('riskStrip').offsetHeight;
-  const th = document.getElementById('tabs').offsetHeight;
-  const mapH = Math.round(vh * 0.30);
-  document.getElementById('mapWrap').style.height = mapH + 'px';
+  const isDesktop = vw >= 768;
+  const mapWrap = document.getElementById('mapWrap');
+  if (isDesktop) {
+    // Desktop: mappa occupa tutta l'altezza della colonna sx — height gestito da CSS
+    mapWrap.style.height = '';
+    mapWrap.style.width  = '';
+  } else {
+    // Mobile: mappa = 30% viewport height in colonna
+    mapWrap.style.height = Math.round(vh * 0.30) + 'px';
+    mapWrap.style.width  = '';
+  }
   map.invalidateSize();
+  // Forza resize grafici Plotly attivi
+  ['chart-72temp','chart-72hdw','chart-72prec','chart-72wind'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.data) {
+      const area = document.getElementById('chartArea');
+      const newH = Math.max(isDesktop ? 300 : 180, area?.offsetHeight || 240);
+      Plotly.relayout(id, {height: newH, autosize: true}).catch(()=>{});
+    }
+  });
 }
 
 // ── draw72h (wrapper) ──────────────────────────────────────────────────────
