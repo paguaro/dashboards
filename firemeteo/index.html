@@ -3127,7 +3127,7 @@ let _engineUserLocked = (function() {
 function engineUnlockGeo() {
   _engineUserLocked = false;
   try { localStorage.removeItem(FM_ENGINE_LS_KEY); } catch(e) {}
-  _activeEngineId = 'greece';
+  _activeEngineId = 'portugal';
   renderEnginePresetPanel();
   updateEngineActiveBar();
   showToast('Geo-detection sbloccata — auto al prossimo punto', 2000);
@@ -4490,7 +4490,7 @@ let ENGINES = _buildEngines();
 
 // ID dell'engine default (persiste in localStorage)
 let _activeEngineId = (function() {
-  try { return localStorage.getItem(FM_ENGINE_LS_KEY) || 'greece'; } catch(e) { return 'greece'; }
+  try { return localStorage.getItem(FM_ENGINE_LS_KEY) || 'portugal'; } catch(e) { return 'portugal'; }
 })();
 
 // Salva default engine e blocca geo-detection
@@ -4584,7 +4584,7 @@ function _saveCustomEngines() {
 function _geoAutoDetectEngine(lat, lon) {
   const _lat = parseFloat(lat), _lon = parseFloat(lon);
 
-  // 1. Cerca un custom engine con bbox che contenga il punto
+  // 1. Custom engine con bbox — priorità assoluta, ignora lock utente
   let bestEng = null;
   for (const eng of Object.values(ENGINES)) {
     if (eng._custom && eng.bbox) {
@@ -4595,16 +4595,31 @@ function _geoAutoDetectEngine(lat, lon) {
     }
   }
 
-  if (!bestEng) return;  // nessuna zona custom copre questo punto → lascia preset attivo
+  // 2. Nessun custom trovato → fallback sui builtin via _ENGINE_BBOX
+  //    Solo se l'utente non ha fissato un engine esplicitamente (rispetta il lock per i builtin)
+  if (!bestEng) {
+    if (_engineUserLocked) return;  // utente ha scelto esplicitamente — non toccare
+    const ordered = ['australia','canada','california','greece_aegean','sardinia','turkey','greece','portugal','chile','mediterranean'];
+    for (const id of ordered) {
+      const bbox = _ENGINE_BBOX[id];
+      if (!bbox || !ENGINES[id]) continue;
+      const [lo, hi, la, lb] = bbox;
+      if (_lon >= lo && _lon <= hi && _lat >= la && _lat <= lb) {
+        bestEng = ENGINES[id]; break;
+      }
+    }
+  }
 
-  // 2. Non rieseguire se già attivo
+  if (!bestEng?.fullConfig) return;  // engine senza config completo → niente da applicare
+
+  // 3. Non rieseguire se già attivo
   const curId = _activeEngineConfig?.meta?.region_id || _activeEngineId;
   if (curId === bestEng.id) return;
 
-  // 3. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)
+  // 4. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)
   engineApply(bestEng.id, false);
   updateEngineActiveBar();
-  showToast(`⬡ Zona: ${bestEng.flag || '📦'} ${bestEng.short}`, 2200);
+  showToast(`⬡ ${bestEng.flag || ''} ${bestEng.short}`, 2000);
 }
 
 function detectEngineFromCoords(lat, lon) {
