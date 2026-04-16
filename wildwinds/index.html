@@ -202,10 +202,13 @@ tr:hover td{background:var(--surface2)}
   <span id="gstatus" style="font-size:10px;color:#6b7280;font-family:var(--mono)"></span>
   <div class="hdr-spacer"></div>
   <button class="btn" onclick="exportPDF()">📄 PDF</button>
-  <button class="btn g" onclick="saveJSON()">💾 JSON</button>
-  <button class="btn" onclick="triggerLoadStations()" title="Load stations.json from monitor repo">📂 Stations</button>
-  <button class="btn a" onclick="fetchAll()">↺ Refresh</button>
-  <input type="file" id="stationsFileInput" accept=".json" style="display:none" onchange="loadStationsFile(this)">
+  <button class="btn g" onclick="saveJSON()">💾 Data</button>
+  <button class="btn" onclick="_wwExportStations()" title="Esporta lista stazioni come JSON">📤 Stations</button>
+  <button class="btn" onclick="triggerLoadStations()" title="Carica stazioni da JSON/CSV">📂 Load</button>
+  <button class="btn" onclick="_wwLoadExamples()" title="Carica stazioni di esempio (idle, clicca per attivare)">⭐ Examples</button>
+  <button class="btn" onclick="_wwClear()" title="Cancella tutte le stazioni salvate" style="color:#dc2626">🗑</button>
+  <button class="btn a" onclick="fetchAll()" title="Fetch dati per tutte le stazioni">↺ All</button>
+  <input type="file" id="stationsFileInput" accept=".json,.csv" style="display:none" onchange="loadStationsFile(this)">
   <div class="hdr-status"><div class="sdot" id="sdot"></div><span id="stxt">Ready</span></div>
 </header>
 
@@ -576,7 +579,7 @@ var DEFAULT_STATIONS=[
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
-var stations=DEFAULT_STATIONS.map(function(s){return Object.assign({},s,{all:null,obs:null,fct:null,status:'idle'});});
+var stations=[];  // starts empty — restored from localStorage or via ⭐ Examples
 var selectedId=null;
 var roseMode='obs';
 var mapObj=null,markers={};
@@ -817,6 +820,86 @@ async function fetchOne(id){
   }catch(e){stations[idx].status='error';setSdot('err');}
   renderList();updateMarker(stations[idx]);
   if(selectedId===id&&stations[idx].all)renderStation(stations[idx]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATION PERSISTENCE — localStorage + export/import
+// ═══════════════════════════════════════════════════════════════════════
+var WW_LS_KEY='ww_stations_v1';
+
+// Serialise only static fields (no meteo data)
+function _wwSave(){
+  try{
+    var s=stations.map(function(x){return{
+      id:x.id,name:x.name,lat:x.lat,lon:x.lon,region:x.region||'',
+      color:x.color,country:x.country||'',elevation:x.elevation||null,
+      terrain:x.terrain||null,wind_system:x.wind_system||null,
+      wind_sectors:x.wind_sectors||null,wind_sector:x.wind_sector||null
+    };});
+    localStorage.setItem(WW_LS_KEY,JSON.stringify(s));
+  }catch(e){console.warn('ww save:',e);}
+}
+
+// Restore from localStorage; returns true if something was loaded
+function _wwLoad(){
+  try{
+    var raw=localStorage.getItem(WW_LS_KEY);
+    if(!raw)return false;
+    var saved=JSON.parse(raw);
+    if(!Array.isArray(saved)||!saved.length)return false;
+    stations=saved.map(function(r){return{
+      id:r.id,name:r.name,lat:parseFloat(r.lat),lon:parseFloat(r.lon),
+      region:r.region||'',color:r.color||PALETTE[0],
+      country:r.country||'',elevation:r.elevation||null,terrain:r.terrain||null,
+      wind_system:r.wind_system||null,wind_sectors:r.wind_sectors||null,
+      wind_sector:r.wind_sector||null,
+      all:null,obs:null,fct:null,status:'idle'
+    };});
+    stations.forEach(addMarker);
+    return true;
+  }catch(e){console.warn('ww restore:',e);return false;}
+}
+
+// Clear saved stations and reset to empty
+function _wwClear(){
+  if(!confirm('Rimuovere tutte le stazioni salvate?'))return;
+  localStorage.removeItem(WW_LS_KEY);
+  stations.forEach(function(s){if(markers[s.id]){mapObj.removeLayer(markers[s.id]);delete markers[s.id];}});
+  stations=[];selectedId=null;showEmpty();renderList();
+  toast('Stazioni cancellate — aggiungi o carica un file',3000);
+}
+
+// Load default example stations as idle (no fetch)
+function _wwLoadExamples(){
+  var existing=new Set(stations.map(function(s){return s.id;}));
+  DEFAULT_STATIONS.forEach(function(def){
+    if(existing.has(def.id))return;
+    var s=Object.assign({},def,{all:null,obs:null,fct:null,status:'idle'});
+    stations.push(s);addMarker(s);existing.add(def.id);
+  });
+  _wwSave();renderList();
+  try{
+    var lats=stations.map(function(s){return s.lat;});
+    var lons=stations.map(function(s){return s.lon;});
+    mapObj.fitBounds([[Math.min.apply(null,lats)-1,Math.min.apply(null,lons)-4],
+                      [Math.max.apply(null,lats)+1,Math.max.apply(null,lons)+4]],{maxZoom:5});
+  }catch(e){}
+  toast('Stazioni di esempio caricate — clicca per attivare',2500);
+}
+
+// Export current station list as JSON (no meteo data)
+function _wwExportStations(){
+  if(!stations.length){toast('Nessuna stazione da esportare',2000);return;}
+  var data=stations.map(function(s){return{
+    id:s.id,name:s.name,lat:s.lat,lon:s.lon,region:s.region||'',
+    country:s.country||'',wind_system:s.wind_system||null,
+    wind_sectors:s.wind_sectors||null
+  };});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='wildwinds_stations_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  toast('Stazioni esportate ('+data.length+')',2000);
 }
 
 function saveJSON(){
@@ -1151,6 +1234,7 @@ function showFoehnEditor(sid,ev){
         e.stopPropagation();
         var idx=parseInt(btn.dataset.idx);
         s.wind_sectors.splice(idx,1);
+        _wwSave();
         _foehnEditorRefresh(s,pop,bRect);
         rebuild();
       };
@@ -1162,6 +1246,7 @@ function showFoehnEditor(sid,ev){
       if(!nm||isNaN(fr)||isNaN(to)){toast('Compila nome e angoli');return;}
       var color=_FSEC_COLORS[s.wind_sectors.length%_FSEC_COLORS.length];
       s.wind_sectors.push({name:nm,from:fr,to:to,color:color});
+      _wwSave();
       _foehnEditorRefresh(s,pop,bRect);
     };
   }
@@ -1193,12 +1278,12 @@ function removeStation(id){
   if(markers[id]){mapObj.removeLayer(markers[id]);delete markers[id];}
   stations=stations.filter(function(s){return s.id!==id;});
   if(selectedId===id){selectedId=null;showEmpty();}
-  renderList();
+  renderList();_wwSave();
 }
 function doAdd(lat,lon,name,windSys){
   var id='c_'+Date.now();var color=PALETTE[stations.length%PALETTE.length];
   var s={id:id,name:name,lat:parseFloat(lat),lon:parseFloat(lon),region:'Custom',color:color,wind_system:windSys||null,all:null,obs:null,fct:null,status:'idle'};
-  stations.push(s);addMarker(s);renderList();fetchOne(id);
+  stations.push(s);addMarker(s);renderList();_wwSave();fetchOne(id);
 }
 function addCustom(){
   var lat=parseFloat(document.getElementById('aLat').value);
@@ -1276,9 +1361,9 @@ function loadStationsFile(input){
 
       renderList();
 
-      // Fetch data for newly added stations
-      stations.filter(function(s){return s.status==='idle';})
-              .forEach(function(s){fetchOne(s.id);});
+      // Option A: no auto-fetch — user clicks station to load data
+      // stations remain idle; call _wwSave to persist
+      _wwSave();
 
       // Fit map to all markers
       try{
@@ -1599,31 +1684,191 @@ var baseL={paper_bgcolor:'transparent',plot_bgcolor:'#f8fafc',
   margin:{t:6,b:35,l:46,r:12},hovermode:'x unified'};
 function mkL(h,extra){var l=JSON.parse(JSON.stringify(baseL));l.height=h;return Object.assign(l,extra||{});}
 
+// ═══════════════════════════════════════════════════════════════════════
+// WIND SHIFT DETECTION + FOEHN DIAMOND HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+
+// Detect hourly wind shifts (Δdir≥45° AND Δwind≥15 or Δdir≥60°)
+function detectWindShifts(times,ws,wg,dirs,temps){
+  var SHIFT_DIR=45,SHIFT_WIND=15,SHIFT_SPEED_ONLY=25,SHIFT_GUST=20;
+  var DIRS16=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  var hasDirs=dirs&&dirs.some(function(v){return v!=null;});
+  function angDist(a,b){if(a==null||b==null)return null;var d=Math.abs(a-b)%360;return d>180?360-d:d;}
+  function angSigned(a,b){if(a==null||b==null)return null;var d=((b-a)%360+360)%360;if(d>180)d-=360;return d;}
+  function dirLabel(deg){return deg!=null?DIRS16[Math.round(((deg%360+360)%360)/22.5)%16]:null;}
+  var shifts=[];
+  for(var i=1;i<times.length;i++){
+    var w0=ws[i-1],w1=ws[i],g0=wg?wg[i-1]:null,g1=wg?wg[i]:null;
+    var d0=dirs?dirs[i-1]:null,d1=dirs?dirs[i]:null;
+    if(w1==null)continue;
+    var dDir=angDist(d0,d1),dDS=angSigned(d0,d1);
+    var dWind=w0!=null?+(w1-w0).toFixed(1):null;
+    var dGust=(g0!=null&&g1!=null)?+(g1-g0).toFixed(1):null;
+    var flagged=false;
+    if(hasDirs){if(dDir!=null&&dWind!=null&&dDir>=SHIFT_DIR&&dWind>=SHIFT_WIND)flagged=true;if(dDir!=null&&dDir>=60)flagged=true;}
+    else{if(dWind!=null&&dWind>=SHIFT_SPEED_ONLY)flagged=true;if(dGust!=null&&dGust>=SHIFT_GUST)flagged=true;}
+    if(flagged){
+      var rot=dDS!=null?(dDS>0?'↻ veering':'↺ backing'):null;
+      shifts.push({date:times[i],dDir:dDir!=null?Math.round(dDir):null,
+        dDirSigned:dDS!=null?Math.round(dDS):null,rotation:rot,
+        fromDir:dirLabel(d0),toDir:dirLabel(d1),
+        dWind:dWind,dGust:dGust,speed:w1,gust:g1,hasDir:hasDirs});
+    }
+  }
+  return shifts;
+}
+
+// Build Plotly wind-shift trace (⚡ triangle-up on gust curve)
+function _buildShiftTrace(times,ws,wg,wd,temp){
+  var shifts=detectWindShifts(times,ws,wg,wd,temp);
+  if(!shifts.length)return null;
+  var sy=shifts.map(function(s){return(s.gust!=null?s.gust:s.speed)+3;});
+  var ht=shifts.map(function(s){
+    var p=[];
+    if(s.hasDir&&s.dDir!=null){
+      var sign=s.dDirSigned!=null?(s.dDirSigned>0?'+':''):'';
+      var ft=(s.fromDir&&s.toDir)?' ('+s.fromDir+'→'+s.toDir+')':'';
+      p.push('Δdir '+sign+s.dDirSigned+'°'+(s.rotation?' '+s.rotation:'')+ft);
+    }
+    if(s.dWind!=null)p.push('Δwind '+(s.dWind>0?'+':'')+s.dWind+' km/h');
+    if(s.dGust!=null)p.push('Δgust '+(s.dGust>0?'+':'')+s.dGust+' km/h');
+    return '⚡ Wind shift<br>'+p.join('<br>');
+  });
+  return{x:shifts.map(function(s){return s.date;}),y:sy,name:'⚡ Shift',
+    type:'scatter',mode:'markers',
+    marker:{symbol:'triangle-up',size:10,color:'#dc2626',line:{color:'#7f1d1d',width:1.5}},
+    hovertemplate:ht.map(function(t){return t+'<extra></extra>';}),showlegend:true};
+}
+
+// Direction-based color: cold (blue) for N winds, warm (red/orange) for S winds
+function _windSectorColor(from,to){
+  var center=(((from+to)/2)%360+360)%360;
+  if(center<=30||center>=330)  return'#1d4ed8'; // N  — deep blue
+  if(center<=75)               return'#4338ca'; // NE — indigo
+  if(center<=120)              return'#d97706'; // E  — amber
+  if(center<=165)              return'#ea580c'; // SE — orange
+  if(center<=210)              return'#dc2626'; // S  — red
+  if(center<=255)              return'#b45309'; // SW — brown
+  if(center<=300)              return'#059669'; // W  — green
+  return                              '#0284c7'; // NW — teal blue
+}
+
+// Build Plotly foehn traces: diamonds every 2h + line connecting consecutive periods
+function _buildFoehnTraces(times,ws,wg,wd,sectors){
+  if(!sectors||!sectors.length||!wd||!wd.some(function(v){return v!=null;}))return[];
+  var out=[];
+  sectors.forEach(function(sec){
+    var from=((sec.from%360)+360)%360;
+    var to=((sec.to%360)+360)%360;
+    var cwArc=((to-from)+360)%360;
+    // Color from direction; override stored color
+    var color=_windSectorColor(sec.from,sec.to);
+    var label=sec.name||sec.label||'Wind';
+
+    // Collect every-2h matching points
+    var matchT=[],matchY=[],matchHT=[];
+    times.forEach(function(time,i){
+      var h=new Date(time).getHours();
+      if(h%2!==0)return;                    // every 2 hours
+      var deg=wd[i];
+      if(deg==null||ws[i]==null)return;
+      var d=((deg%360)+360)%360;
+      var inArc=cwArc<=180
+        ?((d-from+360)%360)<=cwArc
+        :((d-to+360)%360)<=(360-cwArc);
+      if(!inArc)return;
+      matchT.push(time);
+      matchY.push(wg[i]!=null?wg[i]:ws[i]);
+      matchHT.push('★ '+label+'<br>'
+        +sec.from+'°→'+sec.to+'°<br>'
+        +'Wind: '+ws[i].toFixed(0)+' km/h'
+        +(wg[i]!=null?' · Gust: '+wg[i].toFixed(0)+' km/h':'')
+        +'<extra></extra>');
+    });
+    if(!matchT.length)return;
+
+    // Insert null gaps between non-consecutive points (gap > 3h)
+    // so lines only connect runs of consecutive matching hours
+    var gx=[],gy=[];
+    var GAP=3*3600*1000+60000; // 3h + margin
+    matchT.forEach(function(t,i){
+      if(i>0&&(new Date(t)-new Date(matchT[i-1]))>GAP){
+        gx.push(null);gy.push(null);
+      }
+      gx.push(t);gy.push(matchY[i]);
+    });
+
+    // Two traces: thick line for period + bold diamonds on matching points
+    out.push({
+      x:gx, y:gy, name:'★ '+label,
+      type:'scatter', mode:'lines',
+      line:{color:color,width:3.5,dash:'solid'},
+      opacity:0.55, showlegend:false,
+      hoverinfo:'skip', connectgaps:false
+    });
+    out.push({
+      x:matchT, y:matchY, name:'★ '+label,
+      type:'scatter', mode:'markers',
+      marker:{symbol:'diamond',size:13,color:color,opacity:1.0,
+              line:{color:'#fff',width:1.5}},
+      hovertemplate:matchHT, showlegend:true
+    });
+  });
+  return out;
+}
+
 function renderTimeSeries(obsF,fctF){
-  var lay=mkL(160,{yaxis:{color:'#94a3b8',gridcolor:'#e2e8f0',tickfont:{color:'#94a3b8',size:9},title:{text:'km/h',font:{color:'#94a3b8',size:9}}}});
-  // Store references for barb redraw on relayout
+  var lay=mkL(180,{yaxis:{color:'#94a3b8',gridcolor:'#e2e8f0',tickfont:{color:'#94a3b8',size:9},
+    title:{text:'km/h',font:{color:'#94a3b8',size:9}}},
+    legend:{orientation:'h',x:.01,y:1.08,font:{size:9},bgcolor:'rgba(255,255,255,.8)'}});
   window._lastObsF=obsF;window._lastFctF=fctF;
-  // Obs chart — show obs if available (or all-data fallback)
+
+  // Get foehn sectors for selected station
+  var _st=stations.find(function(x){return x.id===selectedId;});
+  var _sectors=_st?_getStationSectors(_st):[];
+
+  // ── OBS chart ────────────────────────────────────────────────────────────
   var showObs=(roseMode!=='fct')&&obsF&&obsF.times.length;
   if(showObs){
-    Plotly.react('chartWindObs',[
-      {x:obsF.times,y:obsF.ws,name:'Wind',type:'scatter',mode:'lines',line:{color:'#0284c7',width:1.4}},
-      {x:obsF.times,y:obsF.wg,name:'Gust',type:'scatter',mode:'lines',line:{color:'#ea580c',width:1.4}},
-      {x:obsF.times,y:obsF.deltas,name:'Δ Gust−Wind',type:'scatter',mode:'lines',line:{color:'#7c3aed',width:1,dash:'dot'},fill:'tozeroy',fillcolor:'rgba(124,58,237,.06)'},
-    ],lay,PC);
+    var obsTraces=[
+      {x:obsF.times,y:obsF.ws,name:'Wind',type:'scatter',mode:'lines',
+       line:{color:'#0284c7',width:1.4},hovertemplate:'Wind: %{y:.1f} km/h<extra></extra>'},
+      {x:obsF.times,y:obsF.wg,name:'Gust',type:'scatter',mode:'lines',
+       line:{color:'#ea580c',width:1.8},hovertemplate:'Gust: %{y:.1f} km/h<extra></extra>'},
+      {x:obsF.times,y:obsF.deltas,name:'Δ G−W',type:'scatter',mode:'lines',
+       line:{color:'#7c3aed',width:1,dash:'dot'},fill:'tozeroy',fillcolor:'rgba(124,58,237,.06)'}
+    ];
+    // Wind shifts ⚡
+    var shiftTrObs=_buildShiftTrace(obsF.times,obsF.ws,obsF.wg,obsF.wd,obsF.temp);
+    if(shiftTrObs)obsTraces.push(shiftTrObs);
+    // Foehn diamonds ♦ every 3h
+    _buildFoehnTraces(obsF.times,obsF.ws,obsF.wg,obsF.wd,_sectors).forEach(function(t){obsTraces.push(t);});
+
+    Plotly.react('chartWindObs',obsTraces,lay,PC);
     var elObs=document.getElementById('chartWindObs');
     if(elObs)elObs.on('plotly_relayout',function(){
       if(window._lastObsF)drawBarbs('barbs-obs','chartWindObs',_lastObsF.times,_lastObsF.ws,_lastObsF.wg,_lastObsF.wd,_lastObsF.temp);
     });
   } else Plotly.react('chartWindObs',[{x:[],y:[],name:'No obs data in range',type:'scatter'}],lay,PC);
-  // FCT chart
+
+  // ── FCT chart ────────────────────────────────────────────────────────────
   var showFct=(roseMode!=='obs')&&fctF&&fctF.times.length;
   if(showFct){
-    Plotly.react('chartWindFct',[
-      {x:fctF.times,y:fctF.ws,name:'Wind FCT',type:'scatter',mode:'lines',line:{color:'#0284c7',width:1.4,dash:'dot'}},
-      {x:fctF.times,y:fctF.wg,name:'Gust FCT',type:'scatter',mode:'lines',line:{color:'#ea580c',width:1.4,dash:'dot'}},
-      {x:fctF.times,y:fctF.deltas,name:'Δ FCT',type:'scatter',mode:'lines',line:{color:'#7c3aed',width:1,dash:'dash'},fill:'tozeroy',fillcolor:'rgba(124,58,237,.04)'},
-    ],lay,PC);
+    var fctTraces=[
+      {x:fctF.times,y:fctF.ws,name:'Wind FCT',type:'scatter',mode:'lines',
+       line:{color:'#0284c7',width:1.4,dash:'dot'},hovertemplate:'Wind FCT: %{y:.1f} km/h<extra></extra>'},
+      {x:fctF.times,y:fctF.wg,name:'Gust FCT',type:'scatter',mode:'lines',
+       line:{color:'#ea580c',width:1.8,dash:'dot'},hovertemplate:'Gust FCT: %{y:.1f} km/h<extra></extra>'},
+      {x:fctF.times,y:fctF.deltas,name:'Δ FCT',type:'scatter',mode:'lines',
+       line:{color:'#7c3aed',width:1,dash:'dash'},fill:'tozeroy',fillcolor:'rgba(124,58,237,.04)'}
+    ];
+    // Wind shifts ⚡
+    var shiftTrFct=_buildShiftTrace(fctF.times,fctF.ws,fctF.wg,fctF.wd,fctF.temp);
+    if(shiftTrFct)fctTraces.push(shiftTrFct);
+    // Foehn diamonds ♦ every 3h
+    _buildFoehnTraces(fctF.times,fctF.ws,fctF.wg,fctF.wd,_sectors).forEach(function(t){fctTraces.push(t);});
+
+    Plotly.react('chartWindFct',fctTraces,lay,PC);
     var elFct=document.getElementById('chartWindFct');
     if(elFct)elFct.on('plotly_relayout',function(){
       if(window._lastFctF)drawBarbs('barbs-fct','chartWindFct',_lastFctF.times,_lastFctF.ws,_lastFctF.wg,_lastFctF.wd,_lastFctF.temp);
@@ -2715,17 +2960,29 @@ function redrawBarbs(){
 try{
   initSlider();
   initMap();
-  // Fit map to show all default stations across PT + IT + US
-  try{
-    var _lats=stations.map(function(s){return s.lat;});
-    var _lons=stations.map(function(s){return s.lon;});
-    mapObj.fitBounds([
-      [Math.min.apply(null,_lats)-1, Math.min.apply(null,_lons)-4],
-      [Math.max.apply(null,_lats)+1, Math.max.apply(null,_lons)+4]
-    ],{maxZoom:5});
-  }catch(e2){mapObj.setView([39,-30],3);}
+
+  // Restore saved stations from localStorage (Option A: idle, no auto-fetch)
+  var _restored=_wwLoad();
+  if(_restored){
+    // Fit map to saved stations
+    try{
+      var _lats=stations.map(function(s){return s.lat;});
+      var _lons=stations.map(function(s){return s.lon;});
+      mapObj.fitBounds([
+        [Math.min.apply(null,_lats)-1,Math.min.apply(null,_lons)-4],
+        [Math.max.apply(null,_lats)+1,Math.max.apply(null,_lons)+4]
+      ],{maxZoom:5});
+    }catch(e2){mapObj.setView([39,-20],4);}
+    document.getElementById('gstatus').textContent=
+      stations.length+' stazioni salvate · clicca per attivare';
+  } else {
+    // First visit: empty, centered on Atlantic, show hint
+    mapObj.setView([39,-20],4);
+    document.getElementById('gstatus').textContent=
+      '⭐ Examples per stazioni demo · 📂 Load per caricare un file';
+  }
   renderList();
-  fetchAll();
+  // No fetchAll() at startup — Option A: user clicks to activate each station
 }catch(e){
   console.error('Init error:',e);
   document.getElementById('emptyState').innerHTML='<div style="color:#dc2626;font-family:monospace;font-size:11px;padding:20px"><b>Init error:</b><br>'+e.message+'</div>';
