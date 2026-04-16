@@ -243,7 +243,21 @@ tr:hover td{background:var(--surface2)}
         <input class="w-lat" type="number" id="aLat" placeholder="Lat" step="0.01">
         <input class="w-lon" type="number" id="aLon" placeholder="Lon" step="0.01">
         <input class="w-nm"  type="text"   id="aNm"  placeholder="Name">
-        <button class="btn a" style="padding:5px 9px" onclick="addCustom()">+</button>
+        <button class="btn a" style="padding:5px 9px;flex-shrink:0" onclick="addCustom()">+</button>
+      </div>
+      <div style="margin-top:4px">
+        <select id="aWindSys" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:4px 5px;background:#fff;color:#374151;cursor:pointer;width:100%">
+          <option value="">🌬 Wind system (opzionale)…</option>
+          <option value="Norte">Norte (PT)</option>
+          <option value="Levante">Levante (PT)</option>
+          <option value="Maestrale">Maestrale (IT)</option>
+          <option value="Scirocco">Scirocco (IT)</option>
+          <option value="Tramontane">Tramontane</option>
+          <option value="Foehn">Foehn</option>
+          <option value="Santa Ana">Santa Ana (CA)</option>
+          <option value="Diablo">Diablo (CA)</option>
+          <option value="Sundowner">Sundowner (CA)</option>
+        </select>
       </div>
       <div style="font-size:9px;color:var(--dim);margin-top:4px;font-style:italic">Or click on the map</div>
     </div>
@@ -547,13 +561,13 @@ var WIND_CLASSES=[
   {min:60,max:999,label:'60+',color:'#7f1d1d'},
 ];
 var DEFAULT_STATIONS=[
-  {id:'braganca',    name:'Bragança',                  lat:41.806, lon:-6.757,  region:'NE Trás-os-Montes',              country:'PT', color:PALETTE[0]},
-  {id:'castelo_branco',name:'Castelo Branco',           lat:39.820, lon:-7.490,  region:'Beira Baixa',                    country:'PT', color:PALETTE[1]},
-  {id:'evora',       name:'Évora',                     lat:38.571, lon:-7.913,  region:'Alentejo',                       country:'PT', color:PALETTE[2]},
-  {id:'faro',        name:'Faro',                      lat:37.014, lon:-7.935,  region:'Algarve',                        country:'PT', color:PALETTE[3]},
-  {id:'cagliari',    name:'Cagliari',                  lat:39.223, lon:9.122,   region:'Sardegna Sud',                   country:'IT', color:PALETTE[4]},
-  {id:'nuoro',       name:'Nuoro',                     lat:40.321, lon:9.330,   region:'Sardegna Centro',                country:'IT', color:PALETTE[5]},
-  {id:'sassari',     name:'Sassari',                   lat:40.727, lon:8.556,   region:'Sardegna Nord',                  country:'IT', color:PALETTE[6]},
+  {id:'braganca',    name:'Bragança',                  lat:41.806, lon:-6.757,  region:'NE Trás-os-Montes',              country:'PT', color:PALETTE[0], wind_system:'Norte'},
+  {id:'castelo_branco',name:'Castelo Branco',           lat:39.820, lon:-7.490,  region:'Beira Baixa',                    country:'PT', color:PALETTE[1], wind_system:'Norte'},
+  {id:'evora',       name:'Évora',                     lat:38.571, lon:-7.913,  region:'Alentejo',                       country:'PT', color:PALETTE[2], wind_system:'Norte'},
+  {id:'faro',        name:'Faro',                      lat:37.014, lon:-7.935,  region:'Algarve',                        country:'PT', color:PALETTE[3], wind_system:'Levante'},
+  {id:'cagliari',    name:'Cagliari',                  lat:39.223, lon:9.122,   region:'Sardegna Sud',                   country:'IT', color:PALETTE[4], wind_system:'Scirocco'},
+  {id:'nuoro',       name:'Nuoro',                     lat:40.321, lon:9.330,   region:'Sardegna Centro',                country:'IT', color:PALETTE[5], wind_system:'Maestrale'},
+  {id:'sassari',     name:'Sassari',                   lat:40.727, lon:8.556,   region:'Sardegna Nord',                  country:'IT', color:PALETTE[6], wind_system:'Maestrale'},
   {id:'cajon_pass',  name:'Cajon Pass',                lat:34.316, lon:-117.459,region:'Santa Ana corridor',             country:'US', color:PALETTE[7], wind_system:'Santa Ana'},
   {id:'livermore',   name:'Livermore — Altamont Pass', lat:37.682, lon:-121.768,region:'Diablo wind corridor',           country:'US', color:PALETTE[0], wind_system:'Diablo'},
   {id:'santa_barbara',name:'Santa Barbara — Refugio',  lat:34.464, lon:-120.064,region:'Sundowner corridor',            country:'US', color:PALETTE[1], wind_system:'Sundowner'},
@@ -952,7 +966,9 @@ function renderList(){
     return '<div class="si'+on+'" data-sid="'+s.id+'">'
       +'<div class="si-dot" style="background:'+s.color+'"></div>'
       +'<div style="flex:1;min-width:0"><div class="si-name">'+s.name+'</div><div class="si-sub">'+s.region+' · '+s.lat.toFixed(2)+', '+s.lon.toFixed(2)+'</div></div>'
-      +badge+'<button class="si-rm" data-rm="'+s.id+'">✕</button></div>';
+      +badge
+      +'<button class="si-rm" data-fe="'+s.id+'" title="Edita settori vento foehn" style="background:transparent;border:none;cursor:pointer;font-size:10px;padding:2px 4px;color:'+(_getStationSectors(s).length?'#ea580c':'#9ca3af')+'" onclick="showFoehnEditor(\''+s.id+'\',event)">🌬'+(s.wind_sectors&&s.wind_sectors.length>1?'<sup style="font-size:8px">'+s.wind_sectors.length+'</sup>':'')+'</button>'
+      +'<button class="si-rm" data-rm="'+s.id+'">✕</button></div>';
   }).join('');
   el.onclick=function(e){
     var rm=e.target.closest('[data-rm]');
@@ -973,24 +989,226 @@ function selectStation(id){
   else{document.getElementById('emptyState').innerHTML='<div class="spinner"></div><p>Loading…</p>';document.getElementById('emptyState').style.display='flex';}
 }
 
+// ── SVG-based foehn sector overlays (immune to Plotly axis scaling) ────────
+// Uses getBoundingClientRect (handles transforms), draws all sectors per station.
+
+// Colour palette for custom sectors (cycles if >5) — MODULE SCOPE
+var _FSEC_COLORS=[
+  'rgba(234,88,12,0.14)','rgba(37,99,235,0.14)','rgba(21,128,61,0.14)',
+  'rgba(124,58,237,0.14)','rgba(220,38,38,0.14)','rgba(8,145,178,0.14)'
+];
+
+function _drawFoehnSectorsSVG(divId, sectors) {
+  var el = document.getElementById(divId);
+  if (!el) return;
+  el.querySelectorAll('.ww-foehn-sector').forEach(function(e){e.remove();});
+  if (!_roseFs.foehnOverlay || !sectors || !sectors.length) return;
+
+  // Find polar background element with multiple selector fallbacks
+  var bgEl = el.querySelector('.polar .plotbg path') ||
+             el.querySelector('.polar .plotbg circle') ||
+             el.querySelector('.polar path.bg') ||
+             el.querySelector('path.bg');
+  if (!bgEl) return;
+
+  var svgMain = el.querySelector('svg.main-svg');
+  if (!svgMain) return;
+
+  // getBoundingClientRect: reliable even with SVG transforms
+  var svgRect = svgMain.getBoundingClientRect();
+  var bgRect  = bgEl.getBoundingClientRect();
+  if (!bgRect.width) return;
+
+  // Convert viewport px → SVG user units
+  var svgW  = svgRect.width  || svgMain.clientWidth  || 1;
+  var svgVW = svgMain.viewBox && svgMain.viewBox.baseVal.width > 0
+               ? svgMain.viewBox.baseVal.width : svgW;
+  var scale = svgVW / svgW;
+
+  var cx = ((bgRect.left + bgRect.right)  / 2 - svgRect.left) * scale;
+  var cy = ((bgRect.top  + bgRect.bottom) / 2 - svgRect.top)  * scale;
+  var r  = (bgRect.width / 2) * scale;
+
+  // Find insertion point (just after plotbg, before data traces)
+  var polarG  = bgEl.closest('.polar');
+  var plotBgG = bgEl.closest('.plotbg');
+  var insertRef = plotBgG || null;
+
+  sectors.forEach(function(sector, idx) {
+    if (!sector || sector.from == null || sector.to == null) return;
+    var from = sector.from, to = sector.to;
+    var sweep = ((to - from) % 360 + 360) % 360;
+    var largeArc = sweep > 180 ? 1 : 0;
+    function metPt(deg) {
+      var rad = deg * Math.PI / 180;
+      return [cx + r * Math.sin(rad), cy - r * Math.cos(rad)];
+    }
+    var p1 = metPt(from), p2 = metPt(to);
+    var d = 'M'+cx.toFixed(2)+','+cy.toFixed(2)+
+            ' L'+p1[0].toFixed(2)+','+p1[1].toFixed(2)+
+            ' A'+r.toFixed(2)+','+r.toFixed(2)+',0,'+largeArc+',1,'+
+            p2[0].toFixed(2)+','+p2[1].toFixed(2)+' Z';
+    var color = sector.color || _FSEC_COLORS[idx % _FSEC_COLORS.length];
+    var pathEl = document.createElementNS('http://www.w3.org/2000/svg','path');
+    pathEl.setAttribute('d', d);
+    pathEl.setAttribute('fill', color);
+    pathEl.setAttribute('stroke', color.replace(/[\d.]+\)$/, '0.55)'));
+    pathEl.setAttribute('stroke-width', '1.5');
+    pathEl.setAttribute('class', 'ww-foehn-sector');
+    pathEl.setAttribute('pointer-events', 'none');
+    if (insertRef && insertRef.nextSibling && polarG) {
+      polarG.insertBefore(pathEl, insertRef.nextSibling);
+    } else if (polarG) {
+      polarG.appendChild(pathEl);
+    }
+    insertRef = pathEl; // stack sectors in order
+  });
+}
+
+// ── Helper: returns ARRAY of effective wind sectors for a station ─────────────
+// Priority: s.wind_sectors[] > s.wind_sector (single, legacy) > WIND_SYSTEM_SECTORS
+function _getStationSectors(s){
+  if(s.wind_sectors&&s.wind_sectors.length) return s.wind_sectors;
+  if(s.wind_sector&&s.wind_sector.from!=null) return [Object.assign({color:'rgba(234,88,12,0.14)'},s.wind_sector)];
+  if(s.wind_system&&WIND_SYSTEM_SECTORS[s.wind_system]) return [WIND_SYSTEM_SECTORS[s.wind_system]];
+  return [];
+}
+
+// ─── Foehn sector editor popover ─────────────────────────────────────────────
+function _fePresetApply(sel){
+  var p=WIND_SYSTEM_SECTORS[sel.value];
+  if(p){
+    var nm=document.getElementById('feNm');
+    var fr=document.getElementById('feFrom');
+    var to=document.getElementById('feTo');
+    if(nm)nm.value=sel.value;
+    if(fr)fr.value=p.from;
+    if(to)to.value=p.to;
+  }
+  sel.value='';
+}
+var _foehnEditorId=null;
+// ─── Foehn sector editor — supports multiple sectors per station ──────────────
+function showFoehnEditor(sid,ev){
+  ev.stopPropagation();
+  var existing=document.getElementById('foehnEditorPop');
+  if(existing&&_foehnEditorId===sid){existing.remove();_foehnEditorId=null;return;}
+  if(existing)existing.remove();
+  var s=stations.find(function(x){return x.id===sid;});if(!s)return;
+  _foehnEditorId=sid;
+
+  // Ensure wind_sectors array exists (migrate legacy wind_sector)
+  if(!s.wind_sectors){
+    s.wind_sectors=[];
+    if(s.wind_sector&&s.wind_sector.from!=null)
+      s.wind_sectors.push(Object.assign({color:'rgba(234,88,12,0.14)'},s.wind_sector));
+    else if(s.wind_system&&WIND_SYSTEM_SECTORS[s.wind_system])
+      s.wind_sectors.push(Object.assign({name:s.wind_system},WIND_SYSTEM_SECTORS[s.wind_system]));
+  }
+
+  var pop=document.createElement('div');pop.id='foehnEditorPop';
+  pop.style.cssText='position:fixed;z-index:2000;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;width:240px;font-size:12px;font-family:var(--mono)';
+  var bRect=ev.target.getBoundingClientRect();
+  pop.style.left=Math.min(bRect.right+6,window.innerWidth-250)+'px';
+  pop.style.top=Math.max(bRect.top-10,10)+'px';
+
+  function rebuild(){
+    pop.innerHTML='<div style="font-weight:700;color:#111;margin-bottom:8px;font-size:11px">🌬 Settori vento · '+s.name+'</div>'
+      +'<div style="color:#6b7280;font-size:9.5px;margin-bottom:8px">Aggiungi uno o più settori direzionali.<br>Nota: usa valori &gt;360° per settori che attraversano Nord (es. 330°→390°).</div>'
+      // List of existing sectors
+      +s.wind_sectors.map(function(sec,i){
+        var bg=_FSEC_COLORS[i%_FSEC_COLORS.length];
+        var bgFill=bg.replace('0.14)','0.08)');
+        var bgStroke=bg.replace('0.14)','0.3)');
+        return '<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;padding:5px 6px;background:'
+          +bgFill+';border:1px solid '+bgStroke+';border-radius:5px">'
+          +'<span style="flex:1;font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          +sec.name+' '+sec.from+'°→'+sec.to+'°'
+          +'</span>'
+          +'<button class="fe-rm-btn" data-idx="'+i
+          +'" style="background:transparent;border:none;cursor:pointer;color:#dc2626;font-size:13px;padding:0 2px" title="Rimuovi">✕</button>'
+          +'</div>';
+      }).join('')
+      // Add new sector form
+      +'<div style="border-top:1px solid #e5e7eb;margin-top:8px;padding-top:8px">'
+      +'<div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:5px">+ Aggiungi settore</div>'
+      +'<input id="feNm" type="text" placeholder="Nome vento (es. Norte)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:11px;margin-bottom:5px">'
+      +'<div style="display:flex;gap:5px;margin-bottom:5px">'
+      +'<div style="flex:1"><div style="font-size:10px;color:#374151;margin-bottom:2px">Da°</div><input id="feFrom" type="number" min="0" max="720" value="0" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:11px"></div>'
+      +'<div style="flex:1"><div style="font-size:10px;color:#374151;margin-bottom:2px">A°</div><input id="feTo" type="number" min="0" max="720" value="90" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:11px"></div>'
+      +'</div>'
+      // Quick presets dropdown
+      +'<select id="fePreset" style="width:100%;font-size:11px;border:1px solid #d1d5db;border-radius:4px;padding:4px 5px;margin-bottom:6px" onchange="_fePresetApply(this)">'
+      +'<option value="">📋 Scegli preset…</option>'
+      +Object.keys(WIND_SYSTEM_SECTORS).map(function(k){return'<option value="'+k+'">'+k+' ('+WIND_SYSTEM_SECTORS[k].from+'°→'+WIND_SYSTEM_SECTORS[k].to+'°)</option>';}).join('')
+      +'</select>'
+      +'<button id="feAdd" style="width:100%;background:#ea580c;color:#fff;border:none;border-radius:5px;padding:5px 0;font-size:11px;cursor:pointer;font-family:var(--mono)">＋ Aggiungi</button>'
+      +'</div>';
+
+    // Event delegation for remove buttons
+    pop.querySelectorAll('.fe-rm-btn').forEach(function(btn){
+      btn.onclick=function(e){
+        e.stopPropagation();
+        var idx=parseInt(btn.dataset.idx);
+        s.wind_sectors.splice(idx,1);
+        _foehnEditorRefresh(s,pop,bRect);
+        rebuild();
+      };
+    });
+    document.getElementById('feAdd').onclick=function(){
+      var nm=document.getElementById('feNm').value.trim();
+      var fr=parseFloat(document.getElementById('feFrom').value);
+      var to=parseFloat(document.getElementById('feTo').value);
+      if(!nm||isNaN(fr)||isNaN(to)){toast('Compila nome e angoli');return;}
+      var color=_FSEC_COLORS[s.wind_sectors.length%_FSEC_COLORS.length];
+      s.wind_sectors.push({name:nm,from:fr,to:to,color:color});
+      _foehnEditorRefresh(s,pop,bRect);
+    };
+  }
+
+  window._feRemove=function(id,idx){
+    var st=stations.find(function(x){return x.id===id;});
+    if(st){st.wind_sectors.splice(idx,1);}
+  };
+  window._foehnEditorRefresh=function(st,p,br){
+    renderList();
+    if(_roseEl&&_roseEl.style.display==='flex'){
+      var _s2=_getStationSectors(st);
+      var fBtn=document.getElementById('rfsFoehnBtn');
+      if(fBtn)fBtn.textContent='🌬 '+(_s2.map(function(x){return x.name||x.label;}).join(' · ')||'—');
+      fsRedraw();
+    }
+  };
+
+  document.body.appendChild(pop);
+  rebuild();
+  setTimeout(function(){
+    document.addEventListener('click',function _closePop(e){
+      if(!pop.contains(e.target)){pop.remove();_foehnEditorId=null;document.removeEventListener('click',_closePop);}
+    });
+  },100);
+}
+
 function removeStation(id){
   if(markers[id]){mapObj.removeLayer(markers[id]);delete markers[id];}
   stations=stations.filter(function(s){return s.id!==id;});
   if(selectedId===id){selectedId=null;showEmpty();}
   renderList();
 }
-function doAdd(lat,lon,name){
+function doAdd(lat,lon,name,windSys){
   var id='c_'+Date.now();var color=PALETTE[stations.length%PALETTE.length];
-  var s={id:id,name:name,lat:parseFloat(lat),lon:parseFloat(lon),region:'Custom',color:color,all:null,obs:null,fct:null,status:'idle'};
+  var s={id:id,name:name,lat:parseFloat(lat),lon:parseFloat(lon),region:'Custom',color:color,wind_system:windSys||null,all:null,obs:null,fct:null,status:'idle'};
   stations.push(s);addMarker(s);renderList();fetchOne(id);
 }
 function addCustom(){
   var lat=parseFloat(document.getElementById('aLat').value);
   var lon=parseFloat(document.getElementById('aLon').value);
   var name=document.getElementById('aNm').value.trim();
+  var ws=document.getElementById('aWindSys').value||null;
   if(isNaN(lat)||isNaN(lon)){toast('Invalid coordinates');return;}
-  doAdd(lat,lon,name||lat.toFixed(2)+'N '+lon.toFixed(2));
+  doAdd(lat,lon,name||lat.toFixed(2)+'N '+lon.toFixed(2),ws);
   ['aLat','aLon','aNm'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('aWindSys').value='';
 }
 
 // ─── Load stations from stations.json (monitor repo format) ───────────────
@@ -1126,11 +1344,17 @@ function updateAllCharts(){
   if(!filtered)return;
   var obsF=getFilteredObs();if(!obsF||!obsF.times.length)obsF=filtered;
   var fctF=getFilteredFct();if(fctF&&!fctF.times.length)fctF=null;
-  renderStats(filtered,s,obsF,fctF);
+  // Mode-aware source for DOM tables (obs/fct/both)
+  var _tblSrc=roseMode==='fct'&&fctF?fctF:roseMode==='obs'&&obsF?obsF:filtered;
+  var _tblFct=roseMode==='obs'?null:fctF;   // hide FCT column in obs-only mode
+  renderStats(_tblSrc,s,obsF,fctF);
   // DOM-only tables: render immediately (no Plotly width dependency)
-  renderSectorTable(filtered,s,fctF);
+  renderSectorTable(_tblSrc,s,_tblFct);
   renderCompare();
-  renderHourlyTable(obsF,fctF);
+  // Hourly table: show only relevant rows based on mode
+  var _htObs=roseMode==='fct'?null:obsF;
+  var _htFct=roseMode==='obs'?null:fctF;
+  renderHourlyTable(_htObs,_htFct);
   // Plotly charts: wait two animation frames so display:block containers
   // complete their layout pass and Plotly gets correct offsetWidth
   var _f=filtered,_o=obsF,_fc=fctF;
@@ -1141,10 +1365,12 @@ function updateAllCharts(){
       renderTimeSeries(_o,_fc);
       renderHumidityChart(_o,_fc);
       renderSoilChart(_o,_fc);
-      renderWindClock(_f);
-      renderScatter(_f);
-      renderPersistence(_f);
-      renderSwitch(_f);
+      // Wind Clock, Scatter, Persistence, Switch: respect obs/fct/both mode
+      var _src=roseMode==='fct'&&_fc?_fc:roseMode==='obs'&&_o?_o:_f;
+      renderWindClock(_src);
+      renderScatter(_src);
+      renderPersistence(_src);
+      renderSwitch(_src);
       // Roses come AFTER — by the time they render, all preceding charts
       // have already completed layout, so the DOM is fully measured
       requestAnimationFrame(function(){
@@ -1178,7 +1404,7 @@ function trendArrow(arr,key){
   return{a:'→',c:'#9ca3af'};
 }
 function renderStats(filtered,s,obsF,fctF){
-  var st=(obsF||filtered).stats;
+  var st=filtered.stats;   // uses mode-aware source passed from updateAllCharts
   var fst=fctF?fctF.stats:null;
   var wH=filtered.worstHDW||{label:'—',hdwAvg:0};
   var n=(obsF?obsF.times.length:0)+(fctF?fctF.times.length:0);
@@ -1784,12 +2010,54 @@ function exportCmpCSV(){
   a.download='comparison_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
-// ═══════════════════════════════════════════
-// ROSE FULLSCREEN (uses dynamic overlay via _ensureFS)
-// ═══════════════════════════════════════════
-var _roseFs={mode:'freq',hour:'all',period:'all'};
-// ── ROSE FULLSCREEN (dedicated overlay, separate from chart FS) ──
+// ═══════════════════════════════════════════════════════════════════
+// ROSE FULLSCREEN — dual panel, independent modes, foehn overlay
+// ═══════════════════════════════════════════════════════════════════
+
+// Static foehn/dominant-wind sector definitions (indicator only — not connected to data)
+var WIND_SYSTEM_SECTORS={
+  'Santa Ana': {from:30,  to:120, color:'rgba(239,68,68,0.13)',   label:'Santa Ana (NE→E)'},
+  'Diablo':    {from:0,   to:80,  color:'rgba(234,179,8,0.13)',   label:'Diablo (N→NE)'},
+  'Sundowner': {from:310, to:370, color:'rgba(168,85,247,0.13)',  label:'Sundowner (NW→N)'},
+  'Norte':     {from:330, to:390, color:'rgba(59,130,246,0.13)',  label:'Norte (NNW→NNE)'},
+  'Scirocco':  {from:100, to:185, color:'rgba(245,158,11,0.13)',  label:'Scirocco (E→S)'},
+  'Maestrale': {from:270, to:340, color:'rgba(16,185,129,0.13)',  label:'Maestrale (W→NW)'},
+  'Tramontane':{from:330, to:390, color:'rgba(99,102,241,0.13)',  label:'Tramontane (N)'},
+  'Foehn':     {from:270, to:360, color:'rgba(234,88,12,0.13)',   label:'Foehn (W→N)'},
+  'Levante':   {from:60,  to:130, color:'rgba(20,184,166,0.13)',  label:'Levante (ENE→SE)'},
+};
+
+function _buildFoehnOverlay(sectorOrName,maxR){
+  // Accepts either a sector object {from,to,color,label} or a wind system name string
+  var sector=typeof sectorOrName==='string'?WIND_SYSTEM_SECTORS[sectorOrName]:sectorOrName;
+  if(!sector||!maxR||maxR<=0)return null;
+  var from=sector.from,to=sector.to;
+  var color=sector.color||'rgba(234,88,12,0.13)';
+  var thetas=[],rs=[];
+  thetas.push(from);rs.push(0); // center
+  for(var t=from;t<=to+0.1;t+=4){thetas.push(Math.min(t,to));rs.push(maxR);}
+  thetas.push(from);rs.push(0); // close
+  return{type:'scatterpolar',mode:'lines',r:rs,theta:thetas,
+    fill:'toself',fillcolor:color,
+    line:{color:color.replace(/[\d.]+\)$/,'0.4)'),width:1.5},
+    hoverinfo:'skip',showlegend:true,name:'🌬 '+(sector.label||'Foehn'),
+    legendgroup:'foehn_overlay',opacity:1};
+}
+
+function _getTracesMaxR(traces){
+  var mx=0;
+  traces.forEach(function(t){if(t.r)t.r.forEach(function(v){if(v!=null&&v>mx)mx=v;});});
+  return mx||50;
+}
+
+// State: shared (period, hour) + per-panel (mode) + foehn toggle + single-expand
+var _roseFs={period:'all',hour:'all',left:{mode:'freq'},right:{mode:'hdw'},foehnOverlay:true,single:null};
 var _roseEl=null;
+
+var _RF_SEL='font-size:10px;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:2px 5px;color:#f9fafb;background:#1f2937;font-family:var(--mono);cursor:pointer';
+var _RF_MOPTS=[{v:'freq',t:'Frequency'},{v:'speed',t:'Mean Speed'},{v:'gust',t:'Max Gust'},{v:'hdw',t:'HDW'},{v:'rh',t:'RH %'},{v:'vpd',t:'VPD'},{v:'temp',t:'Temp'}];
+var _RF_MLABELS={freq:'Frequency',speed:'Mean Speed',gust:'Max Gust',hdw:'HDW',rh:'RH %',vpd:'VPD',temp:'Temp'};
+
 function _ensureRoseFS(){
   if(_roseEl)return;
   _roseEl=document.createElement('div');
@@ -1798,70 +2066,130 @@ function _ensureRoseFS(){
   document.body.appendChild(_roseEl);
 }
 
+function _makeModeSelect(side){
+  var sel=document.createElement('select');
+  sel.id='rfsMode_'+side; sel.style.cssText=_RF_SEL;
+  _RF_MOPTS.forEach(function(o){var op=document.createElement('option');op.value=o.v;op.textContent=o.t;sel.appendChild(op);});
+  sel.value=_roseFs[side].mode;
+  sel.onchange=function(){_roseFs[side].mode=sel.value;fsRedraw();};
+  return sel;
+}
+
+function _makeRosePanel(side){
+  var panel=document.createElement('div');
+  panel.id='rfPanel_'+side;
+  panel.style.cssText='flex:1;min-width:0;display:flex;flex-direction:column;border-left:1px solid #e5e7eb;overflow:hidden';
+  // Panel header: mode select + expand/collapse button
+  var hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb;flex-shrink:0';
+  hdr.appendChild(_makeModeSelect(side));
+  var expandBtn=document.createElement('button');
+  expandBtn.id='rfExpand_'+side;
+  expandBtn.style.cssText='font-size:11px;padding:2px 7px;border:1px solid #d1d5db;border-radius:4px;background:#fff;color:#374151;cursor:pointer;margin-left:auto;flex-shrink:0';
+  expandBtn.textContent='⤢'; expandBtn.title='Espandi';
+  expandBtn.onclick=(function(s2){return function(){_fsExpandSingle(s2);};})(side);
+  hdr.appendChild(expandBtn);
+  panel.appendChild(hdr);
+  // Rose container
+  var rd=document.createElement('div');
+  rd.id='fsRose_'+side; rd.style.cssText='flex:1;min-height:0;width:100%';
+  panel.appendChild(rd);
+  return panel;
+}
+
+function _fsExpandSingle(side){
+  var other=side==='left'?'right':'left';
+  if(_roseFs.single===side){
+    // Restore both
+    _roseFs.single=null;
+    var op=document.getElementById('rfPanel_'+other);if(op)op.style.display='flex';
+    var btn=document.getElementById('rfExpand_'+side);if(btn){btn.textContent='⤢';btn.title='Espandi';}
+    var obtn=document.getElementById('rfExpand_'+other);if(obtn){obtn.textContent='⤢';obtn.title='Espandi';}
+  } else {
+    _roseFs.single=side;
+    var op2=document.getElementById('rfPanel_'+other);if(op2)op2.style.display='none';
+    var btn2=document.getElementById('rfExpand_'+side);if(btn2){btn2.textContent='⤡';btn2.title='Mostra entrambe';}
+  }
+  // Delay: let browser reflow the panel resize before Plotly measures the container
+  setTimeout(fsRedraw,50);
+}
+
 function openRoseFs(target){
-  var _target=target||'both';
   var s=stations.find(function(x){return x.id===selectedId;});if(!s||!s.all)return;
-  window._roseTarget=_target;
-  // Close chart FS if open
   if(_fsEl&&_fsEl.style.display==='flex')closeFS();
   _ensureRoseFS();
-  _roseFs.mode=document.getElementById('roseModeSelMain').value||'freq';
-  _roseFs.hour='all';_roseFs.period='all';
-
-  // Build bar with title, period btns, mode/hour selects, close btn
+  // Init state — target determines initial panel mode
+  _roseFs.period='all'; _roseFs.hour='all';
+  if(target==='roseDelta'){
+    _roseFs.single='left'; _roseFs.left.mode='freq';
+  } else if(target==='roseHdw'){
+    _roseFs.single='right'; _roseFs.right.mode=document.getElementById('roseModeSelMain')?.value||'hdw';
+  } else {
+    _roseFs.single=null; // both panels
+  }
   _roseEl.innerHTML='';
-  var bar=document.createElement('div');
-  bar.style.cssText='background:#111827;height:46px;display:flex;align-items:center;gap:6px;padding:0 14px;flex-shrink:0;flex-wrap:nowrap';
+
+  // ── TOP BAR ──────────────────────────────────────────────────────
+  var bar=document.createElement('div');bar.id='rfBar';
+  bar.style.cssText='background:#111827;min-height:46px;display:flex;align-items:center;gap:5px;padding:0 10px;flex-shrink:0;flex-wrap:wrap';
   // Title
-  var titleSpan=document.createElement('span');
-  titleSpan.style.cssText='font-size:12px;font-weight:600;color:#f9fafb;margin-right:8px;white-space:nowrap';
-  titleSpan.textContent='🌬 Wind Rose · '+(stations.find(function(x){return x.id===selectedId;})||{name:'—'}).name;
-  bar.appendChild(titleSpan);
-  // Period buttons
+  var ti=document.createElement('span');
+  ti.style.cssText='font-size:12px;font-weight:600;color:#f9fafb;white-space:nowrap;margin-right:4px';
+  ti.textContent='🌬 Wind Rose · '+s.name; bar.appendChild(ti);
+  // Period buttons (shared → sync both roses)
   PERIODS.forEach(function(p){
-    var btn=document.createElement('button');
-    btn.style.cssText='padding:2px 8px;font-size:9px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.2);border-radius:5px;background:'+(p.id==='all'?'var(--accent)':'rgba(255,255,255,.06)')+';color:'+(p.id==='all'?'#fff':'#9ca3af');
-    btn.textContent=p.label;btn.dataset.pid=p.id;
+    var btn=document.createElement('button');btn.dataset.pid=p.id;btn.textContent=p.label;
+    btn.style.cssText='padding:2px 7px;font-size:9px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.2);border-radius:5px;white-space:nowrap;background:'+(p.id==='all'?'var(--accent)':'rgba(255,255,255,.06)')+';color:'+(p.id==='all'?'#fff':'#9ca3af');
     btn.onclick=(function(pp,b2){return function(){
       _roseFs.period=pp.id;
       bar.querySelectorAll('[data-pid]').forEach(function(b){b.style.background='rgba(255,255,255,.06)';b.style.color='#9ca3af';});
-      b2.style.background='var(--accent)';b2.style.color='#fff';
+      b2.style.background='var(--accent)'; b2.style.color='#fff';
       fsRedraw();
     };})(p,btn);
     bar.appendChild(btn);
   });
-  // Spacer
-  var sp2=document.createElement('div');sp2.style.flex='1';bar.appendChild(sp2);
-  // Mode select
-  var mSel=document.createElement('select');
-  mSel.style.cssText='font-size:10px;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:2px 5px;color:#f9fafb;background:#1f2937;font-family:var(--mono)';
-  ['freq','speed','gust','hdw','rh','vpd','temp'].forEach(function(v){var o=document.createElement('option');o.value=v;o.textContent={freq:'Frequency',speed:'Mean Speed',gust:'Max Gust',hdw:'HDW',rh:'RH %',vpd:'VPD',temp:'Temp'}[v];mSel.appendChild(o);});
-  mSel.value=_roseFs.mode;mSel.onchange=function(){_roseFs.mode=mSel.value;fsRedraw();};
-  bar.appendChild(mSel);
-  // Hour select
-  var hSel=document.createElement('select');
-  hSel.style.cssText=mSel.style.cssText;
-  [{v:'all',t:'All hours'},{v:'dawn',t:'Dawn 0–6h'},{v:'morning',t:'Morning 6–12h'},{v:'afternoon',t:'Afternoon 12–18h'},{v:'night',t:'Night 18–24h'}].forEach(function(oo){var op=document.createElement('option');op.value=oo.v;op.textContent=oo.t;hSel.appendChild(op);});
+  // Hour select (shared → sync both roses)
+  var hSel=document.createElement('select');hSel.id='rfsHourSel';hSel.style.cssText=_RF_SEL;
+  [{v:'all',t:'All hours'},{v:'n00',t:'00–06h'},{v:'m06',t:'06–12h'},{v:'p12',t:'12–18h'},{v:'s18',t:'18–24h'}].forEach(function(o){
+    var op=document.createElement('option');op.value=o.v;op.textContent=o.t;hSel.appendChild(op);
+  });
+  hSel.value=_roseFs.hour;
   hSel.onchange=function(){_roseFs.hour=hSel.value;fsRedraw();};
   bar.appendChild(hSel);
-  // ✕ Close button
-  var closeBtn=document.createElement('button');
-  closeBtn.textContent='✕';
-  closeBtn.onclick=closeRoseFs;
-  closeBtn.style.cssText='background:rgba(255,255,255,.1);border:none;border-radius:6px;color:#9ca3af;width:30px;height:30px;font-size:16px;cursor:pointer;margin-left:6px;flex-shrink:0';
-  bar.appendChild(closeBtn);
-  // Build two-pane layout: stats + rose(s)
-  var wrap=document.createElement('div');wrap.id='roseWrap';
-  wrap.style.cssText='flex:1;min-height:0;display:flex;flex-direction:row;overflow:hidden';
-  // Stats pane
-  var sp=document.createElement('div');sp.id='rosesFsStats';
-  sp.style.cssText='width:185px;min-width:185px;flex-shrink:0;background:#1f2937;border-right:1px solid #374151;padding:11px;overflow-y:auto;font-size:10px;color:#d1d5db;font-family:var(--mono);display:flex;flex-direction:column;gap:3px';
-  sp.innerHTML='<div id="rfsPeriod" style="font-size:11px;font-weight:700;color:#f9fafb;border-bottom:1px solid #374151;padding-bottom:5px;margin-bottom:3px">—</div>'
+  // Foehn overlay toggle (visibile se stazione ha settori definiti)
+  var _initSectors=_getStationSectors(s);
+  if(_initSectors.length){
+    var fBtn=document.createElement('button');fBtn.id='rfsFoehnBtn';
+    var _sLabel=_initSectors.map(function(x){return x.name||x.label;}).join(' · ');
+    fBtn.title='Toggle overlay settori: '+_sLabel;
+    fBtn.style.cssText='padding:2px 8px;font-size:10px;border:1px solid rgba(255,255,255,.2);border-radius:5px;cursor:pointer;white-space:nowrap;background:'+(_roseFs.foehnOverlay?'var(--accent)':'rgba(255,255,255,.06)')+';color:'+(_roseFs.foehnOverlay?'#fff':'#9ca3af');
+    fBtn.textContent='🌬 '+_sLabel;
+    fBtn.onclick=function(){
+      _roseFs.foehnOverlay=!_roseFs.foehnOverlay;
+      fBtn.style.background=_roseFs.foehnOverlay?'var(--accent)':'rgba(255,255,255,.06)';
+      fBtn.style.color=_roseFs.foehnOverlay?'#fff':'#9ca3af';
+      fsRedraw();
+    };
+    bar.appendChild(fBtn);
+  }
+  // Spacer + close
+  var sp=document.createElement('div');sp.style.flex='1';bar.appendChild(sp);
+  var cBtn=document.createElement('button');cBtn.textContent='✕';cBtn.onclick=closeRoseFs;
+  cBtn.style.cssText='background:rgba(255,255,255,.1);border:none;border-radius:6px;color:#9ca3af;width:30px;height:30px;font-size:16px;cursor:pointer;flex-shrink:0';
+  bar.appendChild(cBtn);
+
+  // ── BODY: stats | left panel | right panel ────────────────────────
+  var body=document.createElement('div');
+  body.style.cssText='flex:1;min-height:0;display:flex;flex-direction:row;overflow:hidden';
+  // Stats pane (dark sidebar)
+  var sp2=document.createElement('div');sp2.id='rosesFsStats';
+  sp2.style.cssText='width:165px;min-width:165px;flex-shrink:0;background:#1f2937;border-right:1px solid #374151;padding:10px;overflow-y:auto;font-size:10px;color:#d1d5db;font-family:var(--mono);display:flex;flex-direction:column;gap:3px';
+  sp2.innerHTML='<div id="rfsPeriod" style="font-size:11px;font-weight:700;color:#f9fafb;border-bottom:1px solid #374151;padding-bottom:5px;margin-bottom:3px">—</div>'
     +'<div style="font-size:8.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-top:4px">💨 Wind</div>'
     +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Mean</span><span id="rfsVm" style="font-family:monospace;font-weight:700;color:#93c5fd">—</span></div>'
-    +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Max</span><span id="rfsVx" style="font-family:monospace;font-weight:700;color:#60a5fa">—</span></div>'
+    +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Max gust</span><span id="rfsVx" style="font-family:monospace;font-weight:700;color:#60a5fa">—</span></div>'
     +'<div style="font-size:8.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-top:4px">🧭 Dir &amp; HDW</div>'
-    +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Dom. dir</span><span id="rfsDir" style="font-family:monospace;font-weight:700;color:#fde68a;font-size:14px">—</span></div>'
+    +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Dom.</span><span id="rfsDir" style="font-family:monospace;font-weight:700;color:#fde68a;font-size:13px">—</span></div>'
     +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">HDW mean</span><span id="rfsHm" style="font-family:monospace;font-weight:700;color:#fb923c">—</span></div>'
     +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">HDW max</span><span id="rfsHx" style="font-family:monospace;font-weight:700;color:#ef4444">—</span></div>'
     +'<div style="font-size:8.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-top:4px">💧 Humidity</div>'
@@ -1869,87 +2197,108 @@ function openRoseFs(target){
     +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">VPD</span><span id="rfsVPD" style="font-family:monospace;font-weight:700;color:#fbbf24">—</span></div>'
     +'<div style="font-size:8.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-top:4px">🌱 Soil 0–1cm</div>'
     +'<div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Mean</span><span id="rfsSM" style="font-family:monospace;font-weight:700;color:#d97706">—</span></div>';
-  wrap.appendChild(sp);
-  // Rose div
-  var rd=document.createElement('div');rd.id='fsRoseDiv';rd.style.cssText='flex:1;min-width:0;padding:8px';
-  var tgt2=window._roseTarget||'both';
-  wrap.style.cssText='flex:1;min-height:0;display:flex;flex-direction:row;overflow:hidden';
-  wrap.appendChild(rd);
+  body.appendChild(sp2);
+  body.appendChild(_makeRosePanel('left'));
+  body.appendChild(_makeRosePanel('right'));
+
   _roseEl.appendChild(bar);
-  _roseEl.appendChild(wrap);
+  _roseEl.appendChild(body);
   _roseEl.style.display='flex';
+
+  // Apply initial single-mode: hide inactive panel immediately
+  if(_roseFs.single==='left'){
+    var rp=document.getElementById('rfPanel_right');if(rp)rp.style.display='none';
+    var lb=document.getElementById('rfExpand_left');if(lb){lb.textContent='⤡';lb.title='Mostra entrambe';}
+  } else if(_roseFs.single==='right'){
+    var lp=document.getElementById('rfPanel_left');if(lp)lp.style.display='none';
+    var rb=document.getElementById('rfExpand_right');if(rb){rb.textContent='⤡';rb.title='Mostra entrambe';}
+  }
+
   setTimeout(fsRedraw,80);
 }
+
 function fsRedraw(){
   var s=stations.find(function(x){return x.id===selectedId;});if(!s||!s.all)return;
-  var mode=_roseFs.mode||'freq';
-  var hourFilter=_roseFs.hour||'all';
   var activePid=_roseFs.period||'all';
+  var hFilter=_roseFs.hour||'all';
   var filtered=getFilteredData();if(!filtered)return;
   var pd=filterByPeriod(filtered,activePid);
-  if(hourFilter!=='all'){var r={dawn:[0,6],morning:[6,12],afternoon:[12,18],night:[18,24]}[hourFilter];if(r)pd=filterByHourRange(pd,r[0],r[1]);}
-  var traces=[];
-  var src=(roseMode==='fct'&&s.fct)?filterByPeriod(getFilteredFct()||filtered,activePid):pd;
-  traces=buildRoseTraces(src,mode);
-  if(roseMode==='both'&&s.fct){
-    var fctPd=filterByPeriod(getFilteredFct()||filtered,activePid);
-    buildRoseTraces(fctPd,mode).forEach(function(t){traces.push(Object.assign({},t,{name:(t.name||'')+'(FCT)',marker:Object.assign({},t.marker,{opacity:.45})}));});
+  if(hFilter!=='all'){
+    var hRanges={n00:[0,6],m06:[6,12],p12:[12,18],s18:[18,24]};
+    var hr=hRanges[hFilter];if(hr)pd=filterByHourRange(pd,hr[0],hr[1]);
   }
-  var rd=document.getElementById('fsRoseDiv');if(!rd)return;
-  var h=Math.max(400,rd.offsetHeight>50?rd.offsetHeight:window.innerHeight-120);
-  var tgt=window._roseTarget||'both';
+  var pLabel=(PERIODS.find(function(p){return p.id===activePid;})||{label:'All'}).label;
+  var hLabel=hFilter!=='all'?' · '+hFilter:'';
 
-  // If target is a specific rose, also show the *other* rose in a smaller div
-  if(tgt==='both'){
-    // Show both roses side by side in the FS panel
-    var wrap=rd.parentElement;
-    if(wrap&&!document.getElementById('fsRoseHdwDiv')){
-      rd.style.cssText='flex:1;min-width:0;padding:4px';
-      var rd2=document.createElement('div');rd2.id='fsRoseHdwDiv';
-      rd2.style.cssText='flex:1;min-width:0;padding:4px';
-      wrap.appendChild(rd2);
+  // Determine which sides to redraw
+  var sides=_roseFs.single?[_roseFs.single]:['left','right'];
+
+  sides.forEach(function(side){
+    var divId='fsRose_'+side;
+    var el=document.getElementById(divId);if(!el)return;
+    var mode=_roseFs[side].mode||'freq';
+
+    // Build data source (obs / fct / both)
+    var src=pd;
+    if(roseMode==='fct'&&s.fct){
+      var ff=getFilteredFct();
+      if(ff){var fp=filterByPeriod(ff,activePid);if(hFilter!=='all'){var hr2=hRanges;if(hr2[hFilter])fp=filterByHourRange(fp,hr2[hFilter][0],hr2[hFilter][1]);}src=fp;}
     }
-    var layF=roseLayout('freq',h);layF.autosize=true;
-    var pLabel=(PERIODS.find(function(p){return p.id===activePid;})||{label:'All'}).label;
-    layF.title={text:'<b>'+s.name+'</b> Δ Freq · '+pLabel,font:{size:11,color:'#374151'},x:.5};
-    (rd.data?Plotly.react:Plotly.newPlot)('fsRoseDiv',buildRoseTraces(src,'freq'),layF,Object.assign({},PC,{scrollZoom:true,toImageButtonOptions:{format:'png',filename:'rose_delta_fs',scale:2}}));
-    var rd2el=document.getElementById('fsRoseHdwDiv');
-    if(rd2el){
-      var layM=roseLayout(mode,h);layM.autosize=true;
-      layM.title={text:'<b>'+s.name+'</b> '+{freq:'Frequency',speed:'Speed',gust:'Gust',hdw:'HDW',rh:'RH',vpd:'VPD',temp:'Temp'}[mode]+' · '+pLabel,font:{size:11,color:'#374151'},x:.5};
-      (rd2el.data?Plotly.react:Plotly.newPlot)('fsRoseHdwDiv',traces,layM,Object.assign({},PC,{scrollZoom:true,toImageButtonOptions:{format:'png',filename:'rose_hdw_fs',scale:2}}));
+    var traces=buildRoseTraces(src,mode);
+    if(roseMode==='both'&&s.fct){
+      var ff2=getFilteredFct();
+      if(ff2){
+        var fp2=filterByPeriod(ff2,activePid);
+        if(hFilter!=='all'&&hRanges[hFilter])fp2=filterByHourRange(fp2,hRanges[hFilter][0],hRanges[hFilter][1]);
+        buildRoseTraces(fp2,mode).forEach(function(t){traces.push(Object.assign({},t,{name:(t.name||'')+'(FCT)',marker:Object.assign({},t.marker,{opacity:.45})}));});
+      }
     }
-  } else {
-    // Single rose fullscreen
-    var rd2rem=document.getElementById('fsRoseHdwDiv');if(rd2rem)rd2rem.remove();
-    rd.style.cssText='flex:1;min-width:0;padding:8px';
-    var usedTraces=tgt==='roseDelta'?buildRoseTraces(src,'freq'):traces;
-    var usedMode=tgt==='roseDelta'?'freq':mode;
-    var lay=roseLayout(usedMode,h);lay.autosize=true;
-    var pLabel=(PERIODS.find(function(p){return p.id===activePid;})||{label:'All'}).label;
-    var roseTitle=tgt==='roseDelta'?'Δ Gust−Wind · Frequency':({freq:'Frequency',speed:'Mean Speed',gust:'Max Gust',hdw:'HDW by Sector',rh:'Avg RH',vpd:'Avg VPD',temp:'Temperature'}[mode]||mode);
-    lay.title={text:'<b>'+s.name+'</b> · '+roseTitle+' · '+pLabel+(hourFilter!=='all'?' · '+hourFilter:''),font:{size:12,color:'#374151'},x:.5};
-    (rd.data?Plotly.react:Plotly.newPlot)('fsRoseDiv',usedTraces,lay,Object.assign({},PC,{scrollZoom:true,toImageButtonOptions:{format:'png',filename:'rose_fs',scale:2,width:1000,height:700}}));
-  }
+
+    var dataMaxR=_getTracesMaxR(traces);
+
+    var h=Math.max(400,el.offsetHeight>50?el.offsetHeight:window.innerHeight-140);
+    var lay=roseLayout(mode,h);lay.autosize=true;
+    lay.title={text:'<b>'+s.name+'</b> · '+(_RF_MLABELS[mode]||mode)+' · '+pLabel+hLabel,font:{size:11,color:'#374151'},x:.5};
+    // Anchor axis range to data only (prevents spurious expansion)
+    if(dataMaxR>0){
+      lay.polar=lay.polar||{};
+      lay.polar.radialaxis=lay.polar.radialaxis||{};
+      lay.polar.radialaxis.range=[0,dataMaxR*1.12];
+    }
+    var plotOpts=Object.assign({},PC,{scrollZoom:true,toImageButtonOptions:{format:'png',filename:'rose_'+side+'_fs',scale:2}});
+    (el.data?Plotly.react:Plotly.newPlot)(divId,traces,lay,plotOpts);
+
+    // Draw foehn sectors directly on Plotly SVG (immune to axis scaling)
+    var _fSecs=_getStationSectors(s);
+    _drawFoehnSectorsSVG(divId, _roseFs.foehnOverlay ? _fSecs : []);
+  });
+
   setTimeout(function(){
-    try{Plotly.Plots.resize('fsRoseDiv');}catch(e){}
-    var r2=document.getElementById('fsRoseHdwDiv');if(r2)try{Plotly.Plots.resize(r2);}catch(e){}
-  },120);
-  // Update stats pane
+    var _s2=stations.find(function(x){return x.id===selectedId;});
+    var _secs2=_s2?_getStationSectors(_s2):[];
+    sides.forEach(function(side){
+      try{Plotly.Plots.resize('fsRose_'+side);}catch(e){}
+      // Redraw foehn sectors after resize (coordinates may shift)
+      _drawFoehnSectorsSVG('fsRose_'+side, _roseFs.foehnOverlay?_secs2:[]);
+    });
+  },150);
+
+  // Update stats panel
   var st=pd.stats;
-  var dom=pd.sectors.reduce(function(b,s){return s.count>b.count?s:b;},pd.sectors[0]||{label:'—',count:0});
+  var dom=pd.sectors.reduce(function(b,sec){return sec.count>b.count?sec:b;},pd.sectors[0]||{label:'—',count:0});
   function fsp(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
-  fsp('rfsPeriod',pLabel+(hourFilter!=='all'?' · '+hourFilter:''));
-  fsp('rfsVm',fmt(st.wsAvg)+' km/h');fsp('rfsVx',fmt(st.wsMax,0)+' km/h');
-  fsp('rfsDir',dom.label);fsp('rfsHm',fmt(st.hdwAvg));fsp('rfsHx',fmt(st.hdwMax,0));
-  fsp('rfsRH',fmt(st.rhMean,0)+'%');fsp('rfsVPD',fmt(st.vpdMean)+'  hPa');
+  fsp('rfsPeriod',pLabel+hLabel);
+  fsp('rfsVm',fmt(st.wsAvg)+' km/h'); fsp('rfsVx',fmt(st.wgMax,0)+' km/h');
+  fsp('rfsDir',dom.label); fsp('rfsHm',fmt(st.hdwAvg)); fsp('rfsHx',fmt(st.hdwMax,0));
+  fsp('rfsRH',fmt(st.rhMean,0)+'%'); fsp('rfsVPD',fmt(st.vpdMean)+' hPa');
   fsp('rfsSM',fmt(st.sm0Mean)+'%');
 }
+
 function closeRoseFs(){
   if(!_roseEl)return;
   _roseEl.style.display='none';
-  try{Plotly.purge('fsRoseDiv');}catch(e){}
-  try{Plotly.purge('fsRoseHdwDiv');}catch(e){}
+  try{Plotly.purge('fsRose_left');}catch(e){}
+  try{Plotly.purge('fsRose_right');}catch(e){}
   _roseEl.innerHTML='';
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){

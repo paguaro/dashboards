@@ -7,64 +7,106 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;
-       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-  .wrap{text-align:center;max-width:680px;width:100%}
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+  .wrap{text-align:center;max-width:860px;width:100%}
   h1{color:#f9fafb;font-size:22px;font-weight:700;margin-bottom:4px}
-  .sub{color:#64748b;font-size:12px;margin-bottom:36px}
-  .cards{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .sub{color:#64748b;font-size:12px;margin-bottom:10px}
+  .badge-row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:32px}
+  .badge{background:#1e293b;border:1px solid #334155;border-radius:20px;
+         padding:3px 10px;font-size:10px;color:#94a3b8;font-family:monospace}
+  .section-lbl{color:#475569;font-size:9.5px;font-weight:700;text-transform:uppercase;
+               letter-spacing:.1em;margin-bottom:12px;margin-top:24px}
+  .cards{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
   .card{background:#1e293b;border:1.5px solid #334155;border-radius:12px;
-        padding:24px 28px;text-decoration:none;transition:border-color .2s,transform .15s;
-        min-width:140px;flex:1;max-width:160px}
+        padding:22px 22px 18px;text-decoration:none;transition:border-color .2s,transform .15s;
+        min-width:130px;flex:1;max-width:150px;display:flex;flex-direction:column;align-items:center}
   .card:hover{border-color:#e85d2f;transform:translateY(-3px)}
-  .flag{font-size:36px;margin-bottom:8px}
-  .name{color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:3px}
-  .sub2{color:#64748b;font-size:10px;line-height:1.4}
-  .ver{color:#e85d2f;font-size:9px;font-family:monospace;margin-top:6px;font-weight:700}
+  .card.tool{border-color:#1e3a5f}
+  .card.tool:hover{border-color:#2563eb}
+  .flag{font-size:34px;margin-bottom:8px}
+  .name{color:#f1f5f9;font-size:13px;font-weight:700;margin-bottom:3px}
+  .sub2{color:#64748b;font-size:10px;line-height:1.4;text-align:center}
+  .ver{font-size:9px;font-family:monospace;margin-top:7px;font-weight:700;
+       background:#0f172a;border-radius:4px;padding:2px 6px}
+  .ver.fire{color:#e85d2f}
+  .ver.tool{color:#3b82f6}
   footer{color:#334155;font-size:10px;margin-top:36px;line-height:1.8}
   footer a{color:#475569;text-decoration:none}
   footer a:hover{color:#94a3b8}
-  @media(max-width:480px){
+  @media(max-width:540px){
     .cards{gap:10px}
-    .card{padding:18px 16px;min-width:110px;max-width:130px}
-    .flag{font-size:28px}
-    .name{font-size:12px}
+    .card{padding:16px 14px;min-width:100px;max-width:120px}
+    .flag{font-size:26px}
+    .name{font-size:11px}
   }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>🔥 Fire Risk Dashboards</h1>
-  <div class="sub">HDW_eff · HDWc · Open-Meteo 16d · ERA5 · EFFIS Copernicus</div>
+  <div class="sub">HDWc · Open-Meteo 16d + ERA5 · EFFIS Copernicus · ANEPC · CFVA</div>
+  <div class="badge-row">
+    <span class="badge">HDWc v2 engine</span>
+    <span class="badge">α dynamic</span>
+    <span class="badge">Drill-down 72h</span>
+    <span class="badge">Geo-detection</span>
+    <span class="badge">ERA5 archive</span>
+  </div>
+
+  <div class="section-lbl">Operational Dashboards</div>
   <div class="cards">
+    <a class="card" href="firemeteo/">
+      <div class="flag">🌐</div>
+      <div class="name">FireMeteo</div>
+      <div class="sub2">Global · EFFIS<br>Custom WFS/GeoJSON<br>Multi-zone packages</div>
+      <div class="ver fire">v41</div>
+    </a>
     <a class="card" href="portugal/">
       <div class="flag">🇵🇹</div>
       <div class="name">Portugal</div>
-      <div class="sub2">ICNF GIFR · ANEPC<br>BDG 1975–2024</div>
-      <div class="ver">v4.0</div>
+      <div class="sub2">ICNF GIFR · ANEPC<br>11 ecoregions<br>Norte / Levante</div>
+      <div class="ver fire">v3</div>
     </a>
     <a class="card" href="sardegna/">
       <div class="flag">🇮🇹</div>
       <div class="name">Sardegna</div>
-      <div class="sub2">CFVA · Grid 10km<br>BDG Perimetri</div>
-      <div class="ver">v4.0 SARD</div>
-    </a>
-    <a class="card" href="firemeteo/">
-      <div class="flag">🌐</div>
-      <div class="name">FireMeteo</div>
-      <div class="sub2">Global · EFFIS<br>Custom WFS/GeoJSON</div>
-      <div class="ver">v5.0</div>
+      <div class="sub2">CFVA · ERA5 archive<br>EFFIS · VIIRS<br>Event markers</div>
+      <div class="ver fire">v5</div>
     </a>
     <a class="card" href="mobile/">
       <div class="flag">📱</div>
       <div class="name">Mobile</div>
       <div class="sub2">Portugal · 72h<br>GPS · Touch</div>
-      <div class="ver">v1.0</div>
+      <div class="ver fire">v1</div>
     </a>
   </div>
+
+  <div class="section-lbl">Analysis &amp; Tools</div>
+  <div class="cards">
+    <a class="card tool" href="wildwinds/">
+      <div class="flag">🌬</div>
+      <div class="name">WildWinds</div>
+      <div class="sub2">Wind rose dual FS<br>Foehn sectors<br>Wind clock · Scatter</div>
+      <div class="ver tool">v2</div>
+    </a>
+    <a class="card tool" href="batch/">
+      <div class="flag">📊</div>
+      <div class="name">HDWc Batch</div>
+      <div class="sub2">Multi-fire analysis<br>Monitoring · FWI<br>ERA5 · PDF export</div>
+      <div class="ver tool">v28</div>
+    </a>
+    <a class="card tool" href="hdwc_builder/">
+      <div class="flag">⚙️</div>
+      <div class="name">HDWc Builder</div>
+      <div class="sub2">Engine config editor<br>Zone Manager · Leaflet<br>α calibration</div>
+      <div class="ver tool">v8</div>
+    </a>
+  </div>
+
   <footer>
     Giuseppe Cornaglia · ANEPC · Copernicus EMS NFP Portugal<br>
     <a href="https://github.com/paguaro/dashboards">github.com/paguaro/dashboards</a>
-     · 2026
+    · 2026
   </footer>
 </div>
 </body>

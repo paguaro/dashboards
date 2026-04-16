@@ -1,0 +1,2330 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HDWC Engine Config Builder v8.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #f5f3ef; color: #1a1a1a; font-family: 'DM Mono', monospace; min-height: 100vh; display: flex; flex-direction: column; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #eee; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+  input::placeholder, textarea::placeholder { color: #777; }
+  input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #ddd; outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #E05A1E; cursor: pointer; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 0.4; }
+
+  /* Layout */
+  #header { background: #fff; border-bottom: 1px solid #e8e4de; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 100; }
+  #main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+  #sidebar { width: 180px; background: #fff; border-right: 1px solid #e8e4de; padding: 12px 0; flex-shrink: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #e0dbd4 transparent; }
+  #content { flex: 1; padding: 28px 32px; overflow-y: auto; }
+  #content-inner { max-width: 520px; }
+  #json-panel { width: 420px; border-left: 1px solid #e8e4de; background: #fafaf8; display: flex; flex-direction: column; overflow: hidden; }
+  #json-panel.hidden { display: none; }
+  #footer { background: #fff; border-top: 1px solid #e8e4de; padding: 9px 24px; display: flex; justify-content: space-between; font-size: 12px; color: #222; letter-spacing: 0.08em; flex-shrink: 0; }
+
+  /* Header brand */
+  .brand-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.15em; color: #E05A1E; }
+  .brand-sub { font-size: 12px; color: #777; letter-spacing: 0.12em; margin-top: 1px; }
+
+  /* Buttons */
+  .btn { border: none; padding: 7px 14px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s; }
+  .btn-ghost { background: #f5f3ef; border: 1px solid #ddd; color: #444; }
+  .btn-ghost:hover { background: #ebe8e3; color: #111; }
+  .btn-outline { background: #fff; border: 1px solid #ddd; color: #111; }
+  .btn-outline.active { border-color: #E05A1E; color: #E05A1E; background: #fff8f5; }
+  .btn-primary { background: #E05A1E; color: #fff; font-weight: 600; padding: 7px 18px; }
+  .btn-primary:hover { background: #c94d18; }
+  .btn-success { color: #16a34a !important; border-color: #16a34a !important; }
+  .hdr-btns { display: flex; gap: 8px; align-items: center; }
+
+  /* Sidebar nav */
+  .nav-item { width: 100%; text-align: left; background: transparent; border: none; border-left: 2px solid transparent; color: #111; padding: 10px 14px; cursor: pointer; font-size: 13px; letter-spacing: 0.06em; font-family: 'DM Mono', monospace; display: flex; align-items: center; gap: 8px; transition: all 0.12s; }
+  .nav-item:hover { color: #111; background: #f9f7f4; }
+  .nav-item.active { color: #E05A1E; background: #fff8f5; border-left-color: #E05A1E; }
+  .nav-icon { font-size: 16px; }
+
+  /* Section heading */
+  .section-label { font-size: 12px; color: #777; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 22px; }
+  .divider { display: flex; align-items: center; gap: 10px; margin: 20px 0 14px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #e8e4de; }
+  .divider span { font-size: 11px; color: #2d2d2d; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
+
+  /* Form controls */
+  .field { margin-bottom: 18px; }
+  .field label { display: block; font-size: 12px; color: #111; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 5px; }
+  .field input[type=text], .field input[type=number], .field textarea {
+    background: #f9f7f4; border: 1px solid #e0dbd4; color: #1a1a1a; padding: 8px 10px;
+    border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 15px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .field input[type=text]:focus, .field input[type=number]:focus, .field textarea:focus { border-color: #E05A1E; }
+  .field input[type=text], .field textarea { width: 100%; }
+  .field input[type=number] { width: 100px; }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .field .hint { font-size: 12px; color: #777; margin-top: 3px; }
+
+  /* Slider field with number input */
+  .slider-field { margin-bottom: 20px; }
+  .slider-header { display: flex; justify-content: space-between; margin-bottom: 5px; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .slider-label { font-size: 12px; color: #111; letter-spacing: 0.08em; text-transform: uppercase; }
+  .slider-value-wrapper { display: flex; align-items: center; gap: 8px; }
+  .slider-value { font-size: 15px; color: #E05A1E; font-weight: 500; }
+  .slider-number { width: 70px; background: #f9f7f4; border: 1px solid #e0dbd4; border-radius: 4px; padding: 4px 6px; font-family: 'DM Mono', monospace; font-size: 13px; text-align: center; color: #E05A1E; font-weight: 500; outline: none; }
+  .slider-number:focus { border-color: #E05A1E; }
+  .slider-field input[type=range] { width: 100%; margin-top: 4px; }
+  .slider-hint { font-size: 12px; color: #777; margin-top: 3px; }
+
+  /* Toggle */
+  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .toggle-btn { width: 44px; height: 22px; border-radius: 11px; border: none; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .toggle-knob { width: 16px; height: 16px; border-radius: 8px; background: #fff; position: absolute; top: 3px; transition: left 0.2s; }
+  .toggle-label { font-size: 13px; color: #444; letter-spacing: 0.06em; text-transform: uppercase; }
+  .toggle-hint { font-size: 12px; color: #777; }
+
+  /* Alpha grid */
+  .alpha-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 12px; }
+  .alpha-cell { background: #f9f7f4; border: 1px solid #e8e4de; border-radius: 6px; padding: 10px 8px; text-align: center; }
+  .alpha-cell .month { font-size: 12px; color: #777; margin-bottom: 6px; }
+  .alpha-cell input { background: transparent; border: none; border-bottom: 1px solid #e0dbd4; color: #E05A1E; font-family: 'DM Mono', monospace; font-size: 17px; width: 100%; text-align: center; outline: none; }
+  .alpha-cell input:focus { border-bottom-color: #E05A1E; }
+
+  /* Alpha bar chart */
+  .alpha-bars { display: flex; align-items: flex-end; gap: 3px; height: 50px; margin-bottom: 10px; }
+  .alpha-bar { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; background: #E05A1E; opacity: 0.6; transition: height 0.2s; }
+
+  /* Alpha info */
+  .alpha-info { display: flex; justify-content: space-between; font-size: 12px; color: #777; margin-bottom: 12px; }
+
+  /* Warning box */
+  .warn-box { background: #fff8f5; border: 1px solid #E05A1E; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+  .warn-title { font-size: 12px; color: #E05A1E; margin-bottom: 4px; }
+  .warn-item { font-size: 13px; color: #c94d18; }
+
+  /* Info box */
+  .info-box { background: #f9f7f4; border: 1px solid #e8e4de; border-radius: 6px; padding: 12px; margin-bottom: 18px; font-size: 14px; color: #444; line-height: 1.7; }
+  .info-box span.hl { color: #E05A1E; }
+
+  /* Washout table */
+  .wash-table { border: 1px solid #e8e4de; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+  .wash-table .th { background: #f5f3ef; padding: 6px 12px; font-size: 12px; color: #777; letter-spacing: 0.08em; }
+  .wash-table .tr { display: grid; grid-template-columns: 1fr 1fr; }
+  .wash-table .td { padding: 7px 12px; border-top: 1px solid #f0ede8; font-size: 14px; color: #333; }
+  .wash-table .td:last-child { border-left: 1px solid #f0ede8; }
+  .wash-table input { background: transparent; border: none; border-bottom: 1px solid #e0dbd4; color: #1a1a1a; font-family: 'DM Mono', monospace; font-size: 14px; outline: none; width: 55px; }
+  .wash-table input.orange { color: #E05A1E; }
+
+  /* JSON panel */
+  #json-header { padding: 10px 14px; border-bottom: 1px solid #e8e4de; font-size: 12px; color: #777; letter-spacing: 0.1em; display: flex; justify-content: space-between; }
+  #json-pre { margin: 0; padding: 16px; overflow: auto; flex: 1; font-size: 13px; color: #155b32; line-height: 1.7; white-space: pre; font-family: 'DM Mono', monospace; background: #fafaf8; }
+
+  /* Wind formula box */
+  .formula-box { background: #f9f7f4; border: 1px solid #e8e4de; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; font-size: 16px; color: #111; }
+
+  /* Night score table */
+  .score-table { border: 1px solid #e8e4de; border-radius: 6px; overflow: hidden; margin-bottom: 16px; }
+  .score-row { display: grid; grid-template-columns: 80px 1fr; border-bottom: 1px solid #f0ede8; }
+  .score-row:last-child { border-bottom: none; }
+  .score-badge { padding: 8px 12px; font-size: 13px; font-weight: 500; }
+  .score-desc { padding: 8px 12px; font-size: 13px; color: #444; }
+
+  .wind-warning { background: #fff8f5; border: 1px solid #E05A1E; border-radius: 6px; padding: 10px; font-size: 13px; color: #c94d18; margin-top: 8px; }
+
+  /* Grid helpers */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Soglie mensili */
+  .soglie-tabs { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid #e8e4de; border-radius: 6px; overflow: hidden; }
+  .soglie-tab { flex: 1; background: #f9f7f4; border: none; padding: 7px 4px; font-family: 'DM Mono', monospace; font-size: 12px; color: #222; cursor: pointer; letter-spacing: 0.04em; transition: all 0.12s; border-right: 1px solid #e8e4de; }
+  .soglie-tab:last-child { border-right: none; }
+  .soglie-tab.active { background: #fff; color: #1a1a1a; font-weight: 500; }
+  .soglie-tab:hover:not(.active) { background: #f0ede8; }
+
+  .soglie-matrix { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .soglie-matrix th { background: #f5f3ef; padding: 6px 8px; text-align: center; font-size: 11px; color: #222; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid #e8e4de; font-weight: 400; }
+  .soglie-matrix th.month-col { text-align: left; min-width: 36px; }
+  .soglie-matrix td { padding: 4px 4px; border-bottom: 1px solid #f5f3ef; text-align: center; }
+  .soglie-matrix tr:last-child td { border-bottom: none; }
+  .soglie-matrix td.month-name { font-size: 12px; color: #444; text-align: left; padding-left: 2px; }
+  .soglie-matrix input { width: 58px; background: #f9f7f4; border: 1px solid #e8e4de; border-radius: 3px; padding: 4px 4px; font-family: 'DM Mono', monospace; font-size: 14px; text-align: center; outline: none; color: #1a1a1a; transition: border-color 0.12s; }
+  .soglie-matrix input:focus { border-color: #E05A1E; }
+
+  .level-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .soglie-legend { display: flex; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  .soglie-legend-item { display: flex; align-items: center; font-size: 12px; color: #444; }
+
+  .soglie-visual { display: flex; gap: 2px; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 6px; margin-bottom: 14px; }
+  .soglie-visual-seg { flex: 1; }
+
+  .month-row-highlight:hover td { background: #faf8f5; }
+
+  .validate-btn { background: #f5f3ef; border: 1px solid #ddd; color: #444; padding: 6px 12px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .validate-btn:hover { background: #ebe8e3; }
+  .validate-ok { color: #16a34a; font-size: 12px; margin-bottom: 10px; }
+  .validate-err { color: #dc2626; font-size: 12px; margin-bottom: 10px; }
+
+  /* Wind card list */
+  .wind-card { background: #f9f7f4; border: 1px solid #e8e4de; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; position: relative; }
+  .wind-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .wind-card-title { font-size: 12px; font-weight: 600; color: #E05A1E; letter-spacing: 0.06em; text-transform: uppercase; }
+  .wind-card-remove { background: none; border: 1px solid #ddd; border-radius: 3px; color: #888; cursor: pointer; font-size: 12px; padding: 2px 8px; font-family: 'DM Mono', monospace; }
+  .wind-card-remove:hover { border-color: #dc2626; color: #dc2626; }
+  .wind-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .wind-field label { display: block; font-size: 11px; color: #555; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 3px; }
+  .wind-field input[type=text], .wind-field input[type=number], .wind-field select {
+    width: 100%; background: #fff; border: 1px solid #e0dbd4; color: #1a1a1a;
+    padding: 6px 8px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 14px; outline: none;
+  }
+  .wind-field input:focus, .wind-field select:focus { border-color: #E05A1E; }
+  .add-wind-btn { width: 100%; background: #fff; border: 1.5px dashed #E05A1E; color: #E05A1E; border-radius: 6px;
+    padding: 9px; font-family: 'DM Mono', monospace; font-size: 13px; cursor: pointer; letter-spacing: 0.06em;
+    margin-top: 4px; transition: background 0.15s; }
+  .add-wind-btn:hover { background: #fff8f5; }
+  .add-wind-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .dir-badge { display: inline-block; background: #1e3a5f; color: #fff; border-radius: 3px;
+    font-size: 10px; padding: 1px 5px; font-family: 'DM Mono', monospace; margin-left: 4px; }
+  .import-alpha-card { background:#f0fdf4;border:1.5px solid #16a34a;border-radius:6px;padding:12px 14px;margin-bottom:12px; }
+  .import-diff-row { display:grid;grid-template-columns:54px 1fr 60px 54px 52px;gap:5px;align-items:center;padding:3px 0;border-bottom:1px solid #e8e4de;font-size:12px; }
+  .diff-up { color:#16a34a;font-weight:700; } .diff-down { color:#b91c1c;font-weight:700; } .diff-same { color:#aaa; }
+  .src-badge { display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-family:'DM Mono',monospace;font-weight:700; }
+  .src-365d { background:#dcfce7;color:#15803d; } .src-blended { background:#fef3c7;color:#b45309; } .src-global { background:#f3f4f6;color:#666; }
+  .fclass-box { background: #1e3a5f; color: #f0f4ff; border-radius: 6px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; line-height: 1.8; }
+  .fclass-box code { background: rgba(255,255,255,0.15); border-radius: 3px; padding: 1px 5px; font-family: 'DM Mono', monospace; }
+
+  /* ── Info badge & popover ─────────────────────────────────────────────── */
+  .info-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: #e8e4de; color: #666; font-size: 10px; font-weight: 600;
+    cursor: pointer; vertical-align: middle; margin-left: 5px; flex-shrink: 0;
+    transition: background 0.15s, color 0.15s; user-select: none;
+    font-style: italic; font-family: serif; line-height: 1;
+  }
+  .info-badge:hover, .info-badge.active { background: #E05A1E; color: #fff; }
+
+  #param-popover {
+    position: fixed; z-index: 9999; width: 300px;
+    background: #fff; border: 1px solid #e0dbd4; border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.14); display: none;
+    font-family: 'DM Mono', monospace;
+  }
+  #param-popover.visible { display: block; }
+  .pop-header {
+    background: #1e3a5f; color: #fff; padding: 9px 12px;
+    border-radius: 7px 7px 0 0; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.09em; text-transform: uppercase;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .pop-close { background: none; border: none; color: rgba(255,255,255,0.55);
+    font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1; }
+  .pop-close:hover { color: #fff; }
+  .pop-body { padding: 10px 12px; }
+  .pop-short { font-size: 13px; color: #222; line-height: 1.6; margin-bottom: 9px; }
+  .pop-block { margin-bottom: 8px; }
+  .pop-block-label { font-size: 10px; color: #E05A1E; letter-spacing: 0.12em;
+    text-transform: uppercase; margin-bottom: 3px; }
+  .pop-block-content { font-size: 12px; color: #333; line-height: 1.65;
+    background: #f5f3ef; border-radius: 4px; padding: 6px 8px; white-space: pre-wrap; }
+  .pop-range { font-size: 12px; color: #555; margin-bottom: 5px; }
+  .pop-range b { color: #E05A1E; font-weight: 500; }
+  .pop-affects { font-size: 10px; color: #bbb; letter-spacing: 0.05em; margin-top: 4px; }
+  .pop-warn { background: #fff8f5; border: 1px solid #E05A1E; border-radius: 4px;
+    padding: 5px 8px; font-size: 12px; color: #c94d18; margin-top: 6px; }
+
+  /* ── Zone Manager ─────────────────────────────────────────────────────────── */
+  #content-inner.zm-wide { max-width: 860px; }
+  .zm-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .zm-subtabs { display: flex; gap: 0; border: 1px solid #e8e4de; border-radius: 6px; overflow: hidden; margin-bottom: 16px; }
+  .zm-subtab { flex: 1; background: #f9f7f4; border: none; padding: 7px 12px; font-family: 'DM Mono', monospace;
+    font-size: 12px; color: #555; cursor: pointer; letter-spacing: 0.06em; border-right: 1px solid #e8e4de; transition: all 0.12s; }
+  .zm-subtab:last-child { border-right: none; }
+  .zm-subtab.active { background: #fff; color: #1a1a1a; font-weight: 500; }
+  .zm-subtab:hover:not(.active) { background: #f0ede8; }
+
+  .zm-zone-list { border: 1px solid #e8e4de; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+  .zm-zone-row { display: grid; grid-template-columns: 1fr 130px 150px 48px 148px;
+    gap: 0; align-items: center; border-bottom: 1px solid #f0ede8; transition: background 0.1s; }
+  .zm-zone-row:last-child { border-bottom: none; }
+  .zm-zone-row:hover { background: #fafaf8; }
+  .zm-zone-row.selected { background: #fff8f5; border-left: 3px solid #E05A1E; }
+  .zm-zone-row.zm-header { background: #f5f3ef; border-bottom: 1px solid #e8e4de; font-size: 11px;
+    color: #777; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; }
+  .zm-zone-cell { padding: 9px 10px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zm-zone-name { font-weight: 500; color: #111; cursor: pointer; }
+  .zm-zone-name:hover { color: #E05A1E; text-decoration: underline; }
+  .zm-zone-id { font-size: 12px; color: #666; }
+  .zm-zone-bbox { font-size: 11px; color: #888; font-family: 'DM Mono', monospace; }
+  .zm-valid-ok { color: #16a34a; font-size: 13px; }
+  .zm-valid-warn { color: #dc2626; font-size: 13px; cursor: pointer; }
+  .zm-ops { display: flex; gap: 1px; padding: 4px 5px; flex-wrap: nowrap; }
+  .zm-op-btn { background: transparent; border: none; cursor: pointer; padding: 3px 4px;
+    border-radius: 3px; font-size: 13px; color: #777; transition: all 0.1s; }
+  .zm-op-btn:hover { background: #f0ede8; color: #333; }
+  .zm-op-btn.danger:hover { color: #dc2626; background: #fef2f2; }
+
+  .zm-empty { text-align: center; padding: 40px 20px; color: #aaa; font-size: 13px; border: 1px dashed #e8e4de;
+    border-radius: 6px; background: #fafaf8; margin-bottom: 12px; }
+  .zm-add-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .zm-err-list { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #dc2626; }
+  .zm-err-list ul { margin: 4px 0 0 16px; }
+  .zm-err-list li { margin-bottom: 2px; }
+
+  .zm-tpl-select { background: #f9f7f4; border: 1px solid #e0dbd4; border-radius: 4px;
+    padding: 7px 10px; font-family: 'DM Mono', monospace; font-size: 13px; color: #444;
+    cursor: pointer; outline: none; min-width: 180px; }
+  .zm-tpl-select:focus { border-color: #E05A1E; }
+
+  #zm-map { height: 480px; border: 1px solid #e8e4de; border-radius: 6px; overflow: hidden; background: #e8e4de; }
+  .zm-map-hint { font-size: 12px; color: #777; margin-bottom: 8px; line-height: 1.5; }
+
+  .zm-export-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #e8e4de; }
+  .zm-pkg-count { font-size: 12px; color: #777; letter-spacing: 0.06em; padding: 7px 0; margin-right: 4px; }
+  .zm-inline-edit { background: transparent; border: none; border-bottom: 1px dashed #ccc;
+    font-family: 'DM Mono', monospace; font-size: 13px; color: #111; outline: none;
+    width: 100%; padding: 0 1px; }
+  .zm-inline-edit:focus { border-bottom-color: #E05A1E; }
+  .nav-item.zm-tab { border-top: 1px solid #e8e4de; margin-top: 6px; }
+
+  /* ── Zona edit banner ────────────────────────────────────────────────────── */
+  #zm-edit-banner { background: #fff8f5; border-bottom: 2px solid #E05A1E;
+    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+    font-size: 12px; font-family: 'DM Mono', monospace; flex-shrink: 0;
+    position: sticky; top: 0; z-index: 50; flex-wrap: wrap; }
+  #zm-edit-banner .banner-label { color: #777; letter-spacing: 0.06em; text-transform: uppercase; }
+  #zm-edit-banner .banner-name { color: #E05A1E; font-weight: 600; margin: 0 4px; flex: 1; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #zm-edit-banner .banner-slot { color: #aaa; font-size: 11px; }
+  .banner-save-btn { background: #E05A1E; color: #fff; border: none; border-radius: 4px;
+    padding: 5px 12px; font-family: 'DM Mono', monospace; font-size: 12px;
+    cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; white-space: nowrap; }
+  .banner-save-btn:hover { background: #c94d18; }
+  .banner-save-btn.saved { background: #16a34a; }
+  .banner-back-btn { background: transparent; border: 1px solid #ddd; color: #555;
+    border-radius: 4px; padding: 5px 10px; font-family: 'DM Mono', monospace;
+    font-size: 12px; cursor: pointer; letter-spacing: 0.05em; white-space: nowrap; transition: all 0.15s; }
+  .banner-back-btn:hover { border-color: #E05A1E; color: #E05A1E; }
+  .zm-draw-btn { background: #1d4ed8; color: #fff; border: none; padding: 7px 14px; border-radius: 4px;
+    font-family: 'DM Mono', monospace; font-size: 13px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; }
+  .zm-draw-btn:hover { background: #1e40af; }
+  .zm-draw-btn.active { background: #dc2626; }
+  .zm-draw-hint { font-size: 12px; color: #555; margin-bottom: 6px; padding: 6px 10px;
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; }
+  .zm-draw-hint.warn { background: #fff7ed; border-color: #fed7aa; color: #92400e; }
+  #zm-map.draw-mode { cursor: crosshair !important; }
+  #zm-map.draw-mode * { cursor: crosshair !important; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div>
+    <div class="brand-title">HDWC ENGINE CONFIG</div>
+    <div class="brand-sub" id="brand-sub">REGIONAL PRESET BUILDER v7.3 · —</div>
+  </div>
+  <div class="hdr-btns">
+    <label class="btn btn-ghost" style="cursor:pointer">
+      ↑ IMPORT
+      <input type="file" accept=".json" id="import-file" style="display:none">
+    </label>
+    <label class="btn btn-ghost" style="cursor:pointer" title="Carica pacchetto multi-zona">
+      📦 PACCHETTO
+      <input type="file" accept=".json" id="zm-pkg-file" style="display:none">
+    </label>
+    <label class="btn btn-ghost" style="cursor:pointer" title="Aggiungi zone da uno o più file JSON (selezione multipla)">
+      📂 AGGIUNGI ZONE
+      <input type="file" accept=".json" multiple id="zm-add-file" style="display:none">
+    </label>
+    <button class="btn btn-outline" id="btn-json">{ } JSON</button>
+    <button class="btn btn-outline" id="btn-copy">⎘ COPIA</button>
+    <button class="btn btn-primary" id="btn-download">↓ DOWNLOAD JSON</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <button class="nav-item active" data-section="meta"><span class="nav-icon">⬡</span>IDENTITÀ</button>
+    <button class="nav-item" data-section="importalpha" style="background:#eff6ff;border-left:2px solid #3b82f6;color:#1d4ed8">
+      <span class="nav-icon">📡</span>IMPORT α ERA5
+    </button>
+    <button class="nav-item" data-section="vegetation"><span class="nav-icon">◈</span>VEGETAZIONE</button>
+    <button class="nav-item" data-section="classification"><span class="nav-icon">◉</span>CLASSIFICAZIONE</button>
+    <button class="nav-item" data-section="night"><span class="nav-icon">◐</span>NOTTI</button>
+    <button class="nav-item" data-section="streak"><span class="nav-icon">◆</span>STREAK / α</button>
+    <button class="nav-item" data-section="alpha"><span class="nav-icon">◇</span>ALPHA MENSILE</button>
+    <button class="nav-item" data-section="washout"><span class="nav-icon">◎</span>WASHOUT</button>
+    <button class="nav-item" data-section="wind"><span class="nav-icon">◁</span>VENTO</button>
+    <button class="nav-item" data-section="hdweff"><span class="nav-icon">⚡</span>HDW_EFF PARAMS</button>
+    <button class="nav-item" data-section="foehn"><span class="nav-icon">🌬</span>VENTI DOMINANTI</button>
+    <button class="nav-item" data-section="soglie"><span class="nav-icon">▦</span>SOGLIE MENSILI</button>
+    <button class="nav-item zm-tab" data-section="zonemgr"><span class="nav-icon">📦</span>ZONE MANAGER</button>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content">
+    <div id="content-inner">
+      <!-- sections injected by JS -->
+    </div>
+  </div>
+
+  <!-- JSON PANEL -->
+  <div id="json-panel" class="hidden">
+    <div id="json-header">
+      <span>OUTPUT JSON</span>
+      <span id="json-chars">—</span>
+    </div>
+    <pre id="json-pre"></pre>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div id="footer">
+  <span id="footer-left">HDWC ENGINE · —</span>
+  <span id="footer-right">—</span>
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const MONTHS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+
+let config = {
+  meta: {
+    preset_name: "", region_id: "", version: "1.0.0",
+    created: new Date().toISOString().slice(0,10), author: "", notes: "",
+    bbox: [null, null, null, null]
+  },
+  vegetation: {
+    days_to_severe_stress: 8,
+    RH_wilt: 38, VPD_stress: 2.0
+  },
+  classification: {
+    Rain_effective_mm: 2,
+    Tmax_class2: 30, Tmax_class3: 35,
+    HDW_eff_class2: 60, HDW_eff_class3: 120,
+    RH_dry: 60, RH_very_dry: 40
+  },
+  night: {
+    T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25,
+    night_hours_min: 4, night_window_start: "20:00", night_window_end: "08:00"
+  },
+  streak: {
+    streak_activation_days: 4,
+    delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010,
+    delta_alpha_night: [0, 0.005, 0.010, 0.015],
+    delta_alpha_relief: -0.010
+  },
+  alpha: {
+    alpha_max_global: 0.95,
+    alpha_ref: [0.45,0.45,0.50,0.55,0.65,0.75,0.85,0.88,0.80,0.65,0.52,0.45]
+  },
+  washout: {
+    enabled: true,
+    thresholds_mm: [2,10,20,30],
+    beta_values: [0.95,0.85,0.75,0.65]
+  },
+  wind: { w_mean_weight: 0.7, w_gust_weight: 0.3 },
+  hdw_eff_params: {
+    k_base: 10, k_mid: 20, k_high: 30,
+    delta_rel_threshold: 0.20
+  },
+  foehn_winds: {
+    enabled: false,
+    delta_alpha_per_score_unit: 0.005,
+    winds: []
+  },
+  soglie: {
+    hdw_eff: {
+      livelli: ["verde","giallo","arancio","rosso","viola"],
+      colori: ["#4ade80","#facc15","#fb923c","#ef4444","#7c3aed"],
+      etichette: ["Basso","Moderato","Alto","Molto alto","Estremo"],
+      mensile: [
+        [15,30,50,80,130],[15,30,50,80,130],[20,40,65,100,160],[25,50,80,120,190],
+        [30,60,100,150,240],[40,80,130,200,320],[50,100,160,250,400],[55,110,175,270,430],
+        [45,90,150,230,370],[30,60,100,150,240],[20,40,65,100,160],[15,30,50,80,130]
+      ]
+    },
+    hdwc: {
+      livelli: ["verde","giallo","arancio","rosso","viola"],
+      colori: ["#4ade80","#facc15","#fb923c","#ef4444","#7c3aed"],
+      etichette: ["Basso","Moderato","Alto","Molto alto","Estremo"],
+      hdwc_peak: [80,150,250,400,600],
+      mensile: [
+        [30,70,130,220,380],[30,70,130,220,380],[40,90,170,280,470],[60,130,240,390,640],
+        [100,210,370,580,920],[160,320,550,840,1280],[220,430,720,1080,1620],[240,470,780,1170,1740],
+        [190,380,650,990,1510],[110,230,410,650,1020],[55,120,220,370,620],[35,80,150,250,420]
+      ]
+    }
+  }
+};
+
+let activeSection = "meta";
+let jsonVisible = false;
+// Zone Manager state
+let zmPkg = [];
+let zmSelIdx = -1;
+let zmSubTab = 'list';
+let zmLeafletMap = null;
+let zmLeafletLayers = { rects: [], corners: [] };
+let zmValidationCache = {};
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function set(section, key, value) {
+  if (section === 'streak' && key === 'delta_alpha_night') {
+    config.streak.delta_alpha_night = value;
+  } else if (section === 'hdw_eff_params') {
+    config.hdw_eff_params[key] = value;
+  } else if (section === 'foehn_winds' && key !== 'winds') {
+    config.foehn_winds[key] = value;
+  } else {
+    config[section][key] = value;
+  }
+  refresh();
+}
+
+function slider(id, label, min, max, step, section, key, unit="", hint="", docKey="") {
+  const val = config[section][key];
+  const badge = docKey ? _iBadge(docKey) : '';
+  return `
+  <div class="slider-field" id="sf-${id}">
+    <div class="slider-header">
+      <span class="slider-label">${label}${badge}</span>
+      <div class="slider-value-wrapper">
+        <span class="slider-value" id="sv-${id}">${val}${unit}</span>
+        <input type="number" class="slider-number" id="sn-${id}" value="${val}" step="${step}" min="${min}" max="${max}"
+          onchange="set('${section}','${key}',parseFloat(this.value));document.getElementById('sv-${id}').textContent=this.value+'${unit}';document.getElementById('sl-${id}').value=this.value">
+      </div>
+    </div>
+    <input type="range" id="sl-${id}" min="${min}" max="${max}" step="${step}" value="${val}"
+      oninput="document.getElementById('sn-${id}').value=this.value;document.getElementById('sv-${id}').textContent=this.value+'${unit}';set('${section}','${key}',parseFloat(this.value))">
+    ${hint ? `<div class="slider-hint">${hint}</div>` : ''}
+  </div>`;
+}
+
+function numInput(label, section, key, min, max, step, unit="", hint="", docKey="") {
+  const val = config[section][key];
+  const badge = docKey ? _iBadge(docKey) : '';
+  return `
+  <div class="field">
+    <label>${label}${unit ? ' ('+unit+')' : ''}${badge}</label>
+    <input type="number" min="${min}" max="${max}" step="${step}" value="${val}"
+      onchange="set('${section}','${key}',parseFloat(this.value))">
+    ${hint ? `<div class="hint">${hint}</div>` : ''}
+  </div>`;
+}
+
+function textInput(label, section, key, placeholder="") {
+  const val = config[section][key] || '';
+  return `
+  <div class="field">
+    <label>${label}</label>
+    <input type="text" value="${val.replace(/"/g, '&quot;')}" placeholder="${placeholder}"
+      onchange="set('${section}','${key}',this.value)">
+  </div>`;
+}
+
+function textareaInput(label, section, key, placeholder="") {
+  const val = config[section][key] || '';
+  return `
+  <div class="field">
+    <label>${label}</label>
+    <textarea onchange="set('${section}','${key}',this.value)" placeholder="${placeholder}">${val}</textarea>
+  </div>`;
+}
+
+function divider(title) {
+  return `<div class="divider"><span>${title}</span></div>`;
+}
+
+// ─── SECTIONS ─────────────────────────────────────────────────────────────────
+function sectionMeta() {
+  const bb = config.meta.bbox || [null,null,null,null];
+  const bv = i => (bb[i] != null && bb[i] !== '') ? bb[i] : '';
+  const bboxSet = bb.some(v => v != null && v !== '');
+
+  // Live preview string
+  const preview = bboxSet
+    ? `[${bb.map(v => v != null ? v : '?').join(', ')}]`
+    : 'non definita — batch usa bbox hardcoded';
+
+  return `
+    ${textInput("Nome Preset","meta","preset_name","es. Portogallo Mediterraneo")}
+    ${textInput("Region ID","meta","region_id","es. portugal_med")}
+    ${textInput("Versione","meta","version","1.0.0")}
+    ${textInput("Autore","meta","author","nome / team")}
+    ${textareaInput("Note","meta","notes","")}
+    ${divider("Bounding Box — rilevamento engine batch")}
+    <div class="info-box" style="margin-bottom:14px">
+      Formato: <b>[lonMin, lonMax, latMin, latMax]</b> ${_iBadge('meta.bbox')}<br>
+      Stato: <span style="color:${bboxSet?'#16a34a':'#aaa'};font-weight:500">${preview}</span>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:8px">
+      <div class="field">
+        <label>Lon Min (°W neg)</label>
+        <input type="number" step="0.1" min="-180" max="180" value="${bv(0)}" placeholder="-10"
+          onchange="config.meta.bbox[0]=this.value!==''?parseFloat(this.value):null;refresh()">
+      </div>
+      <div class="field">
+        <label>Lon Max (°E pos)</label>
+        <input type="number" step="0.1" min="-180" max="180" value="${bv(1)}" placeholder="-5"
+          onchange="config.meta.bbox[1]=this.value!==''?parseFloat(this.value):null;refresh()">
+      </div>
+      <div class="field">
+        <label>Lat Min (°S neg)</label>
+        <input type="number" step="0.1" min="-90" max="90" value="${bv(2)}" placeholder="36"
+          onchange="config.meta.bbox[2]=this.value!==''?parseFloat(this.value):null;refresh()">
+      </div>
+      <div class="field">
+        <label>Lat Max (°N pos)</label>
+        <input type="number" step="0.1" min="-90" max="90" value="${bv(3)}" placeholder="43"
+          onchange="config.meta.bbox[3]=this.value!==''?parseFloat(this.value):null;refresh()">
+      </div>
+    </div>
+    ${bboxSet && bb[0]>=bb[1] ? `<div class="wind-warning">⚠ lonMin deve essere < lonMax</div>` : ''}
+    ${bboxSet && bb[2]>=bb[3] ? `<div class="wind-warning">⚠ latMin deve essere < latMax</div>` : ''}`;
+}
+
+function sectionVegetation() {
+  return `
+    <div class="info-box" style="margin-bottom:18px">
+      Questi parametri modificano la classificazione giornaliera quando i dati di
+      umidità relativa sono disponibili (percorso orario o daily RH).
+      Si attivano in <b>classifyDay_v2</b> indipendentemente dalla streak.
+    </div>
+    ${divider("Modificatori di classificazione")}
+    ${slider("vh1","RH appassimento",20,60,1,"vegetation","RH_wilt","%","Forza dc≥2 quando rhMean ≤ soglia AND hdwEff ≥ HDW_c2×0.75","vegetation.RH_wilt")}
+    ${slider("vv1","VPD stress",0.5,5,0.1,"vegetation","VPD_stress"," kPa","Promuove dc+1 quando VPD diurno ≥ soglia AND hdwEff ≥ HDW_c2×0.75","vegetation.VPD_stress")}
+    ${divider("Memoria α")}
+    ${slider("vd2","Giorni a stress grave",3,21,1,"vegetation","days_to_severe_stress"," gg","Soglia streak per il long-streak boost logaritmico di α","vegetation.days_to_severe_stress")}`;
+}
+
+function sectionClassification() {
+  return `
+    ${divider("Pioggia")}
+    ${slider("cr1","Pioggia efficace",1,10,0.5,"classification","Rain_effective_mm"," mm","Sotto questa soglia la pioggia non resetta il sistema","classification.Rain_effective_mm")}
+    ${divider("Soglie temperatura")}
+    ${slider("ct1","Tmax → Classe 2",25,40,1,"classification","Tmax_class2","°C","","classification.Tmax_class2")}
+    ${slider("ct2","Tmax → Classe 3",30,45,1,"classification","Tmax_class3","°C","","classification.Tmax_class3")}
+    ${divider("Soglie HDW_eff")}
+    ${slider("ch1","HDW_eff → Classe 2",20,150,5,"classification","HDW_eff_class2","","Soglia bassa = più giorni in classe 2","classification.HDW_eff_class2")}
+    ${slider("ch2","HDW_eff → Classe 3",50,300,5,"classification","HDW_eff_class3","","","classification.HDW_eff_class3")}
+    ${divider("Umidità relativa")}
+    ${slider("crh1","RH secco",30,80,1,"classification","RH_dry","%","Doppio uso: classificazione diurna E modulatore secchezza notturna (night score +1)","classification.RH_dry")}
+    ${slider("crh2","RH molto secco",15,60,1,"classification","RH_very_dry","%","Doppio uso: secchezza diurna severa E soglia VPD notturno per ns≥2 (percorso proxy)","classification.RH_very_dry")}`;
+}
+
+function sectionNight() {
+  const sc = config.night;
+  return `
+    <div class="info-box" style="border-color:#3b82f6;background:#eff6ff;margin-bottom:18px">
+      <span style="color:#1d4ed8;font-weight:600">Soglie RH notturne →</span>
+      <span style="color:#1e40af"> Le soglie di umidità relativa notturna (RH_dry e RH_very_dry) sono condivise con la sezione
+      <b>CLASSIFICAZIONE</b>. Lo stesso valore governa sia la classificazione diurna sia il modulatore
+      di secchezza notturna che può elevare il night score di +1.
+      Vai in CLASSIFICAZIONE → "RH secco" e "RH molto secco" per modificarle.</span>
+    </div>
+    ${divider("Soglie termiche notturne")}
+    ${slider("nt1","Notte calda (score 1)",14,22,1,"night","T_night_warm","°C","","night.T_night_warm")}
+    ${slider("nt2","Notte tropicale (score 2)",16,26,1,"night","T_night_tropical","°C","","night.T_night_tropical")}
+    ${slider("nt3","Notte severa (score 3)",20,32,1,"night","T_night_severe","°C","","night.T_night_severe")}
+    ${divider("Finestra notturna")}
+    ${slider("nh1","Ore minime sopra soglia",1,8,1,"night","night_hours_min"," h","Ore notturne calde minime per attivare night_score","night.night_hours_min")}
+    <div class="grid2">
+      ${textInput("Inizio notte","night","night_window_start","es. 20:00")}
+      ${textInput("Fine notte","night","night_window_end","es. 08:00")}
+    </div>
+    <div class="score-table" style="margin-top:16px">
+      <div class="score-row"><div class="score-badge" style="color: #444">Score 0</div><div class="score-desc">Tmin &lt; ${sc.T_night_warm}°C — notte normale, recupero completo</div></div>
+      <div class="score-row"><div class="score-badge" style="color: #d97706">Score 1</div><div class="score-desc">Tmin ≥ ${sc.T_night_warm}°C o ≥${sc.night_hours_min}h calde — notte calda</div></div>
+      <div class="score-row"><div class="score-badge" style="color: #ea580c">Score 2</div><div class="score-desc">Tmin ≥ ${sc.T_night_tropical}°C o ≥${sc.night_hours_min}h ≥${sc.T_night_tropical}°C — tropicale</div></div>
+      <div class="score-row" style="border-bottom:none"><div class="score-badge" style="color: #dc2626">Score 3</div><div class="score-desc">Tmin ≥ ${sc.T_night_severe}°C — notte severa, zero recupero</div></div>
+    </div>`;
+}
+
+function sectionStreak() {
+  const dn = config.streak.delta_alpha_night;
+  return `
+    <div class="info-box" style="margin-bottom:18px">
+      <b>Comportamento del reset:</b> la streak si azzera sia con class 0 (pioggia ≥ Rain_effective_mm)
+      sia con class 1 (giorno neutro). Dopo ogni reset riparte da zero: servono di nuovo
+      <b>${config.streak.streak_activation_days} giorni</b> prima che Δα_dry si riattivi.
+      Se piogge leggere e frequenti resettano la streak prima che si attivi, abbassare
+      <b>Rain_effective_mm</b> in CLASSIFICAZIONE piuttosto che modificare questo parametro.
+    </div>
+    ${divider("Attivazione streak")}
+    ${slider("ss1","Giorni attivazione streak",2,10,1,"streak","streak_activation_days"," gg","Giorni consecutivi classe 2/3 prima che α inizi a salire","streak.streak_activation_days")}
+    ${divider("Incremento α da streak secco")}
+    ${slider("sd1","Δα giorno classe 2",0,0.030,0.001,"streak","delta_alpha_dry_class2","","Incremento giornaliero di α in streak classe 2","streak.delta_alpha_dry_class2")}
+    ${slider("sd2","Δα giorno classe 3",0,0.050,0.001,"streak","delta_alpha_dry_class3","","Incremento giornaliero di α in streak classe 3","streak.delta_alpha_dry_class3")}
+    ${divider("Δα da night score [0–3]")}
+    ${[0,1,2,3].map(i => `
+    <div class="slider-field">
+      <div class="slider-header">
+        <span class="slider-label">Night score ${i}${i>0?_iBadge('streak.delta_alpha_night_'+i):''}</span>
+        <div class="slider-value-wrapper">
+          <span class="slider-value" id="sv-ns${i}">${dn[i]}</span>
+          <input type="number" class="slider-number" id="sn-ns${i}" value="${dn[i]}" step="0.001" min="0" max="0.030"
+            onchange="config.streak.delta_alpha_night[${i}]=parseFloat(this.value);document.getElementById('sv-ns${i}').textContent=this.value;document.getElementById('sl-ns${i}').value=this.value;refresh()">
+        </div>
+      </div>
+      <input type="range" id="sl-ns${i}" min="0" max="0.030" step="0.001" value="${dn[i]}"
+        oninput="document.getElementById('sn-ns${i}').value=this.value;document.getElementById('sv-ns${i}').textContent=this.value;config.streak.delta_alpha_night[${i}]=parseFloat(this.value);refresh()">
+    </div>`).join('')}
+    ${divider("Disagravamento")}
+    ${slider("sr1","Δα classe 0 (relief)",-0.05,0,0.001,"streak","delta_alpha_relief","","Negativo: riduce α nei giorni di disagravamento","streak.delta_alpha_relief")}`;
+}
+
+function sectionAlpha() {
+  const vals = config.alpha.alpha_ref;
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+
+  const warns = [];
+  for (let i = 0; i < 12; i++) {
+    const j = (i+1)%12;
+    const d = Math.abs(vals[i]-vals[j]);
+    if (d > 0.15) warns.push(`${MONTHS[i]}→${MONTHS[j]}: Δ=${d.toFixed(2)} > 0.15`);
+  }
+
+  const bars = vals.map(v => {
+    const pct = ((v - 0.30) / 0.65 * 100).toFixed(1);
+    return `<div class="alpha-bar" style="height:${pct}%;opacity:${0.3+0.7*((v-0.30)/0.65)}"></div>`;
+  }).join('');
+
+  const cells = MONTHS.map((m,i) => `
+    <div class="alpha-cell">
+      <div class="month">${m}</div>
+      <input type="number" min="0.30" max="0.95" step="0.01" value="${vals[i]}"
+        onchange="config.alpha.alpha_ref[${i}]=parseFloat(this.value);refresh()">
+    </div>`).join('');
+
+  return `
+    ${divider("Alpha mensile regionale")}
+    <div class="info-box">
+      Il pavimento dinamico di α è <span class="hl">α_floor = min(alpha_ref)</span>.<br>
+      Salti tra mesi consecutivi > 0.15 generano un avviso di calibrazione.
+      ${_iBadge('alpha.alpha_ref')}
+    </div>
+    <div class="alpha-grid">${cells}</div>
+    <div class="alpha-bars">${bars}</div>
+    <div class="alpha-info">
+      <span>min: ${mn.toFixed(2)}</span>
+      <span>max: ${mx.toFixed(2)}</span>
+      <span>α_floor = ${mn.toFixed(2)}</span>
+    </div>
+    ${warns.length ? `<div class="warn-box"><div class="warn-title">⚠ SALTI MENSILI > 0.15</div>${warns.map(w=>`<div class="warn-item">· ${w}</div>`).join('')}</div>` : ''}
+    ${divider("Cap globale")}
+    ${slider("am1","Alpha max globale",0.80,0.99,0.01,"alpha","alpha_max_global","","Nessun α può superare questo valore","alpha.alpha_max_global")}`;
+}
+
+function sectionWashout() {
+  const w = config.washout;
+  const tableRows = w.thresholds_mm.map((t,i) => `
+    <div class="tr">
+      <div class="td">≥ <input value="${t}" type="number" onchange="config.washout.thresholds_mm[${i}]=parseFloat(this.value);refresh()"> mm</div>
+      <div class="td"><input class="orange" value="${w.beta_values[i]}" type="number" min="0" max="1" step="0.01" onchange="config.washout.beta_values[${i}]=parseFloat(this.value);refresh()"></div>
+    </div>`).join('');
+
+  const legend = `<div style="font-size: 13px;color: #222;line-height:1.9;margin-top:10px">
+    Rain < ${w.thresholds_mm[0]} mm → β = 1.00 (nessun washout)<br>
+    ${w.thresholds_mm.map((t,i)=>`Rain ≥ ${t} mm → β = ${w.beta_values[i]}`).join('<br>')}
+  </div>`;
+
+  return `
+    <div class="toggle-row">
+      <button class="toggle-btn" id="washout-toggle" onclick="config.washout.enabled=!config.washout.enabled;refresh()"
+        style="background:${w.enabled?'#E05A1E':'#ddd'}">
+        <div class="toggle-knob" style="left:${w.enabled?'25px':'3px'}"></div>
+      </button>
+      <div>
+        <div class="toggle-label">Washout beta abilitato ${_iBadge('washout.enabled')}</div>
+        <div class="toggle-hint">Applica β alla formula HDWC in caso di pioggia</div>
+      </div>
+    </div>
+    ${w.enabled ? `
+    ${divider("Tabella soglie → beta")}
+    <div class="wash-table">
+      <div class="tr">
+        <div class="th">Pioggia (mm)</div><div class="th" style="border-left:1px solid #e8e4de">Beta</div>
+      </div>
+      ${tableRows}
+    </div>
+    ${legend}` : ''}`;
+}
+
+function sectionWind() {
+  const w = config.wind;
+  const sum = (w.w_mean_weight + w.w_gust_weight).toFixed(2);
+  return `
+    ${divider("Composizione vento efficace")}
+    <div class="formula-box">
+      W_eff = <span style="color: #E05A1E;font-weight:500">${w.w_mean_weight}</span> · Wind_mean &nbsp;+&nbsp; <span style="color: #E05A1E;font-weight:500">${w.w_gust_weight}</span> · Gust_max
+    </div>
+    ${slider("wm","Peso vento medio",0,1,0.05,"wind","w_mean_weight","","","wind.w_mean_weight")}
+    ${slider("wg","Peso raffica",0,1,0.05,"wind","w_gust_weight","","","wind.w_gust_weight")}
+    ${Math.abs(sum - 1) > 0.01 ? `<div class="wind-warning">⚠ La somma dei pesi è ${sum} — dovrebbe essere 1.00</div>` : ''}`;
+}
+
+let soglieActiveTab = "hdwc";
+
+function validateSoglie(rows) {
+  const errors = [];
+  rows.forEach((row, i) => {
+    for (let j = 1; j < row.length; j++) {
+      if (row[j] <= row[j-1]) errors.push(MONTHS[i] + ': livello ' + (j+1) + ' (' + row[j] + ') deve essere > livello ' + j + ' (' + row[j-1] + ')');
+    }
+  });
+  return errors;
+}
+
+function sectionSoglie() {
+  const tab = soglieActiveTab;
+  const data = config.soglie[tab];
+  const rows = data.mensile;
+  const livelli = data.livelli;
+  const colori = data.colori;
+  const etichette = data.etichette;
+
+  const errors = validateSoglie(rows);
+
+  const legend = livelli.map((l,i) =>
+    '<div class="soglie-legend-item"><span class="level-dot" style="background:' + colori[i] + '"></span>' + etichette[i] + '</div>'
+  ).join('');
+
+  const thCols = livelli.map((l,i) =>
+    '<th style="color:' + colori[i] + ';font-weight:500">' + etichette[i] + '</th>'
+  ).join('');
+
+  const bodyRows = rows.map((row, ri) => {
+    const cells = row.map((val, ci) =>
+      '<td><input type="number" min="0" step="1" value="' + val + '" style="border-color:' + colori[ci] + '44" onchange="config.soglie[\'' + tab + '\'].mensile[' + ri + '][' + ci + ']=parseFloat(this.value)||0;refresh()">民'
+    ).join('');
+    return '<tr class="month-row-highlight"><td class="month-name">' + MONTHS[ri] + '民' + cells + '</tr>';
+  }).join('');
+
+  const vals_by_level = livelli.map((l,li) => rows.map(r => r[li]));
+  const sparklines = vals_by_level.map((vals, li) => {
+    const mn = Math.min(...vals), mx = Math.max(...vals), range = mx - mn || 1;
+    const pts = vals.map((v,i) => ((i/11)*100).toFixed(1) + ',' + (30 - ((v-mn)/range)*26).toFixed(1)).join(' ');
+    return '<polyline points="' + pts + '" fill="none" stroke="' + colori[li] + '" stroke-width="1.5" opacity="0.8"/>';
+  }).join('');
+
+  const peakSection = (tab === 'hdwc') ? (
+    divider('Picco stagionale HDWc (hdwc_peak)') +
+    '<div class="info-box" style="margin-bottom:12px">Valore HDWc di picco per ogni livello di rischio. Usato dal dashboard per normalizzare il rischio cumulativo.</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">' +
+    livelli.map((l,i) =>
+      '<div style="flex:1;min-width:80px">' +
+      '<div style="font-size: 11px;color:' + colori[i] + ';letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">' + etichette[i] + '</div>' +
+      '<input type="number" min="0" step="10" value="' + data.hdwc_peak[i] + '" ' +
+      'style="background:#f9f7f4;border:1px solid ' + colori[i] + '66;border-radius:4px;padding:6px 8px;font-family:\'DM Mono\',monospace;font-size: 15px;width:100%;outline:none;color:' + colori[i] + ';font-weight:500" ' +
+      'onchange="config.soglie.hdwc.hdwc_peak[' + i + ']=parseFloat(this.value)||0;refresh()">' +
+      '</div>'
+    ).join('') + '</div>'
+  ) : '';
+
+  const colorPickers = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px">' +
+    livelli.map((l,i) =>
+      '<div>' +
+      '<div style="font-size: 11px;color: #222;margin-bottom:4px;letter-spacing:0.08em;text-transform:uppercase">' + etichette[i] + '</div>' +
+      '<input type="text" value="' + etichette[i] + '" ' +
+      'style="background:#f9f7f4;border:1px solid ' + colori[i] + '88;border-radius:4px;padding:5px 6px;font-family:\'DM Mono\',monospace;font-size: 13px;width:100%;outline:none;color: #111;box-sizing:border-box" ' +
+      'onchange="config.soglie[\'' + tab + '\'].etichette[' + i + ']=this.value;refresh()">' +
+      '<input type="color" value="' + colori[i] + '" ' +
+      'style="width:100%;height:22px;border:none;border-radius:3px;cursor:pointer;margin-top:4px" ' +
+      'onchange="config.soglie[\'' + tab + '\'].colori[' + i + ']=this.value;refresh()">' +
+      '</div>'
+    ).join('') + '</div>';
+
+  return (
+    '<div class="soglie-tabs">' +
+    '<button class="soglie-tab ' + (tab==='hdwc'?'active':'') + '" onclick="soglieActiveTab=\'hdwc\';refresh()">HDWc cumulativo</button>' +
+    '<button class="soglie-tab ' + (tab==='hdw_eff'?'active':'') + '" onclick="soglieActiveTab=\'hdw_eff\';refresh()">HDW_eff giornaliero</button>' +
+    '</div>' +
+    '<div class="info-box">Soglie mensili che definiscono i <strong>5 livelli di rischio</strong>. I valori devono essere <span class="hl">strettamente crescenti</span> da sinistra a destra.</div>' +
+    '<div class="soglie-legend" style="margin-bottom:12px">' + legend + '</div>' +
+    peakSection +
+    divider('Matrice mensile 12 × 5') +
+    '<div style="overflow-x:auto;margin-bottom:12px"><table class="soglie-matrix"><thead>值得<th class="month-col">Mese</th>' + thCols + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>' +
+    (errors.length ?
+      '<div class="warn-box"><div class="warn-title">Ordine non valido — i valori devono essere crescenti</div>' + errors.map(e=>'<div class="warn-item">· '+e+'</div>').join('') + '</div>' :
+      '<div class="validate-ok">Tutti i valori sono in ordine crescente</div>'
+    ) +
+    divider('Andamento stagionale per livello') +
+    '<svg viewBox="0 0 100 32" style="width:100%;height:56px;overflow:visible;margin-bottom:4px">' + sparklines + '</svg>' +
+    '<div style="display:flex;justify-content:space-between;font-size: 11px;color: #2d2d2d;margin-bottom:18px"><span>Gen</span><span>Apr</span><span>Lug</span><span>Ott</span><span>Dic</span></div>' +
+    divider('Personalizza etichette e colori') +
+    colorPickers
+  );
+}
+
+// ─── SECTION: IMPORT α ERA5 ────────────────────────────────────────────────────
+let _importedCalib = null;
+
+// Named handler — avoids quote-escaping hell inside template literals
+function _loadAlphaCalibFile(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (!d.alpha_ref || !Array.isArray(d.alpha_ref) || d.alpha_ref.length !== 12)
+        throw new Error('alpha_ref mancante o non ha 12 valori');
+      _importedCalib = d;
+      refresh();
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      const btn = document.querySelector('.nav-item[data-section="importalpha"]');
+      if (btn) { btn.classList.add('active'); activeSection = 'importalpha'; refresh(); }
+    } catch(err) { alert('File non valido: ' + err.message); }
+  };
+  r.readAsText(f);
+  input.value = '';
+}
+
+function sectionImportAlpha() {
+  const MONTHS = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const hasData = _importedCalib != null;
+  const meta = _importedCalib?.meta || {};
+
+  let diffHTML = '';
+  let warns = [];
+  if (hasData) {
+    const nA = _importedCalib.alpha_ref;
+    const oA = config.alpha.alpha_ref;
+    for (let i=0;i<11;i++) { const d=Math.abs(nA[i+1]-nA[i]); if(d>0.15) warns.push(MONTHS[i]+'→'+MONTHS[i+1]+': Δ='+d.toFixed(2)); }
+    for (let i=3;i<8;i++) { if(nA[i+1]<nA[i]) warns.push('Inversione '+MONTHS[i]+'→'+MONTHS[i+1]); }
+    const rows = nA.map((na,m) => {
+      const oa=oA[m]; const d=na-oa;
+      const ds=d===0?'=':(d>0?'+':'')+d.toFixed(2);
+      const dc=d>0.001?'diff-up':d<-0.001?'diff-down':'diff-same';
+      const cal=_importedCalib.calibration?.[m]||{};
+      const sc=cal.source==='365d'?'src-365d':cal.source==='blended'?'src-blended':'src-global';
+      const sl=cal.source==='365d'?'●365d':cal.source==='blended'?'◑mix':'?glb';
+      return `<div class="import-diff-row">
+        <span style="color:#555">${MONTHS[m]}</span>
+        <span><b style="font-family:'DM Mono',monospace">${oa.toFixed(2)}</b>→<b style="font-family:'DM Mono',monospace;color:#E05A1E">${na.toFixed(2)}</b></span>
+        <span class="${dc}" style="font-family:'DM Mono',monospace">${ds}</span>
+        <span class="src-badge ${sc}">${sl}</span>
+        <span style="color:#555;font-size:10px">E=${cal.e_hdwc??'—'}</span>
+      </div>`;
+    }).join('');
+    diffHTML = `<div class="import-alpha-card">
+      <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:5px">✅ Calibrazione caricata</div>
+      <div style="font-size:10px;color:#555;margin-bottom:8px">
+        ${meta.location_name||'—'} · ${meta.lat?.toFixed(4)||'—'}, ${meta.lon?.toFixed(4)||'—'}<br>
+        Periodo: ${meta.period||'—'} · ${meta.n_months_local||0}/12 mesi ERA5 locali
+      </div>
+      <div style="font-weight:700;font-size:11px;color:#333;margin-bottom:5px">Diff α_ref: attuale → ERA5</div>
+      <div class="import-diff-row" style="font-size:10px;color:#777;font-weight:700;border-bottom:2px solid #e8e4de">
+        <span>Mese</span><span>α old→new</span><span>Δ</span><span>Fonte</span><span>E[HDWc]</span>
+      </div>${rows}</div>
+    ${warns.length?`<div class="warn-box"><div class="warn-title">⚠ Avvisi</div>${warns.map(w=>'<div class="warn-item">· '+w+'</div>').join('')}</div>`:'<div class="validate-ok">✅ Curva α valida</div>'}
+    <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="_applyImportedAlpha()">✓ Applica α ERA5 calibrati</button>`;
+  }
+
+  return `<div class="info-box">Importa il JSON <b>alpha_calib_*.json</b> esportato dal dashboard FireMeteo
+    (bottone <b>Export α calibrati</b> nel pannello α Sensitivity dopo aver caricato ERA5 365d).<br>
+    Aggiorna automaticamente <b>alpha_ref</b> con valori calibrati localmente. Ideale per calibrare preset per <b>ecoregioni specifiche</b>.</div>
+  ${divider('Carica file calibrazione ERA5')}
+  <div style="margin-bottom:14px">
+    <input type="file" id="alphaCalibFileInput" accept=".json" style="display:none"
+      onchange="_loadAlphaCalibFile(this)">
+    <button class="btn btn-ghost" style="width:100%;text-align:center"
+      onclick="document.getElementById('alphaCalibFileInput').click()">
+      📡 Scegli alpha_calib_*.json
+    </button>
+  </div>
+  ${hasData?diffHTML:'<div class="info-box" style="color:#777;text-align:center">Nessun file caricato.</div>'}`;
+}
+
+function _applyImportedAlpha() {
+  if(!_importedCalib)return;
+  config.alpha.alpha_ref=_importedCalib.alpha_ref.slice();
+  const loc=_importedCalib.meta?.location_name;
+  if(loc) config.meta.notes=(config.meta.notes?config.meta.notes+'\n':'')+
+    'α calibrati ERA5: '+loc+' ('+(_importedCalib.meta?.period||'')+')';
+  _importedCalib=null;refresh();
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector('.nav-item[data-section="alpha"]');
+  if(btn){btn.classList.add('active');activeSection='alpha';refresh();}
+}
+
+// ─── SECTION: HDW_EFF PARAMS ──────────────────────────────────────────────────
+function sectionHdwEff() {
+  const p = config.hdw_eff_params;
+  return `
+    <div class="fclass-box">
+      <b>HDW_eff = HDW_raw + k · F_class</b><br>
+      Dove <code>F_class ∈ [0,1]</code> è la posizione di HDW_raw tra le soglie class2/class3.<br>
+      <code>k</code> dipende dalla Tmax del giorno (base / mid / high).<br>
+      Se ΔHDWrel > threshold, F_class viene amplificato proporzionalmente.
+    </div>
+    ${divider('Costanti k per intensità')}
+` +
+    slider('ke1','k base (Tmax < class2)',0,50,1,'hdw_eff_params','k_base','',
+      'Amplificatore quando Tmax sotto soglia class2','hdw_eff_params.k_base') +
+    slider('ke2','k mid (Tmax class2–class3)',0,60,1,'hdw_eff_params','k_mid','',
+      'Amplificatore a temperatura moderata','hdw_eff_params.k_mid') +
+    slider('ke3','k high (Tmax ≥ class3)',0,80,1,'hdw_eff_params','k_high','',
+      'Amplificatore a temperatura elevata','hdw_eff_params.k_high') +
+    divider('Soglia variazione relativa') +
+    slider('ke4','Δrel threshold',0,0.50,0.01,'hdw_eff_params','delta_rel_threshold','',
+      'Se (HDW_raw - HDW_raw_prev)/HDW_raw_prev supera questa soglia, F_class viene amplificato','hdw_eff_params.delta_rel_threshold') + `
+    <div class="info-box" style="margin-top:12px">
+      Comportamento chiave: sotto <span class="hl">HDW_eff_class2</span> il bonus è zero —
+      i giorni normali non vengono toccati.<br>
+      Scegli k <b>moderati</b> per climi umidi, <b>alti</b> per climi secchi con picchi esplosivi.
+    </div>`;
+}
+
+// ─── SECTION: VENTI DOMINANTI (foehn_winds) ───────────────────────────────────
+const COMPASS_16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+function compassOpts(selected) {
+  return COMPASS_16.map(d => `<option value="${d}"${d===selected?' selected':''}>${d}</option>`).join('');
+}
+
+function _windCardHTML(w, idx) {
+  return `
+  <div class="wind-card" id="wcard-${idx}">
+    <div class="wind-card-hdr">
+      <span class="wind-card-title">Vento ${idx+1}${w.label ? ' · ' + w.label : ''}</span>
+      <button class="wind-card-remove" onclick="_removeWind(${idx})">✕ rimuovi</button>
+    </div>
+    <div class="wind-grid">
+      <div class="wind-field" style="grid-column:1/-1">
+        <label>Etichetta</label>
+        <input type="text" value="${w.label||''}" placeholder="es. Maestrale"
+          onchange="config.foehn_winds.winds[${idx}].label=this.value;refresh()">
+      </div>
+      <div class="wind-field">
+        <label>Direzione DA</label>
+        <select onchange="config.foehn_winds.winds[${idx}].from=this.value;refresh()">
+          ${compassOpts(w.from||'N')}
+        </select>
+      </div>
+      <div class="wind-field">
+        <label>Direzione A</label>
+        <select onchange="config.foehn_winds.winds[${idx}].to=this.value;refresh()">
+          ${compassOpts(w.to||'N')}
+        </select>
+      </div>
+      <div class="wind-field">
+        <label>Score (1–5)</label>
+        <input type="number" min="1" max="5" step="1" value="${w.score||2}"
+          onchange="config.foehn_winds.winds[${idx}].score=parseInt(this.value)||1;refresh()">
+      </div>
+      <div class="wind-field">
+        <label>Velocità min (km/h)</label>
+        <input type="number" min="0" max="200" step="5" value="${w.min_speed_kmh||30}"
+          onchange="config.foehn_winds.winds[${idx}].min_speed_kmh=parseFloat(this.value)||0;refresh()">
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:#555">
+      Δα per evento =
+      <b style="color:#E05A1E">${(config.foehn_winds.delta_alpha_per_score_unit*(w.score||2)).toFixed(3)}</b>
+      (score ${w.score||2} × ${config.foehn_winds.delta_alpha_per_score_unit})
+    </div>
+  </div>`;
+}
+
+function _addWind() {
+  if (config.foehn_winds.winds.length >= 4) return;
+  config.foehn_winds.winds.push({ label:'', from:'NW', to:'NNW', score:2, min_speed_kmh:30 });
+  refresh();
+}
+
+function _removeWind(idx) {
+  config.foehn_winds.winds.splice(idx, 1);
+  refresh();
+}
+
+function sectionFoehn() {
+  const fw = config.foehn_winds;
+  const enabled = fw.enabled;
+  const windCards = fw.winds.map((w,i) => _windCardHTML(w,i)).join('');
+  const canAdd = fw.winds.length < 4;
+
+  return `
+    ${divider('Attivazione')}
+    <div class="toggle-row">
+      <button class="toggle-btn" onclick="config.foehn_winds.enabled=!config.foehn_winds.enabled;refresh()"
+        style="background:${enabled?'#E05A1E':'#ddd'}">
+        <div class="toggle-knob" style="left:${enabled?'25px':'3px'}"></div>
+      </button>
+      <div>
+        <div class="toggle-label">Venti dominanti pericolosi abilitati</div>
+        <div class="toggle-hint">Aggiunge Δα quando il vento dominante corrisponde a un pattern configurato</div>
+      </div>
+    </div>
+    ${enabled ? `
+    <div class="info-box" style="margin-bottom:16px">
+      In caso di <b>match multiplo</b> vince il vento con score più alto.<br>
+      La velocità vento in Open-Meteo/ERA5 è in <b>m/s</b> → convertita in km/h (×3.6) prima del confronto.<br>
+      Il match direzionale gestisce il wrap-around a 360°.<br>
+      Se <code>foehn_winds</code> è assente nel JSON, il motore lo ignora silenziosamente.
+    </div>
+    ${divider('Δα per unità di score')}` +
+    slider('fw1','Δα / score unit',0,0.020,0.001,'foehn_winds','delta_alpha_per_score_unit','',
+      'Es. score=3 → Δα = 3 × questo valore','foehn_winds.delta_alpha_per_score_unit') +
+    `${divider('Lista venti (max 4)')}
+    ${windCards}
+    <button class="add-wind-btn" onclick="_addWind()" ${!canAdd?'disabled':''}>
+      + aggiungi vento ${!canAdd?'(max 4 raggiunto)':''}
+    </button>
+    ` : `
+    <div class="info-box" style="color:#777;margin-top:12px">
+      Abilitare il toggle per configurare i venti dominanti pericolosi (Maestrale, Scirocco, Föhn, ecc.).<br>
+      Se disabilitato, il campo <code>foehn_winds.enabled = false</code> viene incluso nel JSON
+      e il motore lo ignora senza errori.
+    </div>`}`;
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function renderSection() {
+  const map = {
+    meta: sectionMeta, vegetation: sectionVegetation,
+    classification: sectionClassification, night: sectionNight,
+    streak: sectionStreak, alpha: sectionAlpha,
+    washout: sectionWashout, wind: sectionWind,
+    importalpha: sectionImportAlpha,
+    hdweff: sectionHdwEff, foehn: sectionFoehn,
+    soglie: sectionSoglie
+  };
+  return map[activeSection] ? map[activeSection]() : '';
+}
+
+// Rimuove bbox se tutti null prima dell'export
+function _configForExport() {
+  const out = JSON.parse(JSON.stringify(config));
+  if (!out.meta.bbox || out.meta.bbox.every(v => v == null))
+    delete out.meta.bbox;
+  return out;
+}
+
+function refresh() {
+  if (activeSection === 'zonemgr') { _refreshZmSection(); return; }
+  document.getElementById('content-inner').classList.remove('zm-wide');
+
+  // ── Zona edit banner ─────────────────────────────────────────────────────
+  const contentEl = document.getElementById('content');
+  let bannerEl = document.getElementById('zm-edit-banner');
+  if (zmSelIdx >= 0 && zmPkg.length > 0) {
+    const zoneName = config.meta.preset_name || zmPkg[zmSelIdx]?.meta?.preset_name || '—';
+    const bannerHTML = `
+      <span class="banner-label">Editing zona</span>
+      <span class="banner-name" title="${zoneName}">${zoneName}</span>
+      <span class="banner-slot">${zmSelIdx+1} / ${zmPkg.length}</span>
+      <button class="banner-save-btn" id="zm-banner-save" onclick="zmSaveSlot()">💾 Salva nel pacchetto</button>
+      <button class="banner-back-btn" onclick="zmSaveAndBack()">← Zone Manager</button>`;
+    if (!bannerEl) {
+      bannerEl = document.createElement('div');
+      bannerEl.id = 'zm-edit-banner';
+      contentEl.insertBefore(bannerEl, document.getElementById('content-inner'));
+    }
+    bannerEl.innerHTML = bannerHTML;
+  } else {
+    if (bannerEl) bannerEl.remove();
+  }
+
+  // Content
+  const label = document.querySelector(`.nav-item[data-section="${activeSection}"]`)?.textContent.trim() || '';
+  document.getElementById('content-inner').innerHTML = `
+    <div class="section-label">${label}</div>
+    ${renderSection()}`;
+
+  // JSON
+  const j = JSON.stringify(_configForExport(), null, 2);
+  document.getElementById('json-pre').textContent = j;
+  document.getElementById('json-chars').textContent = j.length + ' chars';
+
+  // Footer
+  const alphaMin = Math.min(...config.alpha.alpha_ref);
+  document.getElementById('footer-left').textContent =
+    `HDWC ENGINE · α_floor = ${alphaMin.toFixed(2)} · streak_activation = ${config.streak.streak_activation_days}gg`;
+  document.getElementById('footer-right').textContent =
+    `washout ${config.washout.enabled?'ON':'OFF'} · W_eff = ${config.wind.w_mean_weight}·mean+${config.wind.w_gust_weight}·gust · k=${config.hdw_eff_params.k_base}/${config.hdw_eff_params.k_mid}/${config.hdw_eff_params.k_high} · venti ${config.foehn_winds.enabled?config.foehn_winds.winds.length+'':'OFF'}`;
+
+  // Brand
+  let brandSuffix = config.meta.preset_name || '—';
+  if (zmSelIdx >= 0 && zmPkg.length > 0) brandSuffix += ` [zona ${zmSelIdx+1}/${zmPkg.length}]`;
+  document.getElementById('brand-sub').textContent = `REGIONAL PRESET BUILDER v8.0 · ${brandSuffix}`;
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // Save current zone if leaving any editor section while a zone is selected
+    if (activeSection !== 'zonemgr' && zmSelIdx >= 0) zmSaveCurrentToSlot();
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeSection = btn.dataset.section;
+    if (activeSection === 'zonemgr') {
+      document.getElementById('content-inner').classList.add('zm-wide');
+      document.getElementById('content-inner').innerHTML =
+        `<div class="section-label">📦 ZONE MANAGER</div>${sectionZoneMgr()}`;
+      if (zmSubTab === 'map') setTimeout(zmInitMap, 80);
+    } else {
+      document.getElementById('content-inner').classList.remove('zm-wide');
+      refresh();
+    }
+  });
+});
+
+// ─── TOOLBAR ──────────────────────────────────────────────────────────────────
+document.getElementById('btn-json').addEventListener('click', () => {
+  jsonVisible = !jsonVisible;
+  document.getElementById('json-panel').classList.toggle('hidden', !jsonVisible);
+  document.getElementById('btn-json').classList.toggle('active', jsonVisible);
+});
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+  const j = JSON.stringify(_configForExport(), null, 2);
+  navigator.clipboard.writeText(j).then(() => {
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = '✓ COPIATO';
+    btn.classList.add('btn-success');
+    setTimeout(() => { btn.textContent = '⎘ COPIA'; btn.classList.remove('btn-success'); }, 2000);
+  });
+});
+
+document.getElementById('btn-download').addEventListener('click', () => {
+  const j = JSON.stringify(_configForExport(), null, 2);
+  const blob = new Blob([j], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `hdwc_preset_${config.meta.region_id || 'custom'}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('import-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+
+      // ── 1. Shallow merge delle sezioni top-level ──────────────────────────
+      config = { ...config, ...parsed };
+
+      // ── 2. Deep merge soglie: preserva livelli/colori (campi esclusivi del
+      //       Builder, assenti nei JSON esportati dal dashboard) ─────────────
+      const DEFAULT_SOGLIE_SHARED = {
+        livelli:   ['verde','giallo','arancio','rosso','viola'],
+        colori:    ['#4ade80','#facc15','#fb923c','#ef4444','#7c3aed'],
+        etichette: ['Basso','Moderato','Alto','Molto alto','Estremo'],
+      };
+      ['hdwc', 'hdw_eff'].forEach(tab => {
+        const src = parsed.soglie?.[tab];
+        if (!src) return;
+        config.soglie[tab] = {
+          ...DEFAULT_SOGLIE_SHARED,
+          ...config.soglie[tab],
+          livelli:   DEFAULT_SOGLIE_SHARED.livelli,
+          colori:    src.colori   || DEFAULT_SOGLIE_SHARED.colori,
+          etichette: src.etichette || DEFAULT_SOGLIE_SHARED.etichette,
+        };
+      });
+
+      // ── 3. Normalizza campi opzionali assenti nei JSON del dashboard ───────
+      config.meta.notes               = config.meta.notes               ?? '';
+      config.meta.created             = config.meta.created             || new Date().toISOString().slice(0,10);
+      config.meta.bbox                = Array.isArray(parsed.meta?.bbox) && parsed.meta.bbox.length === 4
+                                        ? parsed.meta.bbox
+                                        : [null, null, null, null];
+      config.night.night_window_start = config.night.night_window_start || '20:00';
+      config.night.night_window_end   = config.night.night_window_end   || '08:00';
+
+      // ── 3b. Normalizza hdw_eff_params (nuovo v15) ─────────────────────────
+      const _defHp = { k_base:10, k_mid:20, k_high:30, delta_rel_threshold:0.20 };
+      config.hdw_eff_params = { ..._defHp, ...(parsed.hdw_eff_params || {}) };
+
+      // ── 3c. Normalizza foehn_winds (nuovo v15) ────────────────────────────
+      if (parsed.foehn_winds) {
+        config.foehn_winds = {
+          enabled: parsed.foehn_winds.enabled ?? false,
+          delta_alpha_per_score_unit: parsed.foehn_winds.delta_alpha_per_score_unit ?? 0.005,
+          winds: Array.isArray(parsed.foehn_winds.winds) ? parsed.foehn_winds.winds.map(w => ({
+            label: w.label || '',
+            from:  w.from  || 'N',
+            to:    w.to    || 'N',
+            score: typeof w.score === 'number' ? w.score : 2,
+            min_speed_kmh: typeof w.min_speed_kmh === 'number' ? w.min_speed_kmh : 30,
+          })) : []
+        };
+      } else {
+        config.foehn_winds = { enabled: false, delta_alpha_per_score_unit: 0.005, winds: [] };
+      }
+
+            // ── 4. Notifica e render ───────────────────────────────────────────────
+      zmSelIdx = -1; // import diretto: nessuna zona del pacchetto attiva
+      refresh();
+      // Salta automaticamente alla sezione SOGLIE MENSILI dopo l'import
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      const soglieBtn = document.querySelector('.nav-item[data-section="soglie"]');
+      if (soglieBtn) { soglieBtn.classList.add('active'); activeSection = 'soglie'; refresh(); }
+
+    } catch(err) {
+      alert('JSON non valido o struttura non compatibile:\n' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+refresh();
+
+
+// ─── ZONE MANAGER STATE (declared above, near other state) ─────────────────────
+
+// ─── GEOGRAPHIC TEMPLATES ─────────────────────────────────────────────────────
+const ZM_TEMPLATES = {
+  'California — Coast Range': {
+    meta: { preset_name: 'California Coast Range', region_id: 'california_coast', version: '1.0.0',
+      author: 'Template', notes: 'Northern California coast ranges. Cool/wet winters, dry summers. Distinct from Diablo wind zone.',
+      bbox: [-124, -120, 37, 42] },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 32, Tmax_class3: 38, HDW_eff_class2: 80, HDW_eff_class3: 160, RH_dry: 55, RH_very_dry: 35 },
+    night: { T_night_warm: 16, T_night_tropical: 20, T_night_severe: 24, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.40,0.42,0.45,0.50,0.58,0.68,0.80,0.85,0.82,0.72,0.58,0.44] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.65, w_gust_weight: 0.35 },
+    hdw_eff_params: { k_base: 12, k_mid: 24, k_high: 36, delta_rel_threshold: 0.20 },
+    foehn_winds: { enabled: true, delta_alpha_per_score_unit: 0.005, winds: [
+      { label: 'Diablo', from: 'NE', to: 'ENE', score: 3, min_speed_kmh: 35 },
+      { label: 'North Wind', from: 'N', to: 'NNE', score: 2, min_speed_kmh: 25 }
+    ]},
+    vegetation: { days_to_severe_stress: 8, RH_wilt: 35, VPD_stress: 2.5 }
+  },
+  'California — Southern': {
+    meta: { preset_name: 'California Southern', region_id: 'california_south', version: '1.0.0',
+      author: 'Template', notes: 'Southern California. Very arid. Santa Ana wind regime critical in autumn.',
+      bbox: [-120, -114, 32, 37] },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 40, HDW_eff_class2: 100, HDW_eff_class3: 200, RH_dry: 45, RH_very_dry: 25 },
+    night: { T_night_warm: 18, T_night_tropical: 22, T_night_severe: 26, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 3, delta_alpha_dry_class2: 0.007, delta_alpha_dry_class3: 0.012, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.43,0.45,0.49,0.55,0.63,0.73,0.85,0.88,0.84,0.76,0.62,0.47] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.60, w_gust_weight: 0.40 },
+    hdw_eff_params: { k_base: 15, k_mid: 28, k_high: 42, delta_rel_threshold: 0.18 },
+    foehn_winds: { enabled: true, delta_alpha_per_score_unit: 0.007, winds: [
+      { label: 'Santa Ana', from: 'ENE', to: 'E', score: 4, min_speed_kmh: 40 },
+      { label: 'Sundowner', from: 'NNW', to: 'NW', score: 2, min_speed_kmh: 30 }
+    ]},
+    vegetation: { days_to_severe_stress: 7, RH_wilt: 28, VPD_stress: 3.0 }
+  },
+  'Australia — SE Mediterranean': {
+    meta: { preset_name: 'Australia SE Mediterranean', region_id: 'australia_se_med', version: '1.0.0',
+      author: 'Template', notes: 'Victoria / NSW. Southern Hemisphere fire season Dec–Mar. Hot, dry northerly winds precede fronts.',
+      bbox: [140, 150, -38, -34] },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 40, HDW_eff_class2: 90, HDW_eff_class3: 180, RH_dry: 50, RH_very_dry: 30 },
+    night: { T_night_warm: 20, T_night_tropical: 24, T_night_severe: 28, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.006, delta_alpha_dry_class3: 0.011, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.85,0.88,0.80,0.65,0.50,0.38,0.32,0.35,0.45,0.58,0.72,0.82] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.65, w_gust_weight: 0.35 },
+    hdw_eff_params: { k_base: 12, k_mid: 24, k_high: 36, delta_rel_threshold: 0.20 },
+    foehn_winds: { enabled: true, delta_alpha_per_score_unit: 0.006, winds: [
+      { label: 'Northerly', from: 'NNW', to: 'NNE', score: 3, min_speed_kmh: 30 }
+    ]},
+    vegetation: { days_to_severe_stress: 9, RH_wilt: 30, VPD_stress: 2.8 }
+  },
+  'Australia — SW (Perth)': {
+    meta: { preset_name: 'Australia SW Perth', region_id: 'australia_sw_perth', version: '1.0.0',
+      author: 'Template', notes: 'SW Western Australia. Mediterranean climate. Fire season Jan–Mar. Fremantle Doctor sea breeze.',
+      bbox: [115, 125, -35, -30] },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 42, HDW_eff_class2: 85, HDW_eff_class3: 170, RH_dry: 45, RH_very_dry: 28 },
+    night: { T_night_warm: 20, T_night_tropical: 24, T_night_severe: 27, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.006, delta_alpha_dry_class3: 0.011, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.82,0.85,0.78,0.65,0.50,0.38,0.30,0.32,0.42,0.55,0.68,0.78] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.65, w_gust_weight: 0.35 },
+    hdw_eff_params: { k_base: 12, k_mid: 24, k_high: 38, delta_rel_threshold: 0.20 },
+    foehn_winds: { enabled: true, delta_alpha_per_score_unit: 0.005, winds: [
+      { label: 'Easterly', from: 'ENE', to: 'ESE', score: 3, min_speed_kmh: 30 }
+    ]},
+    vegetation: { days_to_severe_stress: 9, RH_wilt: 28, VPD_stress: 2.8 }
+  },
+  'Canada — BC Interior': {
+    meta: { preset_name: 'Canada BC Interior', region_id: 'canada_bc_interior', version: '1.0.0',
+      author: 'Template', notes: 'British Columbia interior. Continental climate. Fire season Jun–Sep. Short but intense dry periods.',
+      bbox: [-122, -114, 49, 56] },
+    classification: { Rain_effective_mm: 3, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 55, RH_very_dry: 35 },
+    night: { T_night_warm: 15, T_night_tropical: 18, T_night_severe: 22, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 5, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.012 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.30,0.32,0.38,0.46,0.58,0.72,0.85,0.82,0.68,0.55,0.40,0.30] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.70, w_gust_weight: 0.30 },
+    hdw_eff_params: { k_base: 10, k_mid: 20, k_high: 30, delta_rel_threshold: 0.22 },
+    foehn_winds: { enabled: true, delta_alpha_per_score_unit: 0.005, winds: [
+      { label: 'Chinook', from: 'W', to: 'WSW', score: 2, min_speed_kmh: 30 }
+    ]},
+    vegetation: { days_to_severe_stress: 10, RH_wilt: 35, VPD_stress: 2.0 }
+  },
+  'South Africa — Cape': {
+    meta: { preset_name: 'South Africa Cape', region_id: 'south_africa_cape', version: '1.0.0',
+      author: 'Template', notes: 'Cape Fynbos biome. Southern Hemisphere Mediterranean. Fire season Jan–Mar, Oct–Nov. Berg wind (foehn-type).',
+      bbox: [18, 26, -35, -30] },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 33, Tmax_class3: 38, HDW_eff_class2: 75, HDW_eff_class3: 150, RH_dry: 50, RH_very_dry: 30 },
+    night: { T_night_warm: 18, T_night_tropical: 22, T_night_severe: 26, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.78,0.80,0.72,0.58,0.44,0.34,0.30,0.34,0.44,0.58,0.72,0.76] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.65, w_gust_weight: 0.35 },
+    hdw_eff_params: { k_base: 12, k_mid: 22, k_high: 34, delta_rel_threshold: 0.20 },
+    foehn_winds: { enabled: true, delta_alpha_per_score_unit: 0.006, winds: [
+      { label: 'Berg Wind', from: 'NE', to: 'ENE', score: 3, min_speed_kmh: 25 }
+    ]},
+    vegetation: { days_to_severe_stress: 8, RH_wilt: 32, VPD_stress: 2.4 }
+  },
+  'East Africa — Highland Savanna': {
+    meta: { preset_name: 'East Africa Highland', region_id: 'east_africa_highland', version: '1.0.0',
+      author: 'Template', notes: 'Kenya / Tanzania highlands. Savanna biome. Two fire seasons: Jul–Sep and Jan–Feb. Low alpha baseline.',
+      bbox: [33, 42, -5, 5] },
+    classification: { Rain_effective_mm: 3, Tmax_class2: 33, Tmax_class3: 38, HDW_eff_class2: 65, HDW_eff_class3: 130, RH_dry: 55, RH_very_dry: 35 },
+    night: { T_night_warm: 20, T_night_tropical: 23, T_night_severe: 26, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 5, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.70,0.68,0.60,0.50,0.45,0.55,0.70,0.75,0.68,0.58,0.50,0.62] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.70, w_gust_weight: 0.30 },
+    hdw_eff_params: { k_base: 10, k_mid: 20, k_high: 30, delta_rel_threshold: 0.22 },
+    foehn_winds: { enabled: false, delta_alpha_per_score_unit: 0.005, winds: [] },
+    vegetation: { days_to_severe_stress: 10, RH_wilt: 38, VPD_stress: 2.0 }
+  }
+};
+
+// ─── ZONE MANAGER CORE ────────────────────────────────────────────────────────
+
+function _zmDefaultSoglie() {
+  return JSON.parse(JSON.stringify(config.soglie));
+}
+
+function _zmDefaultConfig() {
+  return JSON.parse(JSON.stringify({
+    meta: { preset_name: 'Nuova Zona', region_id: 'new_zone', version: '1.0.0',
+      created: new Date().toISOString().slice(0,10), author: '', notes: '', bbox: [null,null,null,null] },
+    vegetation: { days_to_severe_stress: 8, RH_wilt: 38, VPD_stress: 2.0 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 60, RH_very_dry: 40 },
+    night: { T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
+    alpha: { alpha_max_global: 0.95, alpha_ref: [0.45,0.45,0.50,0.55,0.65,0.75,0.85,0.88,0.80,0.65,0.52,0.45] },
+    washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
+    wind: { w_mean_weight: 0.7, w_gust_weight: 0.3 },
+    hdw_eff_params: { k_base: 10, k_mid: 20, k_high: 30, delta_rel_threshold: 0.20 },
+    foehn_winds: { enabled: false, delta_alpha_per_score_unit: 0.005, winds: [] },
+    soglie: _zmDefaultSoglie()
+  }));
+}
+
+function _zmNormalize(raw) {
+  const def = _zmDefaultConfig();
+  const out = { ...def, ...raw };
+  const D_SOGLIE = { livelli:['verde','giallo','arancio','rosso','viola'], colori:['#4ade80','#facc15','#fb923c','#ef4444','#7c3aed'], etichette:['Basso','Moderato','Alto','Molto alto','Estremo'] };
+  ['hdwc','hdw_eff'].forEach(tab => {
+    const src = raw.soglie?.[tab];
+    if (src) {
+      out.soglie[tab] = { ...D_SOGLIE, ...out.soglie[tab], livelli: D_SOGLIE.livelli, colori: src.colori||D_SOGLIE.colori, etichette: src.etichette||D_SOGLIE.etichette };
+      if (src.mensile) out.soglie[tab].mensile = src.mensile;
+      if (src.hdwc_peak) out.soglie[tab].hdwc_peak = src.hdwc_peak;
+    }
+  });
+  out.meta = { ...def.meta, ...(raw.meta||{}) };
+  out.meta.notes = out.meta.notes ?? '';
+  out.meta.created = out.meta.created || new Date().toISOString().slice(0,10);
+  out.meta.bbox = Array.isArray(raw.meta?.bbox) && raw.meta.bbox.length===4 ? raw.meta.bbox : [null,null,null,null];
+  out.night = { ...def.night, ...(raw.night||{}) };
+  out.night.night_window_start = out.night.night_window_start || '20:00';
+  out.night.night_window_end = out.night.night_window_end || '08:00';
+  out.hdw_eff_params = { ...def.hdw_eff_params, ...(raw.hdw_eff_params||{}) };
+  if (raw.foehn_winds) {
+    out.foehn_winds = {
+      enabled: raw.foehn_winds.enabled ?? false,
+      delta_alpha_per_score_unit: raw.foehn_winds.delta_alpha_per_score_unit ?? 0.005,
+      winds: Array.isArray(raw.foehn_winds.winds) ? raw.foehn_winds.winds.map(w=>({
+        label:w.label||'', from:w.from||'N', to:w.to||'N',
+        score:typeof w.score==='number'?w.score:2,
+        min_speed_kmh:typeof w.min_speed_kmh==='number'?w.min_speed_kmh:30
+      })) : []
+    };
+  }
+  return out;
+}
+
+function zmParsePkg(json) {
+  if (Array.isArray(json)) return json.map(_zmNormalize);
+  if (typeof json === 'object' && json !== null) {
+    const vals = Object.values(json);
+    if (vals.length > 0 && vals[0] && vals[0].meta) return vals.map(_zmNormalize);
+    if (json.meta) return [_zmNormalize(json)]; // Mode C single
+  }
+  return [];
+}
+
+function zmValidate(z) {
+  const errs = [];
+  const a = z.alpha?.alpha_ref || [];
+  for (let i=0;i<11;i++) {
+    const d = Math.abs((a[i+1]||0)-(a[i]||0));
+    if (d > 0.151) errs.push(`α Δ${d.toFixed(2)} ${MONTHS[i]}→${MONTHS[i+1]}`);
+  }
+  ['hdw_eff','hdwc'].forEach(tab => {
+    (z.soglie?.[tab]?.mensile||[]).forEach((row,m) => {
+      for (let i=0;i<row.length-1;i++) if (row[i]>=row[i+1]) errs.push(`${tab} ${MONTHS[m]}: col${i+1}≥col${i+2}`);
+    });
+  });
+  const bb = z.meta?.bbox;
+  if (bb && Array.isArray(bb) && bb.some(v=>v!=null)) {
+    if (bb.some(v=>v==null||isNaN(v))) errs.push('bbox: valori mancanti');
+    else {
+      if (bb[0]>=bb[1]) errs.push('bbox: lonMin≥lonMax');
+      if (bb[2]>=bb[3]) errs.push('bbox: latMin≥latMax');
+    }
+  }
+  return errs;
+}
+
+function zmSaveCurrentToSlot() {
+  if (zmSelIdx >= 0 && zmSelIdx < zmPkg.length) {
+    zmPkg[zmSelIdx] = JSON.parse(JSON.stringify(_configForExport()));
+    zmValidationCache[zmSelIdx] = zmValidate(zmPkg[zmSelIdx]);
+  }
+}
+
+function zmLoadZone(idx) {
+  zmSaveCurrentToSlot();
+  zmSelIdx = idx;
+  const z = zmPkg[idx];
+  // Apply into editor config (same as import handler)
+  config = JSON.parse(JSON.stringify(z));
+  const D_SOGLIE = { livelli:['verde','giallo','arancio','rosso','viola'], colori:['#4ade80','#facc15','#fb923c','#ef4444','#7c3aed'], etichette:['Basso','Moderato','Alto','Molto alto','Estremo'] };
+  ['hdwc','hdw_eff'].forEach(tab => {
+    if (!config.soglie) config.soglie = {};
+    if (!config.soglie[tab]) config.soglie[tab] = JSON.parse(JSON.stringify(config.soglie[tab]||{}));
+    config.soglie[tab] = { ...D_SOGLIE, ...config.soglie[tab], livelli: D_SOGLIE.livelli };
+  });
+  config.meta.notes = config.meta.notes ?? '';
+  config.meta.created = config.meta.created || new Date().toISOString().slice(0,10);
+  config.meta.bbox = Array.isArray(z.meta?.bbox) && z.meta.bbox.length===4 ? z.meta.bbox : [null,null,null,null];
+  config.night.night_window_start = config.night.night_window_start || '20:00';
+  config.night.night_window_end = config.night.night_window_end || '08:00';
+  config.hdw_eff_params = { k_base:10, k_mid:20, k_high:30, delta_rel_threshold:0.20, ...(z.hdw_eff_params||{}) };
+  if (!config.foehn_winds) config.foehn_winds = { enabled:false, delta_alpha_per_score_unit:0.005, winds:[] };
+  // Navigate to meta section in editor
+  activeSection = 'meta';
+  document.getElementById('content-inner').classList.remove('zm-wide');
+  document.querySelectorAll('.nav-item[data-section]').forEach(b => {
+    b.classList.toggle('active', b.dataset.section==='meta');
+  });
+  refresh();
+}
+
+function zmAddEmpty() {
+  zmSaveCurrentToSlot();
+  const z = _zmDefaultConfig();
+  z.meta.preset_name = 'Nuova Zona ' + (zmPkg.length + 1);
+  z.meta.region_id = 'new_zone_' + (zmPkg.length + 1);
+  zmPkg.push(z);
+  zmValidationCache[zmPkg.length-1] = zmValidate(z);
+  zmLoadZone(zmPkg.length - 1);
+}
+
+function zmCloneZone(idx) {
+  zmSaveCurrentToSlot();
+  const clone = JSON.parse(JSON.stringify(zmPkg[idx]));
+  clone.meta.preset_name = clone.meta.preset_name + ' (copia)';
+  clone.meta.region_id = clone.meta.region_id + '_copy';
+  zmPkg.splice(idx+1, 0, clone);
+  zmValidationCache = {};
+  zmPkg.forEach((z,i) => { zmValidationCache[i] = zmValidate(z); });
+  if (zmSelIdx > idx) zmSelIdx++;
+  _refreshZmSection();
+}
+
+function zmDeleteZone(idx) {
+  if (!confirm('Eliminare la zona "' + (zmPkg[idx]?.meta?.preset_name||'?') + '"?')) return;
+  zmPkg.splice(idx, 1);
+  zmValidationCache = {};
+  zmPkg.forEach((z,i) => { zmValidationCache[i] = zmValidate(z); });
+  if (zmSelIdx === idx) zmSelIdx = zmPkg.length > 0 ? Math.max(0, idx-1) : -1;
+  else if (zmSelIdx > idx) zmSelIdx--;
+  _refreshZmSection();
+}
+
+function zmMoveZone(idx, dir) {
+  zmSaveCurrentToSlot();
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= zmPkg.length) return;
+  [zmPkg[idx], zmPkg[newIdx]] = [zmPkg[newIdx], zmPkg[idx]];
+  if (zmSelIdx === idx) zmSelIdx = newIdx;
+  else if (zmSelIdx === newIdx) zmSelIdx = idx;
+  _refreshZmSection();
+}
+
+function zmRenameField(idx, field, value) {
+  zmPkg[idx].meta[field] = value;
+  if (zmSelIdx === idx) config.meta[field] = value;
+}
+
+function zmFromTemplate(name) {
+  if (!name) return;
+  const tpl = ZM_TEMPLATES[name];
+  if (!tpl) return;
+  zmSaveCurrentToSlot();
+  const z = _zmNormalize(tpl);
+  zmPkg.push(z);
+  zmValidationCache[zmPkg.length-1] = zmValidate(z);
+  zmLoadZone(zmPkg.length - 1);
+}
+
+function zmExportPkg() {
+  zmSaveCurrentToSlot();
+  const errsAll = zmPkg.flatMap((z,i) => {
+    const e = zmValidate(z);
+    return e.map(msg => `Zona ${i+1} (${z.meta?.preset_name||'?'}): ${msg}`);
+  });
+  if (errsAll.length > 0) {
+    if (!confirm('Validazione: ' + errsAll.length + ' avvisi.\n\n' + errsAll.slice(0,5).join('\n') + '\n\nEsportare comunque?')) return;
+  }
+  const blob = new Blob([JSON.stringify(zmPkg, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = 'hdwc_package_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function zmExportZone(idx) {
+  zmSaveCurrentToSlot();
+  const z = zmPkg[idx];
+  const errs = zmValidate(z);
+  if (errs.length > 0) {
+    if (!confirm('Validazione: ' + errs.join('; ') + '\n\nEsportare comunque?')) return;
+  }
+  const blob = new Blob([JSON.stringify(z, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = 'hdwc_preset_' + (z.meta?.region_id||'zone') + '.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ─── ZONE MANAGER RENDER ─────────────────────────────────────────────────────
+
+function _refreshZmSection() {
+  activeSection = 'zonemgr';
+  document.querySelectorAll('.nav-item[data-section]').forEach(b => {
+    b.classList.toggle('active', b.dataset.section==='zonemgr');
+  });
+  document.getElementById('content-inner').classList.add('zm-wide');
+  document.getElementById('content-inner').innerHTML =
+    `<div class="section-label">📦 ZONE MANAGER</div>${sectionZoneMgr()}`;
+  if (zmSubTab === 'map') {
+    setTimeout(zmInitMap, 80);
+  }
+}
+
+function sectionZoneMgr() {
+  const tplOpts = ['<option value="">+ da template geografico…</option>',
+    ...Object.keys(ZM_TEMPLATES).map(k => `<option value="${k.replace(/"/g,'&quot;')}">${k}</option>`)
+  ].join('');
+
+  const listHTML = _zmRenderList();
+
+  const selName = zmSelIdx >= 0 ? (zmPkg[zmSelIdx]?.meta?.preset_name || 'zona selezionata') : null;
+  const hasBbox = zmSelIdx >= 0 && zmPkg[zmSelIdx]?.meta?.bbox?.every(v => v != null && !isNaN(v));
+  const drawPanel = zmSelIdx < 0
+    ? `<div class="zm-draw-hint warn">Carica una zona nell'editor per abilitare il disegno della bbox.</div>`
+    : `<div id="zm-draw-hint" class="zm-draw-hint${hasBbox ? '' : ' warn'}">
+        ${hasBbox
+          ? `Zona selezionata: <b>${selName}</b> — bbox esistente. Ridisegna per sovrascriverla.`
+          : `Zona selezionata: <b>${selName}</b> — <b>nessuna bbox definita</b>. Usa il pulsante per disegnarla.`
+        }
+       </div>
+       <div style="margin-bottom:8px">
+         <button id="zm-draw-btn" class="zm-draw-btn" onclick="zmEnableDraw()">✏ Disegna bbox</button>
+         <span style="font-size:12px;color:#777;margin-left:10px">Click e trascina sulla mappa per definire il rettangolo</span>
+       </div>`;
+
+  const mapHTML = `
+    <div class="zm-map-hint">
+      Ogni zona con bbox valida è visualizzata come rettangolo colorato.
+      Click sul rettangolo → carica nell'editor. Corner handles trascinabili → aggiornano la bbox live.
+    </div>
+    ${drawPanel}
+    <div id="zm-map"></div>`;
+
+  return `
+    <div class="zm-toolbar">
+      <span class="zm-pkg-count">${zmPkg.length} zona${zmPkg.length!==1?'e':''} nel pacchetto</span>
+      <select class="zm-tpl-select" onchange="zmFromTemplate(this.value);this.value=''" title="Crea nuova zona da template climatico precompilato">
+        ${tplOpts}
+      </select>
+    </div>
+    <div class="zm-subtabs">
+      <button class="zm-subtab${zmSubTab==='list'?' active':''}" onclick="zmSubTab='list';_refreshZmSection()">▤ LISTA ZONE</button>
+      <button class="zm-subtab${zmSubTab==='map'?' active':''}" onclick="zmSubTab='map';_refreshZmSection()">🗺 MAPPA BBOX</button>
+    </div>
+    ${zmSubTab==='list' ? listHTML : mapHTML}
+    <div class="zm-export-row">
+      <button class="btn btn-ghost" onclick="zmAddEmpty()">+ Aggiungi vuota</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('zm-add-file').click()" title="Selezione multipla supportata">📂 Aggiungi da file…</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('zm-pkg-file').click()">📦 Carica pacchetto</button>
+      <button class="btn btn-primary" onclick="zmExportPkg()" ${zmPkg.length===0?'disabled':''}>💾 Esporta pacchetto</button>
+    </div>`;
+}
+
+function _zmBboxStr(bb) {
+  if (!bb || !Array.isArray(bb) || bb.every(v=>v==null)) return '—';
+  return '[' + bb.map(v=>v!=null?v:'?').join(',') + ']';
+}
+
+function _zmRenderList() {
+  if (zmPkg.length === 0) {
+    return `<div class="zm-empty">
+      Nessuna zona caricata.<br>
+      Carica un pacchetto con <b>📦 Carica pacchetto</b> oppure aggiungi zone vuote o da template.
+    </div>`;
+  }
+
+  const rows = zmPkg.map((z, i) => {
+    const errs = zmValidationCache[i] || (zmValidationCache[i] = zmValidate(z));
+    const isValid = errs.length === 0;
+    const isSel = i === zmSelIdx;
+    const validBadge = isValid
+      ? `<span class="zm-valid-ok" title="Valido">✓</span>`
+      : `<span class="zm-valid-warn" title="${errs.join('&#10;')}"title="⚠ ${errs.length} err">⚠${errs.length}</span>`;
+    const name = z.meta?.preset_name || '—';
+    const rid = z.meta?.region_id || '—';
+    const bb = _zmBboxStr(z.meta?.bbox);
+    return `<div class="zm-zone-row${isSel?' selected':''}" id="zmrow-${i}">
+      <div class="zm-zone-cell">
+        <input class="zm-inline-edit" value="${name.replace(/"/g,'&quot;')}" title="Rinomina preset_name"
+          oninput="zmRenameField(${i},'preset_name',this.value)"
+          onclick="event.stopPropagation()">
+      </div>
+      <div class="zm-zone-cell">
+        <input class="zm-inline-edit zm-zone-id" value="${rid.replace(/"/g,'&quot;')}" title="Rinomina region_id"
+          oninput="zmRenameField(${i},'region_id',this.value)"
+          onclick="event.stopPropagation()">
+      </div>
+      <div class="zm-zone-cell zm-zone-bbox" title="${bb}">${bb}</div>
+      <div class="zm-zone-cell" style="text-align:center">${validBadge}</div>
+      <div class="zm-ops">
+        <button class="zm-op-btn" title="Carica nell'editor" onclick="zmLoadZone(${i})">✎</button>
+        <button class="zm-op-btn" title="Clona" onclick="zmCloneZone(${i})">⎘</button>
+        <button class="zm-op-btn" title="Esporta zona" onclick="zmExportZone(${i})">↓</button>
+        <button class="zm-op-btn" title="Su" onclick="zmMoveZone(${i},-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="zm-op-btn" title="Giù" onclick="zmMoveZone(${i},1)" ${i===zmPkg.length-1?'disabled':''}>↓</button>
+        <button class="zm-op-btn danger" title="Elimina" onclick="zmDeleteZone(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const totalErrs = zmPkg.reduce((n,_,i) => n + (zmValidationCache[i]?.length||0), 0);
+  const errBlock = totalErrs > 0
+    ? `<div class="zm-err-list">⚠ ${totalErrs} avviso${totalErrs!==1?'i':''} di validazione nel pacchetto.
+       Esportare comunque è possibile, il sistema chiederà conferma.</div>` : '';
+
+  return errBlock + `
+    <div class="zm-zone-list">
+      <div class="zm-zone-row zm-header">
+        <div class="zm-zone-cell">Preset name</div>
+        <div class="zm-zone-cell">Region ID</div>
+        <div class="zm-zone-cell">Bbox</div>
+        <div class="zm-zone-cell" style="text-align:center">Val.</div>
+        <div class="zm-zone-cell">Azioni</div>
+      </div>
+      ${rows}
+    </div>`;
+}
+
+// ─── LEAFLET MAP ──────────────────────────────────────────────────────────────
+
+const ZM_COLORS = ['#E05A1E','#3b82f6','#16a34a','#7c3aed','#dc2626','#0891b2','#d97706','#be185d',
+  '#65a30d','#6366f1','#0d9488','#9333ea','#ea580c'];
+
+function zmInitMap() {
+  const el = document.getElementById('zm-map');
+  if (!el) return;
+  if (!window.L) { el.innerHTML = '<div style="padding:20px;color:#999">Leaflet non disponibile.</div>'; return; }
+
+  if (zmLeafletMap) { zmLeafletMap.remove(); zmLeafletMap = null; }
+  zmLeafletLayers = { rects: [], corners: [] };
+
+  zmLeafletMap = L.map('zm-map', { zoomControl: true, attributionControl: false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18, subdomains: 'abcd'
+  }).addTo(zmLeafletMap);
+
+  const bounds = [];
+
+  zmPkg.forEach((z, idx) => {
+    const bb = z.meta?.bbox;
+    if (!bb || !Array.isArray(bb) || bb.length!==4 || bb.some(v=>v==null||isNaN(v))) return;
+    const [lonMin, lonMax, latMin, latMax] = bb;
+    if (lonMin>=lonMax || latMin>=latMax) return;
+
+    const color = ZM_COLORS[idx % ZM_COLORS.length];
+    const leafletBounds = [[latMin, lonMin],[latMax, lonMax]];
+
+    const rect = L.rectangle(leafletBounds, {
+      color: color, weight: 2, fillColor: color, fillOpacity: zmSelIdx===idx ? 0.25 : 0.12
+    }).addTo(zmLeafletMap);
+
+    const label = L.divIcon({
+      html: `<div style="background:${color};color:#fff;padding:2px 6px;border-radius:3px;font-family:'DM Mono',monospace;font-size:11px;white-space:nowrap;opacity:0.9">${z.meta?.preset_name||idx+1}</div>`,
+      className: '', iconAnchor: [0,0]
+    });
+    L.marker([(latMin+latMax)/2, (lonMin+lonMax)/2], { icon: label, interactive: false }).addTo(zmLeafletMap);
+
+    rect.on('click', () => zmLoadZone(idx));
+    rect.bindTooltip(`<b>${z.meta?.preset_name||'?'}</b><br>${z.meta?.region_id||''}<br>bbox: ${_zmBboxStr(bb)}`, { sticky: true });
+
+    bounds.push(leafletBounds);
+
+    // Corner handles
+    const corners = [
+      { lat: latMin, lng: lonMin, corners: [2, 0] },
+      { lat: latMin, lng: lonMax, corners: [2, 1] },
+      { lat: latMax, lng: lonMin, corners: [3, 0] },
+      { lat: latMax, lng: lonMax, corners: [3, 1] }
+    ];
+
+    corners.forEach(({ lat, lng, corners: [latIdx, lonIdx] }) => {
+      const cIcon = L.divIcon({
+        html: `<div style="width:10px;height:10px;background:${color};border:2px solid #fff;border-radius:2px;cursor:crosshair"></div>`,
+        className: '', iconSize: [10,10], iconAnchor: [5,5]
+      });
+      const m = L.marker([lat, lng], { icon: cIcon, draggable: true }).addTo(zmLeafletMap);
+      m.on('drag', function(e) {
+        const { lat: nlat, lng: nlng } = e.target.getLatLng();
+        zmPkg[idx].meta.bbox[latIdx] = parseFloat(nlat.toFixed(4));
+        zmPkg[idx].meta.bbox[lonIdx] = parseFloat(nlng.toFixed(4));
+        if (zmSelIdx === idx) config.meta.bbox[latIdx] = zmPkg[idx].meta.bbox[latIdx];
+        if (zmSelIdx === idx) config.meta.bbox[lonIdx] = zmPkg[idx].meta.bbox[lonIdx];
+        const bb2 = zmPkg[idx].meta.bbox;
+        rect.setBounds([[bb2[2],bb2[0]],[bb2[3],bb2[1]]]);
+      });
+      m.on('dragend', () => {
+        zmValidationCache[idx] = zmValidate(zmPkg[idx]);
+      });
+      zmLeafletLayers.corners.push(m);
+    });
+    zmLeafletLayers.rects.push(rect);
+  });
+
+  if (bounds.length > 0) {
+    const allBounds = bounds.reduce((acc, b) => acc ? acc.extend(b) : L.latLngBounds(b), null);
+    if (allBounds && allBounds.isValid()) zmLeafletMap.fitBounds(allBounds, { padding: [30,30] });
+  } else {
+    zmLeafletMap.setView([20, 10], 2);
+  }
+}
+
+// ─── PACKAGE FILE INPUT ───────────────────────────────────────────────────────
+
+
+
+// ── FIX: MULTI-FILE ADD ZONES ─────────────────────────────────────────────────
+
+// ── ZONA EDIT BANNER ACTIONS ──────────────────────────────────────────────────
+function zmSaveSlot() {
+  zmSaveCurrentToSlot();
+  // Visual feedback on button
+  const btn = document.getElementById('zm-banner-save');
+  if (btn) {
+    btn.textContent = '✓ Salvata';
+    btn.classList.add('saved');
+    setTimeout(() => {
+      btn.textContent = '💾 Salva nel pacchetto';
+      btn.classList.remove('saved');
+    }, 1800);
+  }
+}
+
+function zmSaveAndBack() {
+  zmSaveCurrentToSlot();
+  activeSection = 'zonemgr';
+  zmSubTab = 'list';
+  document.querySelectorAll('.nav-item[data-section]').forEach(b =>
+    b.classList.toggle('active', b.dataset.section === 'zonemgr'));
+  // Remove banner
+  document.getElementById('zm-edit-banner')?.remove();
+  document.getElementById('content-inner').classList.add('zm-wide');
+  document.getElementById('content-inner').innerHTML =
+    `<div class="section-label">📦 ZONE MANAGER</div>${sectionZoneMgr()}`;
+}
+
+document.getElementById('zm-add-file').addEventListener('change', e => {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  let loaded = 0, added = 0;
+  const errors = [];
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      loaded++;
+      try {
+        const zones = zmParsePkg(JSON.parse(ev.target.result));
+        if (!zones.length) { errors.push(file.name + ': nessuna zona riconosciuta'); }
+        else { zones.forEach(z => { zmPkg.push(z); zmValidationCache[zmPkg.length-1] = zmValidate(z); }); added += zones.length; }
+      } catch(err) { errors.push(file.name + ': ' + err.message); }
+      if (loaded === files.length) {
+        if (errors.length) alert('Avvisi:\n' + errors.join('\n'));
+        if (added > 0) {
+          activeSection = 'zonemgr'; zmSubTab = 'list';
+          document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.toggle('active', b.dataset.section==='zonemgr'));
+          document.getElementById('content-inner').classList.add('zm-wide');
+          document.getElementById('content-inner').innerHTML = `<div class="section-label">📦 ZONE MANAGER</div>${sectionZoneMgr()}`;
+        }
+      }
+    };
+    reader.readAsText(file);
+  });
+  e.target.value = '';
+});
+
+// ── FIX: BBOX DRAW TOOL ───────────────────────────────────────────────────────
+let zmDrawMode = false;
+let zmDrawStart = null;
+let zmDrawRect = null;
+
+function zmEnableDraw() {
+  if (!zmLeafletMap) return;
+  zmDrawMode = true; zmDrawStart = null;
+  if (zmDrawRect) { zmLeafletMap.removeLayer(zmDrawRect); zmDrawRect = null; }
+  document.getElementById('zm-map')?.classList.add('draw-mode');
+  zmLeafletMap.dragging.disable(); zmLeafletMap.boxZoom.disable();
+  const btn = document.getElementById('zm-draw-btn');
+  if (btn) { btn.textContent = '✕ Annulla'; btn.classList.add('active'); }
+  zmLeafletMap.on('mousedown', _zmDrawDown);
+}
+
+function zmDisableDraw() {
+  zmDrawMode = false; zmDrawStart = null;
+  if (zmDrawRect) { zmLeafletMap.removeLayer(zmDrawRect); zmDrawRect = null; }
+  document.getElementById('zm-map')?.classList.remove('draw-mode');
+  if (zmLeafletMap) {
+    zmLeafletMap.dragging.enable(); zmLeafletMap.boxZoom.enable();
+    zmLeafletMap.off('mousedown', _zmDrawDown);
+    zmLeafletMap.off('mousemove', _zmDrawMove);
+    zmLeafletMap.off('mouseup', _zmDrawUp);
+  }
+  const btn = document.getElementById('zm-draw-btn');
+  if (btn) { btn.textContent = '✏ Disegna bbox'; btn.classList.remove('active'); }
+}
+
+function _zmDrawDown(e) {
+  if (!zmDrawMode) return;
+  zmDrawStart = e.latlng;
+  zmLeafletMap.on('mousemove', _zmDrawMove);
+  zmLeafletMap.on('mouseup', _zmDrawUp);
+}
+
+function _zmDrawMove(e) {
+  if (!zmDrawStart) return;
+  const b = L.latLngBounds(zmDrawStart, e.latlng);
+  zmDrawRect ? zmDrawRect.setBounds(b) : (zmDrawRect = L.rectangle(b, { color:'#E05A1E', weight:2, fillOpacity:0.15, dashArray:'6 4' }).addTo(zmLeafletMap));
+}
+
+function _zmDrawUp(e) {
+  zmLeafletMap.off('mousemove', _zmDrawMove);
+  zmLeafletMap.off('mouseup', _zmDrawUp);
+  if (!zmDrawStart || zmSelIdx < 0) { zmDisableDraw(); return; }
+  const b = L.latLngBounds(zmDrawStart, e.latlng);
+  if (Math.abs(b.getWest()-b.getEast()) < 0.01 || Math.abs(b.getSouth()-b.getNorth()) < 0.01) { zmDisableDraw(); return; }
+  const bbox = [+b.getWest().toFixed(3), +b.getEast().toFixed(3), +b.getSouth().toFixed(3), +b.getNorth().toFixed(3)];
+  zmPkg[zmSelIdx].meta.bbox = bbox;
+  config.meta.bbox = [...bbox];
+  zmValidationCache[zmSelIdx] = zmValidate(zmPkg[zmSelIdx]);
+  zmDisableDraw();
+  const hint = document.getElementById('zm-draw-hint');
+  if (hint) { hint.className = 'zm-draw-hint'; hint.textContent = '✓ Bbox salvata: [' + bbox.join(', ') + ']'; }
+  setTimeout(zmInitMap, 60);
+}
+
+document.getElementById('zm-pkg-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      const zones = zmParsePkg(parsed);
+      if (zones.length === 0) { alert('Nessuna zona riconosciuta nel file.\nFormati supportati: array [...], oggetto {"1":{...},...}, config singolo.'); return; }
+      zmPkg = zones;
+      zmSelIdx = -1;
+      zmValidationCache = {};
+      zmPkg.forEach((z,i) => { zmValidationCache[i] = zmValidate(z); });
+      // Switch to zone manager tab
+      activeSection = 'zonemgr';
+      zmSubTab = 'list';
+      document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.toggle('active', b.dataset.section==='zonemgr'));
+      document.getElementById('content-inner').classList.add('zm-wide');
+      document.getElementById('content-inner').innerHTML = `<div class="section-label">📦 ZONE MANAGER</div>${sectionZoneMgr()}`;
+    } catch(err) {
+      alert('JSON non valido:\n' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+
+// ─── PARAM DOC ────────────────────────────────────────────────────────────────
+const PARAM_DOC = {
+
+  // ── META ─────────────────────────────────────────────────────────────────────
+  'meta.bbox': {
+    title: 'Bounding Box — rilevamento engine automatico',
+    short: 'Definisce il rettangolo geografico della regione. Usato dal batch tool per assegnare automaticamente questo engine ai punti che cadono dentro la bbox. Formato: [lonMin, lonMax, latMin, latMax].',
+    formula: 'Formato array: [lonMin, lonMax, latMin, latMax]\n\nLongitudini: negative = Ovest (W), positive = Est (E)\nLatitudini:  negative = Sud (S), positive = Nord (N)\n\nRilevamento in batch:\n  se lon ∈ [lonMin, lonMax]\n  AND lat ∈ [latMin, latMax]\n  → usa questo engine',
+    example: 'Portogallo:  [-10, -5,  36, 43]\nSardegna:    [  8, 10,  38.5, 41.5]\nCalifornia:  [-125, -114, 32, 43]\nCile:        [-75, -65, -56, -17]\n\nSe bbox assente o null: il batch usa\nle bbox hardcoded o rileva dai punti.',
+    range: 'lonMin/lonMax: -180 → +180\nlatMin/latMax:  -90 →  +90\nAssicurarsi che lonMin < lonMax e latMin < latMax',
+    affects: 'batch tool — engine detection automatica per coordinate'
+  },
+
+  // ── CLASSIFICAZIONE ──────────────────────────────────────────────────────────
+  'classification.Rain_effective_mm': {
+    title: 'Pioggia Efficace',
+    short: 'Soglia minima giornaliera per classificare il giorno come class 0 (disagravamento). Sotto questa soglia la pioggia viene ignorata.',
+    formula: 'if rain_day ≥ Rain_eff → day_class = 0 (sovrascrive tutto)\nif rain_day < Rain_eff → pioggia ignorata',
+    example: '2 mm: piogge < 2mm (rugiada, nebbia) non resetano\n10 mm: solo piogge moderate contano\n→ alzare = motore più insensibile alle precipitazioni leggere',
+    range: '1–5 mm  |  default: 2 mm (PT, GR, CA)',
+    affects: 'classifyDay_v2 · dry_streak_aggr · calcAlpha_v2'
+  },
+  'classification.Tmax_class2': {
+    title: 'Tmax → Class 2',
+    short: 'Soglia termica per classificare un giorno come aggravante (class 2). In strict mode (streak): AND con HDW_eff_class2.',
+    formula: 'strict:  class2 = (Tmax ≥ Tmax_c2 AND HDW ≥ HDW_c2)\ndisplay: class2 = (Tmax ≥ Tmax_c2) OR (HDW ≥ HDW_c2) OR ns≥1',
+    example: 'T=31°C, soglia=30 → contribuisce a class 2\nT=29°C, soglia=30 → fattore T non attivo',
+    range: '25–38°C  |  PT: 30°C · GR: 32°C · CA: 35°C',
+    affects: 'classifyDay_v2 · _fclassBonus'
+  },
+  'classification.Tmax_class3': {
+    title: 'Tmax → Class 3',
+    short: 'Soglia termica per class 3 (aggravamento forte). In strict mode: AND con HDW_eff_class3.',
+    formula: 'strict:  class3 = (Tmax ≥ Tmax_c3 AND HDW ≥ HDW_c3)\ndisplay: class3 = (Tmax ≥ Tmax_c3) OR (HDW ≥ HDW_c3)\n         OR (ns≥2 AND (Tmax≥Tmax_c2 OR HDW≥HDW_c2))',
+    example: 'T=36°C, soglia=35 → contribuisce a class 3\nT=33°C, soglia=35 → solo fattore T non attiva class 3',
+    range: '30–45°C  |  PT: 35°C · CA: 40°C',
+    affects: 'classifyDay_v2 · _fclassBonus (k_high attivo)'
+  },
+  'classification.HDW_eff_class2': {
+    title: 'HDW_eff → Class 2',
+    short: 'Soglia di HDW_eff giornaliero per class 2. È anche la soglia di attivazione del bonus _fclassBonus.',
+    formula: 'W_eff = (w_mean·Wind + w_gust·Gust) / 3.6\nVPD = es(T)·(1-RH/100)  [hPa]\nHDW_eff_h = VPD_h · W_eff_h\nHDW_eff_day = max(HDW_eff_h in 10:00-17:00)',
+    example: 'T=32°C, RH=35%, Wind=20km/h, Gust=35km/h\n→ VPD≈19.8 hPa, W_eff≈6.3 m/s → HDW≈125\nSoglia=60 → giorno di class 2',
+    range: '40–200  |  PT: 60 · GR: 70 · CA: 150',
+    affects: 'classifyDay_v2 · _fclassBonus · streak accumulation'
+  },
+  'classification.HDW_eff_class3': {
+    title: 'HDW_eff → Class 3',
+    short: 'Soglia HDW_eff per class 3. Determina anche quando k_high di _fclassBonus è pienamente attivo (Fc=1).',
+    formula: 'Fc = (HDW_eff - HDW_c2) / (HDW_c3 - HDW_c2)  ∈ [0,1]\nFc = 1 se HDW_eff ≥ HDW_c3',
+    example: 'HDW=130, c2=60, c3=120 → Fc=(130-60)/(120-60)=1.0\n→ _fclassBonus = k × 1.0 (massimo)',
+    range: '80–400  |  PT: 120 · GR: 150 · CA: 350',
+    affects: 'classifyDay_v2 · _fclassBonus (normalizzazione Fc)'
+  },
+  'classification.RH_dry': {
+    title: 'RH Secco — soglia diurna E notturna',
+    short: 'Parametro a doppio uso: (1) soglia RH diurna per classificazione giornaliera; (2) soglia RH notturna per il modulatore di secchezza del night score. Lo stesso valore governa entrambi i contesti.',
+    formula: 'USO DIURNO (classifyDay_v2):\n  contribuisce alla classificazione class 2/3\n  via RH_mean_day < RH_dry\n\nUSO NOTTURNO (calcNightScore_v2):\n  night_rh_dry = RH_dry\n  count_dry = count(RH_h ≤ RH_dry, 20:00-08:00)\n  se count_dry ≥ night_hours_min → ns + 1 (cap 3)\n\n  Percorso VPD proxy (fallback):\n  vpd_night_wet = es(20°C) × (1 - RH_dry/100)',
+    example: 'RH_dry=60:\n  Di giorno: RH < 60% contribuisce a class 2\n  Di notte:  ore con RH < 60% → ns +1\n\nRH_dry=40 (clima più arido):\n  La soglia è più severa → meno notti classificate secche',
+    range: '40–70%  |  PT: 60% · GR: 55% · CA: 40%\n⚠ Abbassare = meno notti secche classificate',
+    affects: 'classifyDay_v2 (diurno) · calcNightScore_v2 (notturno)\nATTENZIONE: modifica simultaneamente entrambi i percorsi'
+  },
+  'classification.RH_very_dry': {
+    title: 'RH Molto Secco — soglia diurna E notturna (ns=2)',
+    short: 'Parametro a doppio uso: (1) soglia RH diurna per condizioni molto secche; (2) soglia per il secondo breakpoint VPD del night score (ns≥2 nel percorso proxy). Deve essere < RH_dry.',
+    formula: 'USO DIURNO:\n  condizione di secchezza severa per class 3\n\nUSO NOTTURNO (percorso VPD proxy):\n  vpd_night_dry = es(20°C) × (1 - RH_very_dry/100)\n  se VPD_night ≥ vpd_night_dry → ns ≥ 2\n\n  RH_very_dry=40 → vpd_night_dry ≈ 14.0 hPa\n  RH_very_dry=30 → vpd_night_dry ≈ 16.4 hPa',
+    example: 'RH_very_dry=40:\n  Notti con VPD > 14 hPa → ns ≥ 2 (tropicale)\n\nRH_very_dry=30 (clima estremo):\n  Soglia più alta → meno notti ns=2',
+    range: '20–50%  |  deve essere strettamente < RH_dry\nDefault: 40% (PT, GR), 25% (CA)',
+    affects: 'classifyDay_v2 (severo diurno) · calcNightScore_v2 (vpd_night_dry)'
+  },
+
+  // ── NOTTI ─────────────────────────────────────────────────────────────────────
+  'night.T_night_warm': {
+    title: 'Notte Calda — Score 1',
+    short: 'Tmin soglia per assegnare night_score = 1 (notte calda). Con dati orari: numero di ore notturne con T ≥ questa soglia ≥ night_hours_min.',
+    formula: 'Percorso orario:\n  ns≥1 se count(T_h ≥ T_night_warm, 20-08) ≥ night_hours_min\nPercorso Tmin:\n  ns≥1 se Tmin ≥ T_night_warm',
+    example: 'Soglia=18°C: notte con Tmin=20°C → ns≥1\n→ delta_alpha_night[1] aggiunto a α',
+    range: '14–22°C  |  PT/GR: 18°C · CA (estate): 16°C',
+    affects: 'calcNightScore_v2 · calcAlpha_v2 · classifyDay_v2'
+  },
+  'night.T_night_tropical': {
+    title: 'Notte Tropicale — Score 2',
+    short: 'Tmin soglia per night_score = 2 (notte tropicale). Indica mancato recupero del sistema verso l\'alba.',
+    formula: 'ns≥2 se Tmin ≥ T_night_tropical\nOppure count(T_h ≥ T_night_tropical) ≥ night_hours_min',
+    example: 'Soglia=20°C: notte da 22°C alle 3:00 → ns=2\n→ contribuisce a class 2 in display mode anche senza HDW alto',
+    range: '16–26°C  |  PT/GR: 20°C · CA: 18°C',
+    affects: 'calcNightScore_v2 · classifyDay_v2 (OR class2) · calcAlpha_v2'
+  },
+  'night.T_night_severe': {
+    title: 'Notte Severa — Score 3',
+    short: 'Tmin soglia per night_score = 3 (notte severa). Situazione di zero recupero notturno: sistema cumulativo sempre carico.',
+    formula: 'ns=3 se Tmin ≥ T_night_severe\nOppure count(T_h ≥ T_night_severe) ≥ night_hours_min',
+    example: 'Soglia=25°C: notte sahariana → ns=3\n→ delta_alpha_night[3] = +0.015 su α',
+    range: '20–32°C  |  PT: 25°C · CA arida: 23°C',
+    affects: 'calcNightScore_v2 · calcAlpha_v2 (delta massimo)'
+  },
+  'night.night_hours_min': {
+    title: 'Ore Notturne Minime',
+    short: 'Numero minimo di ore notturne con T ≥ soglia per attivare il night score dal percorso orario (più preciso del solo Tmin).',
+    formula: 'Per ogni livello ns:\n  count(T_h ≥ T_night_X, window 20:00-08:00) ≥ night_hours_min',
+    example: 'night_hours_min=4: almeno 4h calde nella notte\n→ un picco termico notturno isolato non basta',
+    range: '2–6 ore  |  default: 4',
+    affects: 'calcNightScore_v2 (percorso orario)'
+  },
+
+  // ── STREAK / α ───────────────────────────────────────────────────────────────
+  'streak.streak_activation_days': {
+    title: 'Giorni Attivazione Streak — leva climatica primaria',
+    short: 'Numero di giorni consecutivi di class 2/3 prima che Δα_dry si attivi. È il principale parametro di adattamento climatico del modello: climi aridi rispondono subito, climi umidi hanno inerzia più lunga.',
+    formula: 'se streak_t < streak_activation_days → Δα_dry = 0\nse streak_t ≥ streak_activation_days → Δα_dry attivo\n\nDopo ogni reset (class 0 o 1) la streak riparte\nda zero e il contatore ricomincia da capo.\n\nSe Rain_effective_mm è calibrata correttamente,\nle piogge inefficaci non resettano la streak.',
+    example: 'CALIBRAZIONE PER CLIMA:\n\n  Desertico caldo (CA Sud, Cile Nord): 1–2 gg\n  → un solo giorno estremo ha effetto immediato\n\n  Mediterraneo secco (PT, GR, Sardegna): 3–4 gg\n  → vegetazione adattata, risposta rapida\n\n  Sub-mediterraneo (Toscana, Catalogna): 4–5 gg\n  → transizione, risposta intermedia\n\n  Continentale umido (Canada, N.Europa): 5–7 gg\n  → vegetazione non adattata, stress lento\n    ma poi devastante quando si instaura',
+    range: '1–7 giorni  |  default: 4 (mediterraneo)\n⚠ Valore alto + piogge leggere frequenti\n  → streak si resetta prima di attivarsi:\n  in quel caso abbassare Rain_effective_mm',
+    affects: 'calcAlpha_v2 (gate Δα_dry) — leva principale di adattamento regionale'
+  },
+  'streak.delta_alpha_dry_class2': {
+    title: 'Δα — Streak Class 2',
+    short: 'Incremento giornaliero di α per ogni giorno di class 2 con streak ≥ streak_activation_days. Accumulo lento per aggravamento moderato.',
+    formula: 'α_raw += delta_dry2  (se streak ≥ activation AND day_class=2)\nValore tipico: +0.005/giorno\nDopo 10 giorni: +0.05 su α_ref',
+    example: 'α_ref luglio=0.85, dopo 8gg class2 con activation=4:\n  Δα_dry cumulativo = 4 × 0.005 = +0.020\n  α ≈ 0.87 (prima del cap)',
+    range: '0.001–0.015  |  default: 0.005',
+    affects: 'calcAlpha_v2'
+  },
+  'streak.delta_alpha_dry_class3': {
+    title: 'Δα — Streak Class 3',
+    short: 'Incremento giornaliero di α per ogni giorno di class 3 (aggravamento forte) con streak attiva. Più aggressivo del class2.',
+    formula: 'α_raw += delta_dry3  (se streak ≥ activation AND day_class=3)\nBoost logaritmico long-streak:\n  da_long = delta_dry3 × ln(1+(streak-days_to_severe)) / 10',
+    example: 'alpha_ref=0.85, 5gg streak class3 (activation=4):\n  Δα_dry = 2 × 0.010 = +0.020\n  + long-streak boost se streak > days_to_severe',
+    range: '0.003–0.025  |  default: 0.010',
+    affects: 'calcAlpha_v2 · long-streak boost'
+  },
+  'streak.delta_alpha_relief': {
+    title: 'Δα — Disagravamento (Class 0)',
+    short: 'Decremento di α nei giorni di class 0 (pioggia efficace). Valore negativo. Il floor di α è sempre alphaRef del mese corrente (non scende sotto).',
+    formula: 'α_raw += delta_relief  (negativo, se day_class=0)\nFloor: α_t ≥ alphaRef(mese) per class>0\n       α_t ≥ 0 per class=0 (reset più profondo)',
+    example: 'α_relief=-0.010: dopo 5 giorni di pioggia\n  Δ cumulativo = -0.05 su α_ref\n  (ma clampato al floor mensile)',
+    range: '-0.05–0  |  default: -0.010',
+    affects: 'calcAlpha_v2 · beta washout'
+  },
+  'streak.delta_alpha_night_1': {
+    title: 'Δα Night Score 1 — Notte Calda',
+    short: 'Incremento di α per ogni giorno con night_score = 1 (Tmin ≥ T_night_warm). Aggiunto indipendentemente dalla streak secca.',
+    formula: 'α_raw += delta_alpha_night[1]  se night_score = 1\nSommato a Δα_dry, Δα_relief e Δα_foehn',
+    example: 'Δα_night[1]=0.005: notte calda in luglio\n→ α_ref=0.85 + 0.005 = 0.855 (prima degli altri delta)',
+    range: '0–0.015  |  default: 0.005',
+    affects: 'calcAlpha_v2'
+  },
+  'streak.delta_alpha_night_2': {
+    title: 'Δα Night Score 2 — Notte Tropicale',
+    short: 'Incremento di α per night_score = 2 (Tmin ≥ T_night_tropical). Segnala mancato recupero notturno significativo.',
+    formula: 'α_raw += delta_alpha_night[2]  se night_score = 2',
+    example: 'Δα_night[2]=0.010: notte tropicale in agosto\n→ sistema carico anche prima del mattino',
+    range: '0–0.020  |  default: 0.010',
+    affects: 'calcAlpha_v2'
+  },
+  'streak.delta_alpha_night_3': {
+    title: 'Δα Night Score 3 — Notte Severa',
+    short: 'Incremento massimo di α per night_score = 3. Condizione critica: nessun recupero notturno, sistema in accumulo continuo.',
+    formula: 'α_raw += delta_alpha_night[3]  se night_score = 3\nÈ il contributo notturno più alto consentito',
+    example: 'Δα_night[3]=0.015: notte sahariana in Agosto\n→ con streak e relief, α può avvicinarsi al cap 0.95',
+    range: '0–0.025  |  default: 0.015',
+    affects: 'calcAlpha_v2'
+  },
+
+  // ── ALPHA MENSILE ─────────────────────────────────────────────────────────────
+  'alpha.alpha_max_global': {
+    title: 'Alpha Max Globale',
+    short: 'Cap superiore assoluto per α in qualsiasi giorno e mese. Impedisce che la somma di alpha_ref + delta componenti superi questo limite.',
+    formula: 'α_t = clamp(α_raw, α_floor, alpha_max_global)',
+    example: 'α_max=0.95: sistema con memoria al 95%\n→ HDWC_t = HDW_eff + 0.95 × HDWC_prev\n(i.e. solo -5% di decadimento/giorno)',
+    range: '0.85–0.97  |  default: 0.95',
+    affects: 'calcAlpha_v2 (clamp finale)'
+  },
+  'alpha.alpha_ref': {
+    title: 'Alpha Ref Mensile',
+    short: 'Baseline mensile di α (12 valori, Gen-Dic). Rappresenta la memoria strutturale stagionale del sistema. È anche il floor dinamico di α per giorni non-relief.',
+    formula: 'α_t = clamp(α_raw, alphaRef(mese), alpha_max_global)\nα_raw = alphaRef + Δα_dry + Δα_night + Δα_relief + Δα_foehn\n\nVincolo: |α_ref[i+1] - α_ref[i]| ≤ 0.15',
+    example: 'PT: 0.45(gen) → 0.88(ago) → 0.45(dic)\nCA: 0.50(gen) → 0.92(set) → 0.50(dic)\n→ α_ref bassa = memoria breve (inverno)\n→ α_ref alta = memoria lunga (estate siccitosa)',
+    range: '0.20–0.92 per estate  |  0.15–0.55 per inverno\nSalti max tra mesi: 0.15',
+    affects: 'calcAlpha_v2 (floor e baseline)'
+  },
+
+  // ── WASHOUT ───────────────────────────────────────────────────────────────────
+  'washout.enabled': {
+    title: 'Washout Beta',
+    short: 'Se abilitato, applica un fattore β < 1 al termine cumulativo HDWC_prev in caso di pioggia intensa. Non tocca HDW_eff_day diretto.',
+    formula: 'HDWC_t = β_t × (HDW_eff_day + α_t × HDWC_{t-1})\nβ = 1.0 se rain < thresh[0]\nβ < 1 altrimenti (da tabella)\n\nβ applica washout a HDWC_{t-1}, non a HDW_eff',
+    example: '30mm in 1h: r_eff=90mm → β=0.65\n30mm in 12h: r_eff≈7.5mm → β=0.95\n→ pioggia intensa in poco tempo = washout più forte',
+    range: 'β ∈ [0.50, 0.99]  |  default: [0.95, 0.85, 0.75, 0.65]',
+    affects: 'calcBeta_v2 · calcHDWCum_v2'
+  },
+
+  // ── VENTO ─────────────────────────────────────────────────────────────────────
+  'wind.w_mean_weight': {
+    title: 'Peso Vento Medio',
+    short: 'Peso del vento medio orario nella composizione di W_eff. La somma con w_gust_weight deve essere 1.0.',
+    formula: 'W_eff = (w_mean×Wind_mean + w_gust×Gust_max) / 3.6\n[km/h → m/s]\n\nDefault: 0.7×mean + 0.3×gust',
+    example: 'Wind=20km/h, Gust=40km/h:\n  W_eff = (0.7×20 + 0.3×40) / 3.6 = 7.2 m/s\n\n  Solo mean (0.7 / 0.0 + raffica=0):\n  W_eff = (1.0×20) / 3.6 = 5.6 m/s',
+    range: '0.5–0.8  |  default: 0.7\nSomma w_mean + w_gust = 1.0',
+    affects: '_hdwEffFromHourly · calcHDW'
+  },
+  'wind.w_gust_weight': {
+    title: 'Peso Raffica',
+    short: 'Peso della raffica massima oraria nella composizione di W_eff. Aumentare questo valore rende il modello più sensibile ai picchi di vento.',
+    formula: 'W_eff = (w_mean×Wind + w_gust×Gust) / 3.6\nGust = max(Wind, Gust_raw)  [evita inversioni]',
+    example: 'w_gust=0.3: regime con raffiche moderate\nw_gust=0.5: regime con raffiche dominanti (Maestrale)\nw_gust=0.2: vento costante senza picchi significativi',
+    range: '0.2–0.5  |  default: 0.3\nSomma w_mean + w_gust = 1.0',
+    affects: '_hdwEffFromHourly · calcHDW'
+  },
+
+  // ── HDW_EFF PARAMS ────────────────────────────────────────────────────────────
+  'hdw_eff_params.k_base': {
+    title: 'k Base (Tmax < class2)',
+    short: 'Coefficiente di amplificazione _fclassBonus per giorni con Tmax sotto la soglia class2. Amplificazione minima.',
+    formula: 'Se HDW_eff < HDW_c2 → bonus = 0 (nessuna amplificazione)\nFc = (HDW_eff-HDW_c2)/(HDW_c3-HDW_c2)  ∈[0,1]\nHDW_out = HDW_eff + k_base × Fc  (se Tmax < Tmax_c2)',
+    example: 'HDW=80, c2=60, c3=120, Tmax=28°C (sotto c2=30)\nFc=(80-60)/(120-60)=0.33\nHDW_out = 80 + 10×0.33 = 83.3',
+    range: '0–25  |  default: 10',
+    affects: '_fclassBonus'
+  },
+  'hdw_eff_params.k_mid': {
+    title: 'k Mid (Tmax class2–class3)',
+    short: 'Coefficiente per i giorni con temperatura nella fascia intermedia (class2 ≤ Tmax < class3). Amplificazione moderata.',
+    formula: 'HDW_out = HDW_eff + k_mid × Fc\n(se Tmax_c2 ≤ Tmax < Tmax_c3)',
+    example: 'HDW=100, c2=60, c3=120, Tmax=32°C (fascia mid)\nFc=(100-60)/(120-60)=0.67\nHDW_out = 100 + 20×0.67 = 113.3',
+    range: '5–40  |  default: 20',
+    affects: '_fclassBonus'
+  },
+  'hdw_eff_params.k_high': {
+    title: 'k High (Tmax ≥ class3)',
+    short: 'Coefficiente massimo per i giorni con Tmax ≥ soglia class3. Governa i picchi estremi del modello.',
+    formula: 'HDW_out = HDW_eff + k_high × Fc\n(se Tmax ≥ Tmax_c3)\nFc = 1.0 se HDW ≥ HDW_c3\n\nSe Δrel > delta_rel_threshold:\n  Fc = Fc × (1 + Δrel)  [boost accelerazione]',
+    example: 'HDW=130, c2=60, c3=120, Tmax=38°C, k_high=36\nFc=1.0 → HDW_out = 130+36 = 166\n\nClima secco (CA): k_high=36 · climi umidi: 15-20',
+    range: '10–60  |  PT: 30 · CA: 36',
+    affects: '_fclassBonus (effetto massimo)'
+  },
+  'hdw_eff_params.delta_rel_threshold': {
+    title: 'Soglia Variazione Relativa',
+    short: 'Soglia di variazione relativa di HDW_eff tra il giorno corrente e il precedente. Se superata, Fc viene amplificato proporzionalmente (effetto accelerazione).',
+    formula: 'Δrel = (HDW_eff_today - HDW_eff_prev) / HDW_eff_prev\nSe Δrel > delta_rel_threshold:\n  Fc = Fc × (1 + Δrel)',
+    example: 'HDW_prev=60, HDW_today=90 → Δrel=0.50\nThreshold=0.20 → attivo\nFc = Fc_base × 1.50  [boost +50%]',
+    range: '0.10–0.50  |  default: 0.20',
+    affects: '_fclassBonus (boost accelerazione)'
+  },
+
+  // ── VEGETAZIONE ───────────────────────────────────────────────────────────────
+  'vegetation.days_to_severe_stress': {
+    title: 'Giorni a Stress Grave — boost logaritmico α',
+    short: 'Soglia streak oltre la quale si attiva il long-streak boost logaritmico di α. Ogni giorno consecutivo in più produce un incremento non lineare di α che cresce ma si stabilizza (saturazione).',
+    formula: 'In calcAlpha_v2:\n  se streak > days_to_severe_stress:\n    extra = streak - days_to_severe_stress\n    Δα_long = delta_dry3 × ln(1+extra) / 10\n  altrimenti:\n    Δα_long = 0\n\nNOTA: i modificatori RH_wilt e VPD_stress in\nclassifyDay_v2 si attivano quando rhMean != null,\nindipendentemente dalla streak e da questo valore.',
+    example: 'days_to_severe=7, streak=10:\n  extra = 3\n  Δα_long = 0.010 × ln(4)/10 ≈ +0.0014\n\ndays_to_severe=7, streak=15:\n  extra = 8\n  Δα_long = 0.010 × ln(9)/10 ≈ +0.0022\n\n→ il boost cresce ma si stabilizza progressivamente',
+    range: '5–15 giorni  |  PT: 7 · CA: 8\n⚠ Abbassare = boost α inizia prima',
+    affects: 'calcAlpha_v2 (Δα_long — long-streak boost logaritmico)'
+  },
+  'vegetation.RH_wilt': {
+    title: 'RH Appassimento — modificatore classificazione',
+    short: 'RH% diurna sotto cui la traspirazione vegetale si blocca. Quando rhMean scende sotto questa soglia e HDW è moderato, forza dc ≥ 2 anche senza raggiungere le soglie standard di temperatura o HDW.',
+    formula: 'In classifyDay_v2 (quando rhMean != null):\n  hdw_thr = HDW_c2 × 0.75\n  se rhMean ≤ RH_wilt AND hdwEff ≥ hdw_thr:\n    dc = max(dc, 2)\n\nSi attiva quando rhMean è disponibile (dati orari\no daily RH) — indipendentemente dalla streak.\n\nNOTA: RH_wilt NON influenza il night score.\nIl terzo breakpoint VPD notturno non è\nimplementato in v39.',
+    example: 'RH_wilt=38, HDW_c2=60, hdw_thr=45:\n  Giorno con rhMean=35%, hdwEff=50\n  35 ≤ 38 AND 50 ≥ 45 → dc = max(dc, 2)\n  → class 2 anche senza soddisfare soglie standard',
+    range: '25–50%  |  PT/GR: 35–38% · CA arida: 25%',
+    affects: 'classifyDay_v2 (modificatore rhMean — dc forza ≥ 2)'
+  },
+  'vegetation.VPD_stress': {
+    title: 'VPD Stress Vegetazione',
+    short: 'VPD critico (kPa) per la vegetazione locale. Se il VPD diurno supera questa soglia con HDW moderato, la classificazione viene promossa di un livello (1→2 oppure 2→3).',
+    formula: 'In classifyDay_v2 (quando rhMean != null):\n  hdw_thr = HDW_c2 × 0.75\n  vpd_day = es(tmax) × (1 - rhMean/100)  [hPa]\n  VPD_stress_hPa = VPD_stress × 10\n\n  se vpd_day ≥ VPD_stress_hPa AND hdwEff ≥ hdw_thr:\n    dc = min(3, dc + 1)   [+1 livello, cap a 3]\n\nPuò promuovere class 1→2 oppure class 2→3.',
+    example: 'VPD_stress=2.2 kPa → VPD_stress_hPa=22\nT=35°C → es≈56 hPa, rhMean=45%\nvpd_day = 56×0.55 = 30.8 hPa ≥ 22 ✓\nhdwEff=50 ≥ HDW_c2×0.75=45 ✓\n→ dc += 1 (es. class 1 → class 2)',
+    range: '1.0–4.0 kPa  |  PT: 2.0–2.2 · CA: 2.5–3.0',
+    affects: 'classifyDay_v2 (modificatore VPD diurno — dc +1)'
+  },
+
+  // ── FOEHN ─────────────────────────────────────────────────────────────────────
+  'foehn_winds.delta_alpha_per_score_unit': {
+    title: 'Δα per Unità Score Foehn',
+    short: 'Incremento di α per ogni unità di score del vento dominante rilevato. Moltiplicato per lo score del vento che matcha.',
+    formula: 'foehDelta = wind_score_matched × delta_alpha_per_score_unit\nAlpha += foehDelta se vento dominante match\n\nMatch richiede: direzione ∈ [from, to] AND speed ≥ min_speed_kmh',
+    example: 'delta=0.005, Maestrale score=3:\nfoehDelta = 3 × 0.005 = +0.015\n→ notevole contributo α in giornata di Maestrale',
+    range: '0.001–0.015  |  default: 0.005',
+    affects: 'calcAlpha_v2 (foehDelta)'
+  }
+};
+
+// ─── POPOVER ENGINE ───────────────────────────────────────────────────────────
+let _activePopoverKey = null;
+
+function _iBadge(docKey) {
+  return `<span class="info-badge" onclick="event.stopPropagation();showParamDoc('${docKey}',this)">i</span>`;
+}
+
+function showParamDoc(key, el) {
+  const doc = PARAM_DOC[key];
+  if (!doc) return;
+
+  // Toggle
+  if (_activePopoverKey === key) {
+    hideParamDoc(); return;
+  }
+
+  _activePopoverKey = key;
+  document.querySelectorAll('.info-badge').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+
+  let body = `<div class="pop-short">${doc.short}</div>`;
+  if (doc.formula) body += `<div class="pop-block"><div class="pop-block-label">Formula</div><div class="pop-block-content">${doc.formula}</div></div>`;
+  if (doc.example) body += `<div class="pop-block"><div class="pop-block-label">Esempio</div><div class="pop-block-content">${doc.example}</div></div>`;
+  if (doc.range)   body += `<div class="pop-range"><b>Range tipico:</b> ${doc.range}</div>`;
+  if (doc.affects) body += `<div class="pop-affects">Usato da: ${doc.affects}</div>`;
+
+  const pop = document.getElementById('param-popover');
+  pop.innerHTML = `
+    <div class="pop-header">
+      <span>${doc.title}</span>
+      <button class="pop-close" onclick="hideParamDoc()">✕</button>
+    </div>
+    <div class="pop-body">${body}</div>`;
+
+  pop.classList.add('visible');
+
+  // Position: near badge but keep within viewport
+  const rect = el.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const pw = 300, ph = 320;
+  let left = rect.left + rect.width + 8;
+  let top  = rect.top - 8;
+  if (left + pw > vw - 8) left = rect.left - pw - 8;
+  if (top + ph > vh - 8)  top  = vh - ph - 8;
+  if (top < 8)            top  = 8;
+  pop.style.left = left + 'px';
+  pop.style.top  = top  + 'px';
+}
+
+function hideParamDoc() {
+  _activePopoverKey = null;
+  document.querySelectorAll('.info-badge').forEach(b => b.classList.remove('active'));
+  document.getElementById('param-popover').classList.remove('visible');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#param-popover') && !e.target.classList.contains('info-badge')) {
+    hideParamDoc();
+  }
+});
+</script>
+
+<!-- Popover DOM (unico, riposizionato via JS) -->
+<div id="param-popover"></div>
+
+</body>
+</html>
