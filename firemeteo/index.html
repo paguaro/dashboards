@@ -1014,13 +1014,21 @@ tr:hover{background:#f9fafb}
         <div id="slider72Bar" style="background:#fff;border:1px solid var(--border);
              border-radius:8px;padding:10px 14px 8px;margin-bottom:10px">
           <div class="ts-top">
-            <span class="ts-label">⏱ Janela 72h</span>
+            <span class="ts-label" id="ts72Label">⏱ Janela 72h</span>
             <span class="ts-window" id="ts72WindowLabel">—</span>
             <div class="ts-presets">
               <button class="ts-preset" id="ts72p1" onclick="ts72Preset(1)" title="1 dia">1d</button>
               <button class="ts-preset" id="ts72p2" onclick="ts72Preset(2)" title="2 days">2d</button>
               <button class="ts-preset active" id="ts72p3" onclick="ts72Preset(3)" title="3 days">3d</button>
             </div>
+            <button id="btn72drill"
+              onclick="toggle72DrillMode()"
+              title="Mostrar detalhe horário do período selecionado no slider 16d (max 7d)"
+              style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;
+                     background:var(--surface);color:var(--dim);cursor:pointer;white-space:nowrap;
+                     margin-left:6px;transition:background .15s,color .15s">
+              🔍 Det. horário
+            </button>
           </div>
           <div class="ts-track-wrap">
             <div class="ts-track"></div>
@@ -3127,7 +3135,7 @@ let _engineUserLocked = (function() {
 function engineUnlockGeo() {
   _engineUserLocked = false;
   try { localStorage.removeItem(FM_ENGINE_LS_KEY); } catch(e) {}
-  _activeEngineId = 'portugal';
+  _activeEngineId = 'greece';
   renderEnginePresetPanel();
   updateEngineActiveBar();
   showToast('Geo-detection sbloccata — auto al prossimo punto', 2000);
@@ -4490,7 +4498,7 @@ let ENGINES = _buildEngines();
 
 // ID dell'engine default (persiste in localStorage)
 let _activeEngineId = (function() {
-  try { return localStorage.getItem(FM_ENGINE_LS_KEY) || 'portugal'; } catch(e) { return 'portugal'; }
+  try { return localStorage.getItem(FM_ENGINE_LS_KEY) || 'greece'; } catch(e) { return 'greece'; }
 })();
 
 // Salva default engine e blocca geo-detection
@@ -4584,7 +4592,7 @@ function _saveCustomEngines() {
 function _geoAutoDetectEngine(lat, lon) {
   const _lat = parseFloat(lat), _lon = parseFloat(lon);
 
-  // 1. Custom engine con bbox — priorità assoluta, ignora lock utente
+  // 1. Cerca un custom engine con bbox che contenga il punto
   let bestEng = null;
   for (const eng of Object.values(ENGINES)) {
     if (eng._custom && eng.bbox) {
@@ -4595,31 +4603,16 @@ function _geoAutoDetectEngine(lat, lon) {
     }
   }
 
-  // 2. Nessun custom trovato → fallback sui builtin via _ENGINE_BBOX
-  //    Solo se l'utente non ha fissato un engine esplicitamente (rispetta il lock per i builtin)
-  if (!bestEng) {
-    if (_engineUserLocked) return;  // utente ha scelto esplicitamente — non toccare
-    const ordered = ['australia','canada','california','greece_aegean','sardinia','turkey','greece','portugal','chile','mediterranean'];
-    for (const id of ordered) {
-      const bbox = _ENGINE_BBOX[id];
-      if (!bbox || !ENGINES[id]) continue;
-      const [lo, hi, la, lb] = bbox;
-      if (_lon >= lo && _lon <= hi && _lat >= la && _lat <= lb) {
-        bestEng = ENGINES[id]; break;
-      }
-    }
-  }
+  if (!bestEng) return;  // nessuna zona custom copre questo punto → lascia preset attivo
 
-  if (!bestEng?.fullConfig) return;  // engine senza config completo → niente da applicare
-
-  // 3. Non rieseguire se già attivo
+  // 2. Non rieseguire se già attivo
   const curId = _activeEngineConfig?.meta?.region_id || _activeEngineId;
   if (curId === bestEng.id) return;
 
-  // 4. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)
+  // 3. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)
   engineApply(bestEng.id, false);
   updateEngineActiveBar();
-  showToast(`⬡ ${bestEng.flag || ''} ${bestEng.short}`, 2000);
+  showToast(`⬡ Zona: ${bestEng.flag || '📦'} ${bestEng.short}`, 2200);
 }
 
 function detectEngineFromCoords(lat, lon) {
@@ -5019,6 +5012,148 @@ function updatePeakDay(hdwArr, hdwCum, dates, todayIdx) {
 
 let _ts72Hours = []; // array of ISO hour strings for the 72h window
 
+// ── Drill-down orário — mostra período selecionado pelo slider 16d ────────────
+// Lê _tsDates[s]→_tsDates[e] do slider 16d, filtra window._lastMeteo.hourly
+// para esse intervalo (max 7d), reinicializa o slider 72h nesse subconjunto.
+// Toggle: ON → drill-down, OFF → volta ao modo 72h padrão de hoje.
+
+const DRILL_MAX_DAYS = 7;
+
+function toggle72DrillMode() {
+  const btn = document.getElementById('btn72drill');
+  const lbl = document.getElementById('ts72Label');
+
+  if (_drillMode) {
+    // ── OFF: volta a 72h normais ──────────────────────────────────────────
+    _drillMode = false;
+    _drillRange = null;
+    if (btn) { btn.style.background = 'var(--surface)'; btn.style.color = 'var(--dim)'; btn.textContent = '🔍 Det. horário'; }
+    if (lbl) lbl.textContent = '⏱ Janela 72h';
+    // Mostra de novo presets 1d/2d/3d
+    [1,2,3].forEach(d => { const b=document.getElementById('ts72p'+d); if(b) b.style.display=''; });
+    const drill_preset_buttons = document.querySelectorAll('.ts-preset[id^="ts72pdrill"]');
+    drill_preset_buttons.forEach(b => b.remove());
+    // Recarrega 72h padrão do meteo atual
+    if (window._lastMeteo) draw72h(window._lastMeteo);
+    showToast('Voltou à vista 72h padrão', 1500);
+    return;
+  }
+
+  // ── ON: ativa drill-down ──────────────────────────────────────────────────
+  // Lê o intervalo do slider 16d
+  const s = parseInt(document.getElementById('tsStart')?.value ?? 0);
+  const e = parseInt(document.getElementById('tsEnd')?.value ?? 0);
+  const d1 = _tsDates[s] || null;
+  const d2 = _tsDates[e] || null;
+
+  if (!d1 || !d2) { showToast('⚠ Selecione primeiro um intervalo no slider 16d', 2500); return; }
+  if (!window._lastMeteo?.hourly?.time?.length) { showToast('⚠ Dados horários não disponíveis', 2500); return; }
+
+  // Calcula dias do intervalo selecionado
+  const msRange = new Date(d2+'T23:59:59').getTime() - new Date(d1+'T00:00:00').getTime();
+  const daysRange = Math.ceil(msRange / 86400000);
+  const effectiveDays = Math.min(daysRange, DRILL_MAX_DAYS);
+  // Data fim efetiva (d1 + effectiveDays, não além de d2)
+  const d2eff_ms = new Date(d1+'T00:00:00').getTime() + effectiveDays * 86400000;
+  const d2eff = new Date(Math.min(d2eff_ms, new Date(d2+'T23:59:59').getTime())).toISOString().slice(0,10);
+
+  // Verifica disponibilidade de dados horários para o intervalo
+  const h = window._lastMeteo.hourly;
+  const rangeHours = h.time.filter(t => t >= d1 && t.slice(0,10) <= d2eff);
+  if (!rangeHours.length) {
+    showToast('⚠ Nenhum dado horário disponível para este período', 2500);
+    return;
+  }
+
+  _drillMode = true;
+  _drillRange = { start: d1, end: d2eff, effectiveDays };
+
+  // Atualiza UI botão e label
+  const fmt = d => new Date(d+'T12:00').toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
+  const cappedLabel = effectiveDays < daysRange ? ` (max ${DRILL_MAX_DAYS}d)` : '';
+  if (btn) {
+    btn.style.background = 'var(--accent)'; btn.style.color = '#fff';
+    btn.textContent = '✕ Sair drill';
+  }
+  if (lbl) lbl.textContent = `🔍 ${fmt(d1)} → ${fmt(d2eff)}${cappedLabel}`;
+
+  // Substitui presets 1d/2d/3d por presets específicos para o drill range
+  [1,2,3].forEach(d => { const b=document.getElementById('ts72p'+d); if(b) b.style.display='none'; });
+
+  // Aplica o drill-down
+  _drill72Apply();
+}
+
+function _drill72Apply() {
+  if (!_drillMode || !_drillRange) return;
+  const h = window._lastMeteo.hourly;
+  const { start, end } = _drillRange;
+
+  // Filtra horas no intervalo (de start 00:00 a end 23:59)
+  const maskDrill = h.time.map(t => t >= start+'T00:00' && t <= end+'T23:59');
+  const timesDrill = h.time.filter((_,i) => maskDrill[i]);
+
+  if (!timesDrill.length) {
+    showToast('⚠ Nenhum dado horário no período selecionado', 2500);
+    return;
+  }
+
+  // Atualiza _hourly72 com o dataset completo (para a rosa dos ventos)
+  _hourly72 = h;
+
+  // Reinicializa slider 72h no novo subconjunto
+  _ts72Hours = timesDrill;
+  const n = timesDrill.length - 1;
+  const startEl = document.getElementById('ts72Start');
+  const endEl   = document.getElementById('ts72End');
+  if (!startEl || !endEl) return;
+  startEl.max = n; startEl.value = 0;
+  endEl.max   = n; endEl.value   = n;
+
+  // Reconstrói ticks a cada 6h com datas legíveis
+  const ticks = document.getElementById('ts72Ticks');
+  if (ticks) {
+    ticks.innerHTML = '';
+    timesDrill.forEach((t, i) => {
+      const hh = new Date(t).getHours();
+      if (hh % 6 === 0) {
+        const pct = (i / n * 100).toFixed(1);
+        const span = document.createElement('span');
+        span.className = 'ts-tick'; span.style.left = pct + '%';
+        const d = new Date(t);
+        span.textContent = hh === 0
+          ? d.toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'})
+          : d.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
+        ticks.appendChild(span);
+      }
+    });
+  }
+
+  // Presets drill: 1d / 3d / max (até DRILL_MAX_DAYS)
+  const { effectiveDays } = _drillRange;
+  const presetsEl = document.querySelector('#slider72Bar .ts-presets');
+  if (presetsEl) {
+    // Remove presets drill anteriores
+    presetsEl.querySelectorAll('[id^="ts72pdrill"]').forEach(b => b.remove());
+    [1, Math.min(3, effectiveDays), effectiveDays].filter((v,i,a)=>a.indexOf(v)===i).forEach((d, idx) => {
+      const b = document.createElement('button');
+      b.className = 'ts-preset'; b.id = 'ts72pdrill'+d;
+      b.textContent = d+'d'; b.title = d+' dia(s)';
+      b.onclick = () => {
+        const cutMs = new Date(timesDrill[0]).getTime() + d * 86400000;
+        let ei = 0;
+        for (let i=0; i<timesDrill.length; i++) { if (new Date(timesDrill[i]).getTime() < cutMs) ei=i; }
+        startEl.value = 0; endEl.value = ei; ts72Update();
+      };
+      if (idx === 0) b.classList.add('active');
+      presetsEl.appendChild(b);
+    });
+  }
+
+  ts72Update();
+  showToast(`🔍 Detalhe horário ${_drillRange.start} → ${_drillRange.end} (${timesDrill.length}h)`, 3000);
+}
+
 function ts72Init(times) {
   _ts72Hours = times;
   const n = times.length - 1;
@@ -5118,11 +5253,21 @@ function ts72Preset(days) {
 function ts72Redraw(startIdx, endIdx) {
   if (!_hourly72) return;
   const h = _hourly72;
-  // Build full mask: within 72h AND within slider window
-  const _r72s = new Date(); _r72s.setHours(0,0,0,0);
-  const _r72e = new Date(_r72s.getTime() + 72*3600000);
-  const mask72 = h.time.map(t => { const ts=new Date(t); return ts>=_r72s && ts<_r72e; });
-  const times72 = h.time.filter((_,i)=>mask72[i]);
+
+  let mask72, times72;
+
+  if (_drillMode && _drillRange) {
+    // Drill-down: usa _ts72Hours já filtrados para o intervalo selecionado
+    times72 = _ts72Hours;
+    const drillSet = new Set(times72);
+    mask72 = h.time.map(t => drillSet.has(t));
+  } else {
+    // Modo normal: 72h desde meia-noite de hoje
+    const _r72s = new Date(); _r72s.setHours(0,0,0,0);
+    const _r72e = new Date(_r72s.getTime() + 72*3600000);
+    mask72 = h.time.map(t => { const ts=new Date(t); return ts>=_r72s && ts<_r72e; });
+    times72 = h.time.filter((_,i)=>mask72[i]);
+  }
 
   // Apply slider window on top of 72h mask
   const slicedTimes = times72.slice(startIdx, endIdx+1);
@@ -5158,6 +5303,8 @@ function ts72Redraw(startIdx, endIdx) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 let _hourly72 = null;
+let _drillMode  = false;   // true = drill-down su periodo selezionato dallo slider 16gg
+let _drillRange = null;    // {start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', effectiveDays: N}
 
 function draw72h(meteo) {
   if (!meteo?.hourly?.time) return;
