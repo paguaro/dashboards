@@ -595,6 +595,30 @@ tr:hover{background:#f9fafb}
             </div>
             <!-- Engine config badge -->
             <div id="engineConfigBadge" style="display:none;margin-top:5px;padding:6px 8px;background:rgba(232,93,47,.04);border:1px solid rgba(232,93,47,.18);border-radius:5px"></div>
+                    <div id="atmoPanel" style="display:none;margin-top:8px;padding:7px 8px;
+               border-top:1px solid var(--border)">
+            <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;
+                 letter-spacing:.05em;color:var(--dim);margin-bottom:5px">
+              🌡️ Atmospheric Stability
+            </div>
+            <div id="atmoHainesRow" style="display:flex;justify-content:space-between;
+                 align-items:center;margin-bottom:4px;font-size:11px">
+              <span style="color:var(--dim);font-size:10px" title="Haines Mid Index — stabilità + secchezza 850/700 hPa">Haines Mid</span>
+              <span id="atmoHainesVal" style="font-family:var(--mono);font-weight:700">—</span>
+              <span id="atmoHainesSem" style="font-size:14px">⬜</span>
+            </div>
+            <div id="atmoVentRow" style="display:flex;justify-content:space-between;
+                 align-items:center;font-size:11px">
+              <span style="color:var(--dim);font-size:10px" title="Ventilation Index — Wind × Mixing Height (m²/s)">Ventilation</span>
+              <span id="atmoVentVal" style="font-family:var(--mono);font-weight:700">—</span>
+              <span id="atmoVentSem" style="font-size:14px">⬜</span>
+            </div>
+            <div id="atmoNote" style="font-size:9px;color:var(--dim);margin-top:4px;
+                 line-height:1.4"></div>
+            <div id="atmoAlert" style="display:none;margin-top:5px;padding:4px 7px;
+                 border-radius:3px;font-size:10px;font-weight:700;line-height:1.35"></div>
+          </div>
+
           </div>
         </div>
       </div>
@@ -938,6 +962,10 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-meteo',7)">Precip. mm</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',8)">HDW inst.</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',9)">HDWc</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',10)" title="Haines Mid Index (stability + moisture 850/700 hPa, range 2-6)">Haines</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',11)" title="Component A (stability)">A</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',12)" title="Component B (moisture)">B</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',13)" title="Ventilation Index = Wind × PBL, m²/s">VI m²/s</th>
               </tr>
             </thead>
             <tbody id="tbl-meteo-body"></tbody>
@@ -1370,11 +1398,181 @@ async function fetchICNF(lat,lng){
   return(d.features||[])[0]?.attributes||null;
 }
 
+// Inverso di es(T) = 6.1078·exp(17.27T/(T+237.3)).
+// Input: T (°C), RH (%); Output: Td (°C) o null.
+function _tdFromTRH(T, RH) {
+  if (T == null || RH == null || RH <= 0 || RH > 100) return null;
+  const es  = 6.1078 * Math.exp(17.27 * T / (T + 237.3));
+  const e   = es * (RH / 100);
+  if (e <= 0) return null;
+  const ln  = Math.log(e / 6.1078);
+  return (237.3 * ln) / (17.27 - ln);
+}
+
+// Pure function: Haines Mid da valori puntuali.
+// Input: T850, Td850, T700 (°C); Output: {A, B, haines, label, color}
+function calcHainesMid(t850, td850, t700) {
+  if (t850 == null || td850 == null || t700 == null) return null;
+  const dT_stab  = t850 - t700;          // Component A (stability)
+  const dT_moist = t850 - td850;         // Component B (moisture = dewpoint depression)
+  let A;
+  if (dT_stab <= 5)       A = 1;
+  else if (dT_stab <= 10) A = 2;
+  else                    A = 3;
+  let B;
+  if (dT_moist <= 5)       B = 1;
+  else if (dT_moist <= 12) B = 2;
+  else                     B = 3;
+  const h = A + B;  // range [2, 6]
+  const META = {
+    2: { label: 'Very Low',  color: '#4ade80' },
+    3: { label: 'Low',       color: '#a3e635' },
+    4: { label: 'Moderate',  color: '#facc15' },
+    5: { label: 'High',      color: '#fb923c' },
+    6: { label: 'Very High', color: '#dc2626' },
+  };
+  return { A, B, haines: h, label: META[h].label, color: META[h].color,
+           dT_stab: parseFloat(dT_stab.toFixed(1)),
+           dT_moist: parseFloat(dT_moist.toFixed(1)) };
+}
+
+// Pure function: Ventilation Index (m²/s).
+// Input: wind_ms (m/s), pbl_m (m); Output: {vi, label, color}
+function calcVentIndex(wind_ms, pbl_m) {
+  if (wind_ms == null || pbl_m == null || wind_ms < 0 || pbl_m < 0) return null;
+  const vi = wind_ms * pbl_m;
+  let label, color;
+  if (vi <  4000)      { label = 'Poor';      color = '#6b7280'; }
+  else if (vi < 12000) { label = 'Fair';      color = '#fbbf24'; }
+  else if (vi < 40000) { label = 'Good';      color = '#22c55e'; }
+  else                 { label = 'Excellent'; color = '#3b82f6'; }
+  return { vi: Math.round(vi), label, color };
+}
+
+// Daily max Haines da serie orarie.
+// Scelta max coerente con HDW_eff_day = max. Finestra 00-23 (Haines è indice
+// di stabilità di massa d'aria, non legato al ciclo diurno come HDW_eff).
+// rh850 richiesto (per derivazione Td850); td850 passato null → derivato qui.
+function _dailyMaxHaines(times, t850, rh850, t700, date) {
+  if (!times || !t850 || !rh850 || !t700 || !date) return null;
+  let best = null;
+  for (let i = 0; i < times.length; i++) {
+    if (!times[i] || times[i].slice(0, 10) !== date) continue;
+    const td = _tdFromTRH(t850[i], rh850[i]);
+    const h = calcHainesMid(t850[i], td, t700[i]);
+    if (h && (!best || h.haines > best.haines))
+      best = { ...h, hour: times[i].slice(11, 16), td850: td != null ? parseFloat(td.toFixed(1)) : null };
+  }
+  return best;
+}
+
+// Daily max Ventilation Index da serie orarie.
+// Finestra pomeridiana 10-17 (coerente con HDW_eff, fase di max attività fuoco).
+function _dailyMaxVentIndex(times, wind_ms, pbl_m, date, winStart=10, winEnd=17) {
+  if (!times || !wind_ms || !pbl_m || !date) return null;
+  let best = null;
+  for (let i = 0; i < times.length; i++) {
+    if (!times[i] || times[i].slice(0, 10) !== date) continue;
+    const hh = parseInt(times[i].slice(11, 13));
+    if (hh < winStart || hh > winEnd) continue;
+    const v = calcVentIndex(wind_ms[i], pbl_m[i]);
+    if (v && (!best || v.vi > best.vi)) best = { ...v, hour: times[i].slice(11, 16) };
+  }
+  return best;
+}
+
+// Async fetcher: richiede 6 giorni (oggi + 5 forecast) da pressure levels + PBL.
+// Salva in window._lastAtmo = { today: {haines, vi}, series: [{date, haines, vi}, ...] }
+// Panel UI legge da window._lastAtmo (S3). Qui solo fetch + cache.
+// Nota API: Open-Meteo pressure levels NON include dew_point_* (solo su superficie).
+// Td850 derivato da T850 + RH850 via _tdFromTRH (Magnus-Tetens).
+//
+// v43 C5: se window._lastMeteo._atmoSeries è già disponibile (fetch main ha portato
+// pressure levels), usiamo quello invece di fare una seconda chiamata API.
+
+
+// Pure function: estrae serie daily di Haines Mid e Ventilation Index dal meteo.hourly.
+// Allineata a meteo.daily.time. Scrive in meteo._atmoSeries = { haines:[], vi:[] }.
+// Se dati pressure/PBL mancanti per tutti i giorni → meteo._atmoSeries = null.
+//
+// v43 C6: scansiona sia meteo.hourly (forecast) che meteo._histWarmupHourly (warmup 21d).
+// Per ogni data di meteo.daily.time, cerca in entrambe le sorgenti → copertura completa
+// archive + forecast sul chart-hdw.
+function _calcAtmoDailySeries(meteo) {
+  meteo._atmoSeries = null;
+  try {
+    const d = meteo && meteo.daily;
+    if (!d || !d.time) return;
+
+    // Assemblo elenco di sorgenti hourly da cui attingere (prima warmup, poi forecast)
+    const sources = [];
+    if (meteo._histWarmupHourly && meteo._histWarmupHourly.time) sources.push(meteo._histWarmupHourly);
+    if (meteo.hourly            && meteo.hourly.time)            sources.push(meteo.hourly);
+    if (!sources.length) return;
+
+    // Helper: per ogni sorgente, restituisce max Haines del giorno cercato (00-23)
+    function _hainesForDateInSource(src, date) {
+      const t850  = src.temperature_850hPa;
+      const rh850 = src.relative_humidity_850hPa;
+      const t700  = src.temperature_700hPa;
+      if (!t850 || !rh850 || !t700) return null;
+      let best = null;
+      for (let i = 0; i < src.time.length; i++) {
+        if (!src.time[i] || src.time[i].slice(0, 10) !== date) continue;
+        const td = _tdFromTRH(t850[i], rh850[i]);
+        const obj = calcHainesMid(t850[i], td, t700[i]);
+        if (obj && (!best || obj.haines > best.haines)) best = obj;
+      }
+      return best;
+    }
+
+    // Helper: max VI del giorno cercato (finestra 10-17)
+    function _viForDateInSource(src, date) {
+      const pbl  = src.boundary_layer_height;
+      const wind = src.windspeed_10m;
+      if (!pbl || !wind) return null;
+      let best = null;
+      for (let i = 0; i < src.time.length; i++) {
+        if (!src.time[i] || src.time[i].slice(0, 10) !== date) continue;
+        const hh = parseInt(src.time[i].slice(11, 13));
+        if (hh < 10 || hh > 17) continue;
+        const wind_ms = wind[i] != null ? wind[i] / 3.6 : null;
+        const obj = calcVentIndex(wind_ms, pbl[i]);
+        if (obj && (!best || obj.vi > best.vi)) best = obj;
+      }
+      return best;
+    }
+
+    const haines = [];
+    const vi     = [];
+    let hasAny = false;
+
+    for (const date of d.time) {
+      // Prendi il primo match fra le sorgenti (warmup ha priorità se il giorno
+      // è coperto da entrambi, ma normalmente non c'è overlap).
+      let bestH = null, bestV = null;
+      for (const src of sources) {
+        if (!bestH) bestH = _hainesForDateInSource(src, date);
+        if (!bestV) bestV = _viForDateInSource(src, date);
+        if (bestH && bestV) break;
+      }
+      haines.push(bestH);
+      vi.push(bestV);
+      if (bestH || bestV) hasAny = true;
+    }
+
+    if (hasAny) meteo._atmoSeries = { haines, vi };
+  } catch (e) {
+    meteo._atmoSeries = null;
+  }
+}
+
+
 async function fetchMeteo(lat,lng){
   
   const pF=new URLSearchParams({latitude:lat,longitude:lng,
     daily:'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean,precipitation_probability_max,winddirection_10m_dominant',
-    hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation',
+    hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation,temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,boundary_layer_height',
     forecast_days:16,timezone:'Europe/Rome'});
 
   
@@ -1384,11 +1582,12 @@ async function fetchMeteo(lat,lng){
   const fmt=d=>d.toISOString().split('T')[0];
   const pH=new URLSearchParams({latitude:lat,longitude:lng,
     daily:'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,windspeed_10m_max,windgusts_10m_max,precipitation_sum',
-    start_date:fmt(startH),end_date:fmt(endH),timezone:'Europe/Rome'});
+    hourly:'temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,boundary_layer_height,windspeed_10m',
+    past_days:21, forecast_days:0, timezone:'Europe/Rome'});
 
   const [rF,rH]=await Promise.all([
     fetch(`${METEO_URL}?${pF}`),
-    fetch('https://archive-api.open-meteo.com/v1/archive?'+pH)
+    fetch(`${METEO_URL}?${pH}`)
   ]);
   if(!rF.ok)throw new Errorer(`Open-Meteo HTTP ${rF.status}`);
   const meteo=await rF.json();
@@ -1397,9 +1596,11 @@ async function fetchMeteo(lat,lng){
     if(rH.ok){
       const hist=await rH.json();
       meteo._histWarmup=hist.daily;
+      // v44 C6: serbare hourly warmup per Haines/VI retrospettivi
+      if (hist.hourly && hist.hourly.time) meteo._histWarmupHourly = hist.hourly;
     }
   }catch(e){}
-  return meteo;
+  _calcAtmoDailySeries(meteo); return meteo;
 }
 
 const HDW_T_MIN = 10;  
@@ -2354,7 +2555,7 @@ async function applyCSVArchive() {
     const pForecast = new URLSearchParams({
       latitude:lat, longitude:lon, forecast_days:16, timezone:'Europe/Rome',
       daily:'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean,precipitation_probability_max,winddirection_10m_dominant',
-      hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation',
+      hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation,temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,boundary_layer_height',
     });
     const [rWarmup, rForecast] = await Promise.all([
       fetch(ARCH_URL + '?' + pWarmup),
@@ -2465,7 +2666,7 @@ function _dominantDirFromHourly(daily_dates, hourly_times, hourly_dirs, hourly_s
   return result;
 }
 
-function _mergeERA5WithForecast(archive, forecast, warmup, archiveEnd) {
+function _mergeERA5WithForecast(archive, forecast, warmup, archiveEnd, atmoHist) {
   const fDates = forecast.daily.time;
   const fStart = fDates.findIndex(d => d > archiveEnd);
   const ad = archive.daily, ah = archive.hourly || {};
@@ -2519,6 +2720,30 @@ function _mergeERA5WithForecast(archive, forecast, warmup, archiveEnd) {
     winddirection_10m: [...(archHourly.winddirection_10m||[]),  ...(fcastHourly.winddirection_10m||[]).slice(fhIdx)],
     precipitation:     [...(archHourly.precipitation||[]),      ...(fcastHourly.precipitation||[]).slice(fhIdx)],
   } : (archHourly.time?.length ? archHourly : fcastHourly);
+
+  // v44 C7: pressure levels + PBL per Haines retrospettivo. archive-api NON li espone.
+  // atmoHist (historical-forecast-api) copre range archivio, fcastHourly copre forecast.
+  if (mergedHourly.time && mergedHourly.time.length) {
+    const ATMO_KEYS = ['temperature_850hPa','relative_humidity_850hPa','temperature_700hPa','boundary_layer_height'];
+    const atmH = (atmoHist && atmoHist.hourly) ? atmoHist.hourly : null;
+    const atmMap = new Map();
+    if (atmH && atmH.time) for (let i = 0; i < atmH.time.length; i++) atmMap.set(atmH.time[i], i);
+    const fcMap = new Map();
+    if (fcastHourly.time) for (let i = 0; i < fcastHourly.time.length; i++) fcMap.set(fcastHourly.time[i], i);
+    ATMO_KEYS.forEach(k => {
+      mergedHourly[k] = mergedHourly.time.map(t => {
+        if (atmH && atmH[k]) {
+          const i = atmMap.get(t);
+          if (i != null && atmH[k][i] != null) return atmH[k][i];
+        }
+        if (fcastHourly[k]) {
+          const j = fcMap.get(t);
+          if (j != null && fcastHourly[k][j] != null) return fcastHourly[k][j];
+        }
+        return null;
+      });
+    });
+  }
   return {
     daily: merged,
     hourly: mergedHourly,
@@ -2556,15 +2781,31 @@ async function applyArchiveDateRange() {
     const base = `latitude=${lat}&longitude=${lng}&timezone=Europe%2FRome`;
     const dv = 'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean';
     const hv = 'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation';
-    const [rA, rW, rF] = await Promise.all([
+    // v44 C7 fix: pressure levels NON disponibili via archive-api. Usiamo historical-forecast-api (dal 2022).
+    const hvAtmo = 'temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,boundary_layer_height,windspeed_10m';
+    const startYear = parseInt(start.slice(0,4));
+    const atmoHistAvailable = startYear >= 2022;
+    const [rA, rW, rF, rAatmo] = await Promise.all([
       fetch(`${ARCH_URL}?${base}&daily=${dv}&hourly=${hv}&start_date=${start}&end_date=${endCapped}`),
       fetch(`${ARCH_URL}?${base}&daily=${dv}&start_date=${fmt(warmupStart)}&end_date=${fmt(warmupEnd)}`),
       fetch(`${METEO_URL}?${base}&daily=${dv},precipitation_probability_max,winddirection_10m_dominant&hourly=${hv}&forecast_days=16&past_days=5`),
+      atmoHistAvailable
+        ? fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?${base}&hourly=${hvAtmo}&start_date=${start}&end_date=${endCapped}`)
+        : Promise.resolve(null),
     ]);
     if (!rA.ok) throw new Error('ERA5 HTTP ' + rA.status);
     if (!rF.ok) throw new Error('Forecast HTTP ' + rF.status);
-    const [aD, wD, fD] = await Promise.all([rA.json(), rW.ok ? rW.json() : null, rF.json()]);
-    const merged = _mergeERA5WithForecast(aD, fD, wD, endCapped);
+    const [aD, wD, fD, aAtmoD] = await Promise.all([
+      rA.json(),
+      rW.ok ? rW.json() : null,
+      rF.json(),
+      (rAatmo && rAatmo.ok) ? rAatmo.json() : null,
+    ]);
+    if (!atmoHistAvailable) showToast('Haines Mid non disponibile per date < 2022 (archivio ERA5 senza pressure levels)', 4000);
+    const merged = _mergeERA5WithForecast(aD, fD, wD, endCapped, aAtmoD);
+    _calcAtmoDailySeries(merged);  // v44 popola _atmoSeries per flow archive mode
+    window._lastMeteo = merged;  // permette fast path di fetchAtmoIndices
+    if (typeof fetchAtmoIndices === "function") fetchAtmoIndices(lat, lng).catch(()=>{});
     _archiveMode = true;
     window._lastMeteo = merged;
     chartData = { meteo:merged, lat, lng };
@@ -3112,11 +3353,22 @@ async function fetchExternalLayer(url){
 function showAttributePopup(lat, lng, layerName, props) {
   if (!props) return;
   const skip = new Set(['geometry','geom','the_geom','shape','SHAPE','OBJECTID','objectid','FID','fid']);
+  // v44 fix: rileva epoch ms e formatta come data leggibile (ArcGIS/FIRMS pattern)
+  const _fmtVal = (k, v) => {
+    const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{13}$/.test(v.trim()) ? parseInt(v) : null);
+    if (n != null && n > 946684800000 && n < 4102444800000) {
+      const keyL = k.toLowerCase();
+      if (keyL.includes('date') || keyL.includes('time') || keyL.includes('data') || keyL.includes('fecha') || keyL.includes('ora')) {
+        try { return new Date(n).toISOString().slice(0,19).replace('T',' ') + ' UTC'; } catch(e) { return v; }
+      }
+    }
+    return v;
+  };
   const rows = Object.entries(props)
     .filter(([k,v]) => !skip.has(k) && v != null && v !== '')
     .map(([k,v]) => `<div style="display:flex;gap:8px;padding:2px 0;font-size:12px">
       <span style="color:#374151;min-width:90px;flex-shrink:0">${k}</span>
-      <span style="font-weight:600;font-family:monospace;word-break:break-all">${v}</span></div>`)
+      <span style="font-weight:600;font-family:monospace;word-break:break-all">${_fmtVal(k,v)}</span></div>`)
     .join('');
   const html = `<div style="min-width:180px;max-width:280px">
     <div style="font-weight:700;font-size:13px;color:#e85d2f;border-bottom:1px solid #e5e7eb;margin-bottom:6px;padding-bottom:4px">${layerName}</div>
@@ -3131,8 +3383,24 @@ function _populateFireEvent(lat, lng, props) {
 
   // Normalizza date: accetta YYYY-MM-DD e DD/MM/YYYY
   const _norm = v => {
-    if (!v) return null;
+    if (v == null || v === '') return null;
+    // v44 fix: gestisci unix epoch ms (ArcGIS/FIRMS/VIIRS return date come numero)
+    if (typeof v === 'number' && v > 946684800000) {
+      try { return new Date(v).toISOString().slice(0, 10); } catch(e) {}
+    }
     const s = String(v).trim();
+    if (/^\d{13}$/.test(s)) {
+      const n = parseInt(s);
+      if (n > 946684800000) {
+        try { return new Date(n).toISOString().slice(0, 10); } catch(e) {}
+      }
+    }
+    if (/^\d{10}$/.test(s)) {
+      const n = parseInt(s);
+      if (n > 946684800) {
+        try { return new Date(n * 1000).toISOString().slice(0, 10); } catch(e) {}
+      }
+    }
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
     const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
     return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
@@ -4185,7 +4453,168 @@ function drawTemp(meteo,todayIdx,hdwArr,hdwCum,nightScores){
   Plotly.react('chart-temp',traces,layout,plotlyBaseConfig('temperatura'));
 }
 
+// Render panel compatto (pattern vegIndPanel). Chiamato da fetchAtmoIndices.
+// Scaffold alert: S3 mostra alert se Haines ≥ 5. S4 raffinerà a "Haines ≥ 5
+// AND dc_today < 3" per catturare il quadrante Pedrógão-pattern.
+function renderAtmoPanel(atmo) {
+  const panel = document.getElementById('atmoPanel');
+  if (!panel) return;
+  const today = atmo && atmo.today;
+  if (!today) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  // Haines Mid
+  const hEl   = document.getElementById('atmoHainesVal');
+  const hSem  = document.getElementById('atmoHainesSem');
+  const h     = today.haines;
+  const HSEM  = { 2:'🟢', 3:'🟢', 4:'🟡', 5:'🟠', 6:'🔴' };
+  if (h && hEl) {
+    hEl.textContent = h.haines + '  ' + h.label;
+    hEl.style.color = h.color;
+    if (hSem) hSem.textContent = HSEM[h.haines] || '⬜';
+  } else if (hEl) {
+    hEl.textContent = '—'; hEl.style.color = 'var(--dim)';
+    if (hSem) hSem.textContent = '⬜';
+  }
+
+  // Ventilation Index
+  const vEl  = document.getElementById('atmoVentVal');
+  const vSem = document.getElementById('atmoVentSem');
+  const v    = today.vi;
+  const VSEM = { Poor:'⚪', Fair:'🟡', Good:'🟢', Excellent:'🔵' };
+  if (v && vEl) {
+    const viLabel = v.vi < 10000
+      ? v.vi + ' m²/s'
+      : (v.vi/1000).toFixed(1) + 'k m²/s';
+    vEl.textContent = viLabel + '  ' + v.label;
+    vEl.style.color = v.color;
+    if (vSem) vSem.textContent = VSEM[v.label] || '⬜';
+  } else if (vEl) {
+    vEl.textContent = '—'; vEl.style.color = 'var(--dim)';
+    if (vSem) vSem.textContent = '⬜';
+  }
+
+  // Note con dettaglio componenti
+  const noteEl = document.getElementById('atmoNote');
+  if (noteEl) {
+    const parts = [];
+    if (h) parts.push('Stab A=' + h.A + ' (ΔT ' + h.dT_stab + '°) · Moist B=' + h.B + ' (ΔTd ' + h.dT_moist + '°)');
+    if (v && v.hour) parts.push('VI max @ ' + v.hour + ' LT');
+    noteEl.textContent = parts.join(' · ');
+  }
+
+  // PLUME-ALERT (scaffold S3: solo su Haines; S4 incrocerà con dc_today<3)
+  const alertEl = document.getElementById('atmoAlert');
+  if (alertEl) {
+    if (h && h.haines === 6) {
+      alertEl.style.display    = 'block';
+      alertEl.style.background = 'rgba(220,38,38,.1)';
+      alertEl.style.border     = '1px solid rgba(220,38,38,.3)';
+      alertEl.style.color      = '#dc2626';
+      alertEl.textContent      = '⚠ PLUME-ALERT · atmosfera estremamente favorevole a blow-up fire (pirocumulo, downburst)';
+    } else if (h && h.haines === 5) {
+      alertEl.style.display    = 'block';
+      alertEl.style.background = 'rgba(251,146,60,.1)';
+      alertEl.style.border     = '1px solid rgba(251,146,60,.3)';
+      alertEl.style.color      = '#ea580c';
+      alertEl.textContent      = '⚠ Haines High · atmosfera che supporta plume-dominated fires';
+    } else {
+      alertEl.style.display = 'none';
+    }
+  }
+}
+
+async function fetchAtmoIndices(lat, lng) {
+  // Fast path: riusa dati già fetchati da fetchMeteo (evita round-trip extra)
+  try {
+    const m = window._lastMeteo;
+    if (m && m._atmoSeries && m.daily && m.daily.time) {
+      const today = new Date().toISOString().slice(0, 10);
+      const dates = m.daily.time;
+      const hA = m._atmoSeries.haines || [];
+      const vA = m._atmoSeries.vi     || [];
+      const series = dates.map((date, i) => ({
+        date, haines: hA[i] || null, vi: vA[i] || null
+      }));
+      // Per "today": preferisci giorno corrente, altrimenti primo giorno con dati forecast
+      let todayEntry = series.find(s => s.date === today && (s.haines || s.vi));
+      if (!todayEntry) todayEntry = series.find(s => s.haines || s.vi) || null;
+
+      window._lastAtmo = {
+        today: todayEntry,
+        series,
+        coords: { lat, lng },
+        fetched_at: new Date().toISOString(),
+        _source: 'meteo_cache',
+      };
+      if (typeof renderAtmoPanel === 'function') {
+        try { renderAtmoPanel(window._lastAtmo); } catch(e) {}
+      }
+      return window._lastAtmo;
+    }
+  } catch(e) {}
+
+  // Slow path (fallback): seconda chiamata API dedicata.
+  // Eseguito solo se fetchMeteo non ha portato pressure levels (coord fuori copertura
+  // modello, o fetchMeteo non invocato prima — es. click mappa senza query full).
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat +
+      '&longitude=' + lng +
+      '&hourly=temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,' +
+              'boundary_layer_height,wind_speed_10m' +
+      '&forecast_days=6&past_days=0&timezone=auto' +
+      '&wind_speed_unit=ms';
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) { window._lastAtmo = null; return null; }
+    const d = await r.json();
+    const h = d && d.hourly;
+    if (!h || !h.time) { window._lastAtmo = null; return null; }
+
+    const times  = h.time;
+    const t850   = h.temperature_850hPa;
+    const rh850  = h.relative_humidity_850hPa;
+    const t700   = h.temperature_700hPa;
+    const pbl    = h.boundary_layer_height;
+    const wind   = h.wind_speed_10m;
+
+    const seen = new Set();
+    const series = [];
+    for (let i = 0; i < times.length; i++) {
+      const date = times[i] ? times[i].slice(0, 10) : null;
+      if (!date || seen.has(date)) continue;
+      seen.add(date);
+      const haines = _dailyMaxHaines(times, t850, rh850, t700, date);
+      const vi     = _dailyMaxVentIndex(times, wind, pbl, date);
+      series.push({ date, haines, vi });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const todayEntry = series.find(s => s.date === today) || series[0] || null;
+
+    window._lastAtmo = {
+      today: todayEntry,
+      series,
+      coords: { lat, lng },
+      fetched_at: new Date().toISOString(),
+      _source: 'dedicated_fetch',
+    };
+    if (typeof renderAtmoPanel === 'function') {
+      try { renderAtmoPanel(window._lastAtmo); } catch(e) {}
+    }
+    return window._lastAtmo;
+  } catch (e) {
+    window._lastAtmo = null;
+    return null;
+  }
+}
+
+
+
 function drawHDW(meteo,todayIdx,hdwArr,hdwCum,alphas,dayClasses,deltaAlpha,nightScores){
+  // v44: espone globalmente ultime serie per _pdfAnalysisMetrics
+  window._lastHdwCum      = hdwCum;
+  window._lastHdwInst     = hdwArr;
+  window._lastDayClasses  = dayClasses;
   const d=meteo.daily; const dates=d.time; const today=dates[todayIdx];
 
   const NS_COLOR = ['#9ca3af','#facc15','#f97316','#dc2626'];
@@ -4252,8 +4681,76 @@ function drawHDW(meteo,todayIdx,hdwArr,hdwCum,alphas,dayClasses,deltaAlpha,night
      font:{size:9,color:'rgba(185,28,28,.6)'},xanchor:'right'},
     ...(evAnnot.length?evAnnot:[]),
   ];
-  applyAnnotations('chart-hdw',layout);
-  Plotly.react('chart-hdw',traces,layout,plotlyBaseConfig('hdw'));
+
+  // v44 P11b: trace Haines Mid con rolling mean 3d + spline per leggibilità
+  if (meteo._atmoSeries && meteo._atmoSeries.haines) {
+    const fHaines = meteo._atmoSeries.haines;
+    const hainesVals = fHaines.map(h => h ? h.haines : null);
+    const hainesSmooth = hainesVals.map((_, i) => {
+      const wStart = Math.max(0, i - 1);
+      const wEnd   = Math.min(hainesVals.length, i + 2);
+      const vals   = hainesVals.slice(wStart, wEnd).filter(v => v != null);
+      return vals.length >= 2 ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+    });
+    traces.push({
+      x: dates,
+      y: hainesSmooth,
+      name: 'Haines Mid · 3d mean',
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'rgba(88,28,135,.85)', width: 2, shape: 'spline', smoothing: 0.6 },
+      yaxis: 'y2',
+      connectgaps: false,
+      hovertemplate: fHaines.map((h,i) => h
+        ? `${dates[i]}<br>Haines Mid: <b>${h.haines}</b> · ${h.label}<br>Stab A=${h.A} (ΔT ${h.dT_stab}°) · Moist B=${h.B} (ΔTd ${h.dT_moist}°)<br>3d mean: ${hainesSmooth[i]!=null?hainesSmooth[i].toFixed(1):'—'}<extra></extra>`
+        : `${dates[i]}<br>Haines: n/d<extra></extra>`),
+    });
+    if (!layout.yaxis2) {
+      layout.yaxis2 = {
+        title: {text:'Haines Mid', font:{size:10}},
+        tickfont: {size:9},
+        overlaying: 'y',
+        side: 'right',
+        range: [1.8, 6.2],
+        showgrid: false,
+        zeroline: false,
+        fixedrange: true,
+      };
+      // v44 fix: forza autorange su xaxis/yaxis per far ricalcolare il canvas al Plotly.react
+      // (sardegna non ha layout.yaxis.autorange altrove, serve questo per stabilire dimensioni corrette)
+      if (layout.xaxis) layout.xaxis.autorange = true;
+      if (layout.yaxis) layout.yaxis.autorange = true;
+    }
+    window._hainesChartDirty = true;  // v44 fix: forza resize post-react
+  }
+    applyAnnotations('chart-hdw',layout);
+  // v44 fix sardegna: quando meteo._atmoSeries è presente, il chart richiede una sequenza
+  // più aggressiva di resize perché sardegna non ha altri punti di autorange nel drawHDW.
+  // Strategia: react + resize immediato + doppio retry via rAF e setTimeout lungo.
+  const _hasHaines = !!(meteo._atmoSeries && meteo._atmoSeries.haines);
+  Plotly.react('chart-hdw',traces,layout,plotlyBaseConfig('hdw')).then(() => {
+    if (_hasHaines) {
+      try { Plotly.Plots.resize('chart-hdw'); } catch(e){}
+      // rAF: aspetta il prossimo paint per relayout autorange
+      requestAnimationFrame(() => {
+        try {
+          Plotly.relayout('chart-hdw', {
+            'xaxis.autorange': true,
+            'yaxis.autorange': true,
+          });
+          Plotly.Plots.resize('chart-hdw');
+        } catch(e){}
+      });
+      // Retry lungo in caso di container collapsed/transition
+      setTimeout(() => {
+        try {
+          Plotly.Plots.resize('chart-hdw');
+          Plotly.relayout('chart-hdw', { 'xaxis.autorange': true });
+        } catch(e){}
+      }, 300);
+    }
+  }).catch(()=>{});
+  window._hainesChartDirty = false;
 }
 
 // ── detectWindShifts — trapianto da firemeteo_v40 ─────────────────────────────
@@ -4812,6 +5309,7 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
   const today=dates[todayIdx];
   document.getElementById('tbl-meteo-sub').textContent=`${dates.length} giorni . clicca colonna per ordinare`;
   const tbody=document.getElementById('tbl-meteo-body');
+  const atmoSrc = (chartData.meteo && chartData.meteo._atmoSeries) || null;
   tbody.innerHTML=dates.map((dt,i)=>{
     const isToday=dt===today;
     const isFut=dt>today;
@@ -4829,6 +5327,10 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
       <td style="color:#3b82f6">${d.precipitation_sum[i]!=null?d.precipitation_sum[i].toFixed(1):'-'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'-'}</td>
       <td class="${hdwCumClass(hc||0).label==='MOLTO BASSO'?'td-hdw-mbx':hdwCumClass(hc||0).label==='BASSO'?'td-hdw-bx':'td-hdw-alt'}">${hc!=null?hc.toFixed(1):'-'}</td>
+      <td style="color:${(() => { const h = atmoSrc ? atmoSrc.haines[i] : null; return h ? ({2:'#16a34a',3:'#65a30d',4:'#ca8a04',5:'#ea580c',6:'#dc2626'}[h.haines]||'#374151') : '#9ca3af'; })()};font-weight:700">${atmoSrc && atmoSrc.haines[i] ? atmoSrc.haines[i].haines : '-'}</td>
+      <td style="color:#6b7280">${atmoSrc && atmoSrc.haines[i] ? atmoSrc.haines[i].A : '-'}</td>
+      <td style="color:#6b7280">${atmoSrc && atmoSrc.haines[i] ? atmoSrc.haines[i].B : '-'}</td>
+      <td style="color:#374151">${atmoSrc && atmoSrc.vi[i] ? atmoSrc.vi[i].vi : '-'}</td>
     </tr>`;
   }).join('');
 }
@@ -5968,6 +6470,109 @@ async function exportPDF(){
   }
 
   
+  // ── v44 PDF refactor: metriche analitiche + provenance ──
+  function _pdfAnalysisMetrics() {
+    const m = chartData.meteo;
+    const d = m && m.daily;
+    if (!d || !d.time) return { hdwcToday:'—', hdwcPeak:'—', peakDate:'—', daysAbove80:'—', daysCl23:'—', hainesToday:'—', viToday:'—', hainesPeak:'—', plumeAlert:false };
+    const todayLocal = new Date().toISOString().slice(0,10);
+    const ti = d.time.indexOf(todayLocal);
+    const tIdx = ti >= 0 ? ti : (d.time.indexOf(m._todayBoundary) >= 0 ? d.time.indexOf(m._todayBoundary) : d.time.length-1);
+    const arch = m._csvBoundary || m.daily._csvBoundary;
+    const refIdx = arch && d.time.indexOf(arch) >= 0 ? d.time.indexOf(arch) : tIdx;
+    const hdwCumArr = (window._lastHdwCum || []).length ? window._lastHdwCum : (d._hdwCum || []);
+    const hdwcToday = hdwCumArr[refIdx] != null ? hdwCumArr[refIdx].toFixed(1) : '—';
+    let peak = -Infinity, peakIdx = -1;
+    for (let i = 0; i <= refIdx; i++) if (hdwCumArr[i] > peak) { peak = hdwCumArr[i]; peakIdx = i; }
+    const hdwcPeak = peak > -Infinity ? peak.toFixed(1) : '—';
+    const peakDate = peakIdx >= 0 ? d.time[peakIdx] : '—';
+    const hdwArr = window._lastHdwInst || [];
+    const daysAbove80 = hdwArr.filter((v,i) => v != null && v >= 80 && i <= refIdx).length;
+    const dcArr = window._lastDayClasses || [];
+    const daysCl23 = dcArr.filter((v,i) => (v===2||v===3) && i <= refIdx).length;
+    const atmo = m._atmoSeries;
+    const hainesToday = (atmo && atmo.haines && atmo.haines[refIdx]) ? atmo.haines[refIdx].haines + ' (' + atmo.haines[refIdx].label + ')' : '—';
+    const viToday     = (atmo && atmo.vi     && atmo.vi[refIdx])     ? atmo.vi[refIdx].vi + ' m²/s · ' + atmo.vi[refIdx].label : '—';
+    let hainesPeak = 0, hainesPeakDate = '—';
+    if (atmo && atmo.haines) {
+      for (let i = 0; i <= refIdx; i++) {
+        if (atmo.haines[i] && atmo.haines[i].haines > hainesPeak) {
+          hainesPeak = atmo.haines[i].haines;
+          hainesPeakDate = d.time[i];
+        }
+      }
+    }
+    const plumeAlert = hainesPeak >= 5;
+    return { hdwcToday, hdwcPeak, peakDate, daysAbove80, daysCl23, hainesToday, viToday, hainesPeak: hainesPeak || '—', hainesPeakDate, plumeAlert };
+  }
+
+  function _pdfProvenance() {
+    const lines = [];
+    if (typeof _activeEngineConfig !== 'undefined' && _activeEngineConfig?.meta) {
+      const pn = _activeEngineConfig.meta.preset_name || _activeEngineConfig.meta.region_id || 'custom';
+      const fn = _activeEngineConfig.meta.source_filename || '';
+      lines.push({ type: 'Engine config (JSON)', name: pn, detail: fn ? 'file: ' + fn : '' });
+    } else {
+      const pk = (typeof _activePreset !== 'undefined' && _activePreset) ? _activePreset.key : 'default';
+      lines.push({ type: 'Engine config', name: 'Preset builtin · ' + pk, detail: 'nessun file JSON caricato' });
+    }
+    if (chartData.meteo?._csvBoundary || chartData.meteo?.daily?._csvBoundary) {
+      const bnd = chartData.meteo._csvBoundary || chartData.meteo.daily._csvBoundary;
+      lines.push({ type: 'Dati osservati', name: 'ERA5 archive + CSV boundary', detail: 'fino a ' + bnd });
+    }
+    if (typeof _archiveMode !== 'undefined' && _archiveMode) {
+      const s = document.getElementById('archiveDateStart')?.value || '';
+      const e = document.getElementById('archiveDateEnd')?.value || '';
+      if (s && e) lines.push({ type: 'Archive ERA5 range', name: s + ' → ' + e, detail: 'historical-forecast-api per pressure levels' });
+    }
+    return lines;
+  }
+
+  function _pdfAuxLayers() {
+    const aux = [];
+    const cl = Object.values(typeof _customLayersObj !== 'undefined' ? _customLayersObj : {});
+    cl.forEach(l => {
+      aux.push({ name: l.name || 'senza nome', url: l.url || '', visible: !!l.visible });
+    });
+    if (typeof _effisLayerVisible !== 'undefined' && _effisLayerVisible) aux.push({ name: 'EFFIS FireHotspots', url: 'effis.jrc.ec.europa.eu WMS', visible: true });
+    if (typeof _icnfVisible !== 'undefined' && _icnfVisible) aux.push({ name: 'ICNF GIFR 1975-2022', url: 'sigservices.icnf.pt', visible: true });
+    if (typeof _viirsLayerVisible !== 'undefined' && _viirsLayerVisible) aux.push({ name: 'VIIRS Fire Hotspots', url: 'NASA FIRMS', visible: true });
+    return aux;
+  }
+
+  const _metrics    = _pdfAnalysisMetrics();
+  const _provenance = _pdfProvenance();
+  const _auxLayers  = _pdfAuxLayers();
+
+  const metricsRowsHTML = [
+    ['HDWc riferimento',   _metrics.hdwcToday],
+    ['HDWc picco window',  _metrics.hdwcPeak + (_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : '')],
+    ['Giorni HDW inst ≥ 80', _metrics.daysAbove80],
+    ['Giorni class 2-3',    _metrics.daysCl23],
+    ['Haines Mid (oggi)', _metrics.hainesToday],
+    ['Haines Mid · picco', _metrics.hainesPeak + (_metrics.hainesPeakDate !== '—' ? ' · ' + _metrics.hainesPeakDate : '')],
+    ['Ventilation Index', _metrics.viToday],
+  ].map(([l,v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:10.5px">
+    <span style="color:#374151">${l}</span>
+    <span style="font-weight:700;font-family:monospace">${v}</span>
+  </div>`).join('');
+
+  const provenanceRowsHTML = _provenance.length
+    ? _provenance.map(p => `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:10px">
+        <div style="color:#374151;text-transform:uppercase;letter-spacing:.04em;font-size:8.5px;margin-bottom:1px">${p.type}</div>
+        <div style="font-weight:700">${p.name}</div>
+        ${p.detail ? `<div style="color:#6b7280;font-family:monospace;font-size:9px">${p.detail}</div>` : ''}
+      </div>`).join('')
+    : '<div style="color:#6b7280;font-size:10px">Nessuna fonte personalizzata caricata</div>';
+
+  const auxLayersHTML = _auxLayers.length
+    ? _auxLayers.map(a => `<div style="padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:10px">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.visible?'#16a34a':'#9ca3af'};margin-right:5px"></span>
+        <span style="font-weight:700">${a.name}</span>
+        ${a.url ? `<span style="color:#6b7280;font-family:monospace;font-size:9px"> · ${a.url}</span>` : ''}
+      </div>`).join('')
+    : '<div style="color:#6b7280;font-size:10px">Nessun layer ausiliario attivo</div>';
+
   const retNum  =document.querySelector('.ret-num')?.textContent.trim()||'-';
   const retCls  =document.querySelector('.ret-cls')?.textContent.trim()||'';
   const retNote =document.querySelector('.ret-note')?.textContent.trim()||'';
@@ -6135,22 +6740,27 @@ tr:nth-child(even):not(.tr-today){background:#fafafa}
 </div>
 
 <div class="cards">
-  <div class="card"><div class="l">Ponto</div><div class="v orange">${nome}</div><div class="n">${lat} N . ${lon} E</div></div>
-  <div class="card"><div class="l">Indicador de Ritorno CFVA</div><div class="v orange" style="font-size:22px">${retNum}</div><div class="n">${retCls}${retNote?' . '+retNote:''}</div></div>
-  <div class="card"><div class="l">HDW Cumulativo Hoje</div><div class="v">${hdwcBadge}</div></div>
+  <div class="card"><div class="l">Ponto</div><div class="v orange">${nome}</div><div class="n">${lat} N · ${lon} E</div></div>
+  <div class="card"><div class="l">HDWc · oggi / picco window</div><div class="v">${_metrics.hdwcToday}</div><div class="n">pico: ${_metrics.hdwcPeak}${_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : ''}</div></div>
+  <div class="card"><div class="l">Haines Mid · Ventilation</div><div class="v" style="font-size:14px">${_metrics.hainesToday}</div><div class="n" style="font-size:9.5px">${_metrics.viToday}${_metrics.plumeAlert ? ' · <span style="color:#dc2626;font-weight:700">⚠ PLUME-ALERT</span>' : ''}</div></div>
 </div>
 
 ${interp?`<div class="interp">${interp}</div>`:''}
 
 <div class="two-col">
   <div class="panel-box">
-    <div class="ph">Indicatori CFVA</div>
-    ${icnfRows}
+    <div class="ph">Metriche dell\'analisi</div>
+    ${metricsRowsHTML}
   </div>
   <div class="panel-box">
-    <div class="ph">Anni con Incendio Registrato</div>
-    ${anosInc?`<div style="margin-top:4px">${anosInc}</div>`:'<div style="color:#9ca3af;font-size:9px;margin-top:4px">Senza storico incendio neste ponto</div>'}
+    <div class="ph">Fonti dati · provenance</div>
+    ${provenanceRowsHTML}
   </div>
+</div>
+
+<div class="panel-box" style="margin-bottom:14px">
+  <div class="ph">Layer ausiliari attivi</div>
+  ${auxLayersHTML}
 </div>
 
 <div class="section-hdr">GRAFICOS METEOROLOGICOS . 16 DIAS</div>
