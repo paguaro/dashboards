@@ -1197,7 +1197,7 @@ tr:hover{background:#f9fafb}
           <table id="tbl-meteo">
             <thead>
               <tr>
-                <th class="sortable" onclick="sortTable('tbl-meteo',0)">Data</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',0)">Date</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',1)">T Max °C</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',2)">T Min °C</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',3)">RH %</th>
@@ -1234,7 +1234,7 @@ tr:hover{background:#f9fafb}
           <table id="tbl-hourly">
             <thead>
               <tr>
-                <th class="sortable" onclick="sortTable('tbl-hourly',0)">Data/Hora</th>
+                <th class="sortable" onclick="sortTable('tbl-hourly',0)">Date/Hour</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',1)">T °C</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',2)">RH %</th>
                 <th class="sortable" onclick="sortTable('tbl-hourly',3)">Wind km/h</th>
@@ -1266,15 +1266,15 @@ tr:hover{background:#f9fafb}
           <table id="tbl-crit">
             <thead>
               <tr>
-                <th class="sortable" onclick="sortTable('tbl-crit',0)">Data</th>
+                <th class="sortable" onclick="sortTable('tbl-crit',0)">Date</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',1)">Period</th>
-                <th class="sortable" onclick="sortTable('tbl-crit',2)" title="Temperature at HDW peak hour">T pico °C</th>
+                <th class="sortable" onclick="sortTable('tbl-crit',2)" title="Temperature at HDW peak hour">T peak °C</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',3)" title="Relative humidity at HDW peak hour">RH peak %</th>
-                <th class="sortable" onclick="sortTable('tbl-crit',4)" title="Wind speed at HDW peak hour (km/h)">V pico km/h</th>
+                <th class="sortable" onclick="sortTable('tbl-crit',4)" title="Wind speed at HDW peak hour (km/h)">Wind peak km/h</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',5)" title="Peak instantaneous HDW for period">HDW max</th>
-                <th>Classe HDW</th>
+                <th>HDW Class</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',7)" title="Daily HDWc — same value as chartDW">HDWc daily ⓘ</th>
-                <th>Alerta</th>
+                <th>Alert</th>
               </tr>
             </thead>
             <tbody id="tbl-crit-body"></tbody>
