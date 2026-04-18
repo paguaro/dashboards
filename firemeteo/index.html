@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/interact.js/1.10.27/interact.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -359,7 +360,7 @@ tr:hover{background:#f9fafb}
     <div id="map-wrap">
       <div id="map-float-handle">
         <span>⠿ FireMeteo Map</span>
-        <span class="fh-close" onclick="_toggleMapExpand()" title="Chiudi floating">✕</span>
+        <span class="fh-close" onclick="_toggleMapExpand()" title="Close floating">✕</span>
       </div>
       <div id="mini-map"></div>
       <div class="map-hint" id="maphint">✦ Click to select a point</div>
@@ -522,7 +523,7 @@ tr:hover{background:#f9fafb}
                margin-bottom:6px">No file · separator ; · UTC time</div>
           <div style="font-size:9px;color:var(--dim);margin-bottom:6px;line-height:1.4">
             Colunas requeridas: data/hora, temperatura, vento (km/h), HR (%), precip (mm)<br>
-            Opcional: raffica, VPD. Formato CSV exportado pela dashboard ou estação ANEPC/IPMA.
+            Optional: gust, VPD. CSV format exported from dashboard or ANEPC/IPMA station.
           </div>
 
           <!-- Event markers (optional) -->
@@ -610,7 +611,7 @@ tr:hover{background:#f9fafb}
                 padding:4px 5px;border:1px solid var(--border);border-radius:3px;
                 background:var(--surface);color:var(--text)" min="2000-01-01"
                 onchange="_syncDateToText('archiveDateStart','archiveDateStartTxt');_validateArchiveDate()">
-              <input id="archiveDateStartTxt" type="text" placeholder="AAAA-MM-DD"
+              <input id="archiveDateStartTxt" type="text" placeholder="YYYY-MM-DD"
                 maxlength="10" style="width:100%;font-size:10px;margin-top:3px;
                 padding:3px 5px;border:1px solid var(--border);border-radius:3px;
                 background:var(--surface2);color:var(--mid);font-family:var(--mono)"
@@ -623,7 +624,7 @@ tr:hover{background:#f9fafb}
                 padding:4px 5px;border:1px solid var(--border);border-radius:3px;
                 background:var(--surface);color:var(--text)" min="2000-01-01"
                 onchange="_syncDateToText('archiveDateEnd','archiveDateEndTxt');_validateArchiveDate()">
-              <input id="archiveDateEndTxt" type="text" placeholder="AAAA-MM-DD"
+              <input id="archiveDateEndTxt" type="text" placeholder="YYYY-MM-DD"
                 maxlength="10" style="width:100%;font-size:10px;margin-top:3px;
                 padding:3px 5px;border:1px solid var(--border);border-radius:3px;
                 background:var(--surface2);color:var(--mid);font-family:var(--mono)"
@@ -642,7 +643,7 @@ tr:hover{background:#f9fafb}
                   padding:2px 4px;border:1px solid var(--border);border-radius:3px;
                   background:var(--surface);color:var(--text)" min="2000-01-01"
                   onchange="_syncDateToText('archiveDateIgnicao','archiveDateIgnicaoTxt')">
-                <input id="archiveDateIgnicaoTxt" type="text" placeholder="AAAA-MM-DD" maxlength="10"
+                <input id="archiveDateIgnicaoTxt" type="text" placeholder="YYYY-MM-DD" maxlength="10"
                   style="width:100%;font-size:9px;margin-top:2px;padding:2px 4px;
                   border:1px solid var(--border);border-radius:3px;
                   background:var(--surface2);color:var(--mid);font-family:var(--mono)"
@@ -654,7 +655,7 @@ tr:hover{background:#f9fafb}
                   padding:2px 4px;border:1px solid var(--border);border-radius:3px;
                   background:var(--surface);color:var(--text)" min="2000-01-01"
                   onchange="_syncDateToText('archiveDateContencao','archiveDateContencaoTxt')">
-                <input id="archiveDateContencaoTxt" type="text" placeholder="AAAA-MM-DD" maxlength="10"
+                <input id="archiveDateContencaoTxt" type="text" placeholder="YYYY-MM-DD" maxlength="10"
                   style="width:100%;font-size:9px;margin-top:2px;padding:2px 4px;
                   border:1px solid var(--border);border-radius:3px;
                   background:var(--surface2);color:var(--mid);font-family:var(--mono)"
@@ -749,7 +750,7 @@ tr:hover{background:#f9fafb}
               <div id="engineActiveParams" style="font-size:9px;color:var(--dim);line-height:1.5;margin-top:1px"></div>
             </div>
             <button onclick="engineUnlockGeo()" id="engineUnlockBtn"
-              title="Sblocca geo-detection automatica"
+              title="Unlock automatic geo-detection"
               style="font-size:9px;padding:2px 6px;border:1px solid var(--border);border-radius:3px;
                      background:none;cursor:pointer;color:var(--dim);white-space:nowrap">✕ auto</button>
             <button onclick="toggleEngineList()" id="engineListToggleBtn"
@@ -797,7 +798,7 @@ tr:hover{background:#f9fafb}
             </div>
             <div id="atmoHainesRow" style="display:flex;justify-content:space-between;
                  align-items:center;margin-bottom:4px;font-size:11px">
-              <span style="color:var(--dim);font-size:10px" title="Haines Mid Index — stabilità + secchezza 850/700 hPa">Haines Mid</span>
+              <span style="color:var(--dim);font-size:10px" title="Haines Mid Index — stability + dryness 850/700 hPa">Haines Mid</span>
               <span id="atmoHainesVal" style="font-family:var(--mono);font-weight:700">—</span>
               <span id="atmoHainesSem" style="font-size:14px">⬜</span>
             </div>
@@ -862,7 +863,7 @@ tr:hover{background:#f9fafb}
                      background:#1e3a5f;color:#fff;border:none;border-radius:4px;
                      font-family:var(--mono);font-size:10px;font-weight:700;
                      cursor:pointer;letter-spacing:.05em;text-transform:uppercase"
-              title="Esporta i 12 valori α mensili calibrati su ERA5 locale">
+              title="Export the 12 monthly α values calibrated on local ERA5">
               ↓ Export α calibrati · JSON
             </button>
           </div>
@@ -1002,7 +1003,7 @@ tr:hover{background:#f9fafb}
                 <option value="temp">Temperature</option>
                 <option value="vpd">VPD</option>
               </select>
-              <select id="wind-hour-sel" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;color:var(--text);background:var(--surface)" onchange="redrawWindRose()" title="Filtrar por período do dia">
+              <select id="wind-hour-sel" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;color:var(--text);background:var(--surface)" onchange="redrawWindRose()" title="Filter by time of day">
                 <option value="all">All day</option>
                 <option value="dawn">Dawn 0–6h</option>
                 <option value="morning">Morning 6–12h</option>
@@ -1268,11 +1269,11 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-crit',0)">Data</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',1)">Period</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',2)" title="Temperature at HDW peak hour">T pico °C</th>
-                <th class="sortable" onclick="sortTable('tbl-crit',3)" title="Relative humidity at HDW peak hour">HR pico %</th>
+                <th class="sortable" onclick="sortTable('tbl-crit',3)" title="Relative humidity at HDW peak hour">RH peak %</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',4)" title="Wind speed at HDW peak hour (km/h)">V pico km/h</th>
                 <th class="sortable" onclick="sortTable('tbl-crit',5)" title="Peak instantaneous HDW for period">HDW max</th>
                 <th>Classe HDW</th>
-                <th class="sortable" onclick="sortTable('tbl-crit',7)" title="Daily HDWc — same value as chartDW">HDWc dia ⓘ</th>
+                <th class="sortable" onclick="sortTable('tbl-crit',7)" title="Daily HDWc — same value as chartDW">HDWc daily ⓘ</th>
                 <th>Alerta</th>
               </tr>
             </thead>
@@ -1477,7 +1478,7 @@ function uploadSoglieJSON(input) {
         alphaUpdateBadge();
         _soglieUIUpdate(displayLabel + ' (engine config completo)');
         _engineConfigBadgeUpdate();
-        showToast(`⚙ Engine config "${displayLabel}" — α + soglie + parametri motore — ricalcolo…`, 3500);
+        showToast(`⚙ Engine config "${displayLabel}" — α + thresholds + engine params — recalculating…`, 3500);
 
       // ── Mode A: full preset (mesi + hdwc_peak, optional alpha) ──────────
       } else if (obj.mesi && obj.hdwc_peak) {
@@ -1535,7 +1536,7 @@ function uploadSoglieJSON(input) {
         alphaUpdateBadge();
         // Update file label area to confirm
         _soglieUIUpdate(displayLabel + ' (α only)');
-        showToast(`✓ α "${displayLabel}" caricato — ricalcolo…`, 2500);
+        showToast(`✓ α "${displayLabel}" loaded — recalculating…`, 2500);
 
       } else {
         throw new Error('Formato non riconosciuto. Usa Modo C ({meta,alpha.alpha_ref,soglie}), Modo A ({label,mesi,hdwc_peak}) o Modo B ({label,alpha:[12]})');
@@ -1546,7 +1547,7 @@ function uploadSoglieJSON(input) {
       if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
 
     } catch(err) {
-      showToast('⚠ JSON non valido: ' + err.message, 4500);
+      showToast('⚠ Invalid JSON: ' + err.message, 4500);
     }
   };
   reader.readAsText(file);
@@ -1558,9 +1559,9 @@ function clearCustomSoglie() {
   try { localStorage.removeItem(CUSTOM_SOGLIE_LS_KEY); } catch(e) {}
   // Also reset engine config if it was loaded with the soglie
   if (_activeEngineConfig) _clearEngineConfig();
-  document.getElementById('soglieCustomLabel').textContent = 'no file';
+  document.getElementById('soglieCustomLabel').textContent = 'No file';
   document.getElementById('soglieCustomClear').style.display = 'none';
-  showToast('Soglie + engine config rimossi — preset regionale attivo', 2000);
+  showToast('Thresholds + engine config removed — regional preset active', 2000);
   const lat = parseFloat(document.getElementById('iLat')?.value);
   const lng = parseFloat(document.getElementById('iLon')?.value);
   if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
@@ -1586,20 +1587,20 @@ const CLASSI_RETORNO = [
   
   
   
-  {max:.001,label:'EVENTO ÚNICO',                color:'#374151',note:'Ardeu apenas 1 vez — ciclo não calculável'},
-  {max:.33, label:'RISCO ESTRUTURAL EXTREMO',    color:'#7f1d1d',note:'Cycle exceeded mais de 3× — biomassa extremamente acumulada'},
-  {max:.50, label:'RISCO ESTRUTURAL MUITO ALTO', color:'#b91c1c',note:'Years without fire superam o double the mean return period'},
-  {max:.75, label:'RISCO ESTRUTURAL ALTO',       color:'#e85d2f',note:'Years without fire clearly exceed mean return'},
-  {max:.90, label:'ACIMA DO CICLO',              color:'#d4740a',note:'Return cycle exceeded — combustível acumulado acima do normal'},
-  {max:1.01,label:'CICLO TEÓRICO',               color:'#b45309',note:'No ponto de retorno histórico esperado'},
-  {max:1.33,label:'MODERATE RISK-ALTO',         color:'#ca8a04',note:'75–100% of cycle elapsed — fuel accumulating'},
-  {max:2.00,label:'MODERATE RISK',              color:'#d97706',note:'50–75% of cycle elapsed — risco crescente'},
-  {max:4.00,label:'RISCO ESTRUTURAL BAIXO',      color:'#15803d',note:'Recent fire — vegetation still recovering'},
-  {max:9999,label:'RISCO ESTRUTURAL MÍNIMO',     color:'#14532d',note:'Area with rare historical fire activity'},
+  {max:.001,label:'SINGLE EVENT',                color:'#374151',note:'Burned only once — cycle not calculable'},
+  {max:.33, label:'STRUCTURAL RISK · EXTREME',   color:'#7f1d1d',note:'Cycle exceeded more than 3× — biomass extremely accumulated'},
+  {max:.50, label:'STRUCTURAL RISK · VERY HIGH', color:'#b91c1c',note:'Years without fire exceed double the mean return period'},
+  {max:.75, label:'STRUCTURAL RISK · HIGH',      color:'#e85d2f',note:'Years without fire clearly exceed mean return'},
+  {max:.90, label:'ABOVE CYCLE',                 color:'#d4740a',note:'Return cycle exceeded — fuel accumulated above normal'},
+  {max:1.01,label:'THEORETICAL CYCLE',           color:'#b45309',note:'At expected historical return point'},
+  {max:1.33,label:'MODERATE-HIGH RISK',          color:'#ca8a04',note:'75–100% of cycle elapsed — fuel accumulating'},
+  {max:2.00,label:'MODERATE RISK',               color:'#d97706',note:'50–75% of cycle elapsed — risk increasing'},
+  {max:4.00,label:'STRUCTURAL RISK · LOW',       color:'#15803d',note:'Recent fire — vegetation still recovering'},
+  {max:9999,label:'STRUCTURAL RISK · MINIMAL',   color:'#14532d',note:'Area with rare historical fire activity'},
 ];
 
 const CHART_LABELS = {
-  'chart-temp': 'Temperature','chart-hdw': 'HDW','chart-prec': 'Precipitation/RH/Wind','chart-wind': 'Wind Roseentos',
+  'chart-temp': 'Temperature','chart-hdw': 'HDW','chart-prec': 'Precipitation/RH/Wind','chart-wind': 'Wind Rose',
   'chart-72temp': '🌡 Temperature & RH · 72h','chart-72hdw': '🔥 HDW_eff & Wind · 72h',
   'chart-72prec': '💧 Precipitation & RH · 72h','chart-72wind': '🌬 Wind Rose · 72h'
 };
@@ -1656,7 +1657,7 @@ function _toggleMapExpand() {
     wrap.style.left = wrap.style.top = wrap.style.width = wrap.style.height = '';
   }
   setTimeout(() => { if (window.map) map.invalidateSize(); }, 60);
-  if (_mapExpanded) showToast('Mappa floating — trascina per spostare · ridimensiona dal bordo ↘', 3000);
+  if (_mapExpanded) showToast('Floating map — drag to move · resize from edge ↘', 3000);
 }
 
 // ── Drag del floating map (via drag handle) ──────────────────────────────────
@@ -1804,14 +1805,14 @@ function updateEnginePointDisplay(lat, lng) {
     <button onclick="engineSetDefault('${eng.id || activeId}')"
       style="margin-left:auto;font-size:9px;padding:1px 5px;border:1px solid var(--border);
              border-radius:3px;background:none;cursor:pointer;color:var(--dim)"
-      title="Imposta come default">⭐</button>
+      title="Set as default">⭐</button>
   `;
 }
 
 function goManual(){
   const lat=parseFloat(document.getElementById('iLat').value.replace(',','.'));
   const lng=parseFloat(document.getElementById('iLon').value.replace(',','.'));
-  if(isNaN(lat)||isNaN(lng)){alert('Coordinates inválidas');return;}
+  if(isNaN(lat)||isNaN(lng)){alert('Invalid coordinates');return;}
   map.setView([lat,lng],Math.max(map.getZoom(),10));
   selectPoint(lat,lng);
 }
@@ -2103,9 +2104,9 @@ function toggleICNFLayer() {
       _icnfLayer.addTo(map);
       if (btn) { btn.style.background='rgba(232,93,47,.1)'; btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)'; btn.textContent='Ocultar layer'; }
       if (leg) leg.style.display = 'block';
-      showToast('Layer ICNF ativado' + (map.getZoom()<9?' | zoom per vedere perimetri':''), 2500);
+      showToast('ICNF layer activated' + (map.getZoom()<9?' | zoom in to see perimeters':''), 2500);
     } else {
-      showToast('Layer ICNF nao disponivel', 2500);
+      showToast('ICNF layer not available', 2500);
       _icnfVisible = false;
     }
   } else {
@@ -2482,7 +2483,7 @@ function parseCSVArchive(text) {
     });
   }
 
-  if (hourly.length === 0) throw new Error('Nenhuma linha de dados válida encontrada');
+  if (hourly.length === 0) throw new Error('No valid data row found');
 
   // Sort ascending by datetime
   hourly.sort((a, b) => a.dtLocal - b.dtLocal);
@@ -2588,7 +2589,7 @@ function loadCSVArchive(input) {
       _csvArchive = parsed;
       const lbl = document.getElementById('csvArchiveLabel');
       const hasGustNote = parsed._hasGust ? '' : ' · sem raffica (W_eff=W_mean)';
-      lbl.textContent = `✓ ${file.name} · ${parsed.nDays} dias · ${parsed.nHours}h${hasGustNote}`;
+      lbl.textContent = `✓ ${file.name} · ${parsed.nDays} days · ${parsed.nHours}h${hasGustNote}`;
       lbl.style.color = 'var(--accent)';
       document.getElementById('csvApplyBtn').style.display = 'block';
       document.getElementById('eventMarkersRow').style.display = 'block';
@@ -2600,7 +2601,7 @@ function loadCSVArchive(input) {
       if (!ig.value) ig.setAttribute('min', parsed.dateStart);
       if (!co.value) co.setAttribute('max', parsed.dateEnd);
 
-      showToast(`✓ CSV carregado: ${parsed.nDays} dias (${parsed.dateStart} → ${parsed.dateEnd})`, 3000);
+      showToast(`✓ CSV loaded: ${parsed.nDays} days (${parsed.dateStart} → ${parsed.dateEnd})`, 3000);
     } catch(err) {
       console.error('[CSV]', err);
       showToast('⚠ CSV: ' + err.message, 5000);
@@ -2618,7 +2619,7 @@ async function applyCSVArchive() {
   const lat = _csvArchive._stationLat || _csvArchive._lat || _mapLat;
   const lon = _csvArchive._stationLon || _csvArchive._lon || _mapLng;
   if (!lat || !lon || isNaN(lat) || isNaN(lon)) {
-    showToast('⚠ Coordenadas not founds no CSV e nenhum ponto selecionado', 3000); return;
+    showToast('⚠ Coordinates not found in CSV and no point selected', 3000); return;
   }
   // Place map marker at station location with station name
   const stationLabel = _csvArchive._stationName || 'Estação CSV';
@@ -2719,7 +2720,7 @@ async function applyCSVArchive() {
       }, 350);
     }
 
-    showToast('✓ CSV · α: ' + _activePreset.key + ' · soglie ' + _getRefMonthKey().toUpperCase(), 3500);
+    showToast('✓ CSV · α: ' + _activePreset.key + ' · thresholds ' + _getRefMonthKey().toUpperCase(), 3500);
   } catch(err) {
     showToast('⚠ Error applying archive: ' + err.message, 4000);
     console.error(err);
@@ -2804,10 +2805,10 @@ function _validateArchiveDate() {
   if (!errEl) return true;
   const maxDate = _era5MaxDate();
   if (start && end && start >= end) {
-    errEl.textContent = '⚠ Início deve ser anterior ao fim'; errEl.style.display = 'block'; return false;
+    errEl.textContent = '⚠ Start must be earlier than end'; errEl.style.display = 'block'; return false;
   }
   if (end && end > maxDate) {
-    errEl.textContent = `⚠ Data fim max: ${maxDate} (ERA5 lag ${ERA5_LAG_DAYS}gg)`; errEl.style.display = 'block'; return false;
+    errEl.textContent = `⚠ Max end date: ${maxDate} (ERA5 lag ${ERA5_LAG_DAYS}d)`; errEl.style.display = 'block'; return false;
   }
   errEl.style.display = 'none'; return true;
 }
@@ -2857,11 +2858,11 @@ function _rebuildSliderTicks(allDates, sliderEnd) {
 async function applyArchiveDateRange() {
   const start = document.getElementById('archiveDateStart')?.value;
   const end   = document.getElementById('archiveDateEnd')?.value;
-  if (!start || !end) { showToast('Select data início e fim', 2500); return; }
-  if (!_validateArchiveDate()) { showToast('Verificar datas introduzidas', 2500); return; }
-  if (start >= end)   { showToast('Data início deve ser anterior ao fim', 2500); return; }
+  if (!start || !end) { showToast('Select start and end dates', 2500); return; }
+  if (!_validateArchiveDate()) { showToast('Check the entered dates', 2500); return; }
+  if (start >= end)   { showToast('Start date must be earlier than end', 2500); return; }
   const lat = _mapLat, lng = _mapLng;
-  if (isNaN(lat) || isNaN(lng)) { showToast('Select um ponto no mapa primeiro', 2500); return; }
+  if (isNaN(lat) || isNaN(lng)) { showToast('Select a point on the map first', 2500); return; }
   _eventMarkers = {
     ignition:    document.getElementById('archiveDateIgnicao')?.value   || null,
     containment: document.getElementById('archiveDateContencao')?.value || null,
@@ -2903,7 +2904,7 @@ async function applyArchiveDateRange() {
     ]);
     // Toast informativo se l'utente ha scelto un range pre-2022: Haines non calcolabile.
     if (!atmoHistAvailable) {
-      showToast('Haines Mid non disponibile per date < 2022 (archivio ERA5 senza pressure levels)', 4000);
+      showToast('Haines Mid unavailable for dates < 2022 (ERA5 archive without pressure levels)', 4000);
     }
     const merged = _mergeERA5WithForecast(aD, fD, wD, endCapped, aAtmoD);
 
@@ -2942,9 +2943,9 @@ async function applyArchiveDateRange() {
       }, 350);
     }
 
-    showToast('ERA5 ' + start + ' → ' + end + ' (' + nd + ' d) · α: ' + _activePreset.key + ' · soglie ' + _getRefMonthKey().toUpperCase(), 3500);
+    showToast('ERA5 ' + start + ' → ' + end + ' (' + nd + ' d) · α: ' + _activePreset.key + ' · thresholds ' + _getRefMonthKey().toUpperCase(), 3500);
   } catch(err) {
-    console.error('[ERA5]', err); showToast('Erro ERA5: ' + err.message, 4000);
+    console.error('[ERA5]', err); showToast('ERA5 error: ' + err.message, 4000);
   } finally { btn.textContent = 'Load ERA5 + forecast'; btn.disabled = false; }
 }
 function clearArchiveDateRange() {
@@ -2957,7 +2958,7 @@ function clearArchiveDateRange() {
   });
   var sp = document.getElementById('eventSummaryPanel'); if (sp) sp.style.display = 'none';
   if (!isNaN(_mapLat) && !isNaN(_mapLng)) setTimeout(function(){ selectPoint(_mapLat, _mapLng); }, 100);
-  showToast('Arquivo ERA5 rimosso', 2000);
+  showToast('ERA5 archive removed', 2000);
 }
 // Dominant wind direction from hourly data.
 // Strategy: direction at the hour of maximum wind speed (most physically meaningful
@@ -3241,19 +3242,19 @@ function _renderEventSummary(meteo) {
   panel.style.display = 'block';
   panel.innerHTML = `
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-         color:#e85d2f;margin-bottom:6px">🔥 Análise do Evento</div>
+         color:#e85d2f;margin-bottom:6px">🔥 Event Analysis</div>
     <div style="font-size:10px;color:var(--dim);margin-bottom:5px">
-      ${fmt(_eventMarkers.ignition)} → ${fmt(_eventMarkers.containment)} · ${durDays} dias</div>
+      ${fmt(_eventMarkers.ignition)} → ${fmt(_eventMarkers.containment)} · ${durDays} days</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:10px">
-      <div style="color:var(--dim)">HDWc na ignição</div>
+      <div style="color:var(--dim)">HDWc at ignition</div>
       <div style="font-weight:700;color:${cl.color}">${hdwcAtIgnition?.toFixed(1)} <span style="font-size:9px">${cl.label}</span></div>
-      <div style="color:var(--dim)">HDW_eff máx evento</div>
+      <div style="color:var(--dim)">HDW_eff max event</div>
       <div style="font-weight:700;color:#1e3a5f">${maxHDW.toFixed(1)} (${new Date(maxHDWcDate+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'})})</div>
-      <div style="color:var(--dim)">Dry streak ignição</div>
-      <div style="font-weight:700;color:#1e3a5f">${dryAtIgnition} dias</div>
-      <div style="color:var(--dim)">Night score médio</div>
+      <div style="color:var(--dim)">Dry streak at ignition</div>
+      <div style="font-weight:700;color:#1e3a5f">${dryAtIgnition} days</div>
+      <div style="color:var(--dim)">Night score mean</div>
       <div style="font-weight:700;color:#1e3a5f">${nsAvg.toFixed(1)}</div>
-      ${_eventMarkers.areaBruciata ? `<div style="color:var(--dim)">Área ardida</div><div style="font-weight:700;color:#1e3a5f">${_eventMarkers.areaBruciata.toLocaleString('en-GB')} ha</div>` : ''}
+      ${_eventMarkers.areaBruciata ? `<div style="color:var(--dim)">Burned area</div><div style="font-weight:700;color:#1e3a5f">${_eventMarkers.areaBruciata.toLocaleString('en-GB')} ha</div>` : ''}
     </div>`;
 }
 
@@ -3312,14 +3313,14 @@ function engineUnlockGeo() {
   _activeEngineId = 'greece';
   renderEnginePresetPanel();
   updateEngineActiveBar();
-  showToast('Geo-detection sbloccata — auto al prossimo punto', 2000);
+  showToast('Geo-detection unlocked — auto on next point', 2000);
 }
 
 function _autoSelectAlphaForArchive(lat, lon, dateStr) {
   // GUARD: blocca geo-detection se l'utente ha scelto un engine (Apply o ⭐ default)
   if (_engineUserLocked) {
     const defEng = ENGINES[_activeEngineId];
-    showToast(`Engine: ${defEng?.flag||''} ${defEng?.short||_activeEngineId} · ✕ per sbloccare`, 1500);
+    showToast(`Engine: ${defEng?.flag||''} ${defEng?.short||_activeEngineId} · ✕ to unlock`, 1500);
     return;
   }
 
@@ -3519,7 +3520,7 @@ function _engineConfigSoglie(cfg) {
   // Converts soglie.hdwc from new 12×5 format to existing {mesi:{jan:{p25..p95}}, hdwc_peak:{}} format
   if (!cfg?.soglie?.hdwc?.mensile) return null;
   const MKEYS = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
-  const MLABELS = ['31/Jan','28/Fev','31/Mar','30/Abr','31/Mai','30/Jun','31/Jul','31/Ago','30/Set','31/Out','30/Nov','31/Dez'];
+  const MLABELS = ['31/Jan','28/Feb','31/Mar','30/Apr','31/May','30/Jun','31/Jul','31/Aug','30/Sep','31/Oct','30/Nov','31/Dec'];
   const MMDD    = ['01-31','02-28','03-31','04-30','05-31','06-30','07-31','08-31','09-30','10-31','11-30','12-31'];
   const rows = cfg.soglie.hdwc.mensile;
   const mesi = {};
@@ -3576,7 +3577,7 @@ function _clearEngineConfig() {
   });
   try { localStorage.removeItem(ENGINE_CONFIG_LS_KEY); } catch(e) {}
   _engineConfigBadgeUpdate();
-  showToast('Engine config reset ai valori di default', 2000);
+  showToast('Engine config reset to defaults', 2000);
 }
 
 // Restore engine config from localStorage on init
@@ -4560,7 +4561,7 @@ function _refreshIcnfPanelCustomLayers(lat, lng) {
 let _alphaCalibCache = null;
 
 function exportAlphaCalibration() {
-  if (!_alphaCalibCache) { showToast('No data di calibrazione disponibile', 2000); return; }
+  if (!_alphaCalibCache) { showToast('No calibration data available', 2000); return; }
   const c = _alphaCalibCache;
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -4635,7 +4636,7 @@ function exportAlphaCalibration() {
   a.download = `alpha_calib_${loc}_${c.period?.slice(0,4)||'era5'}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('α calibrati esportati · importa nel Config Builder v5', 3000);
+  showToast('Calibrated α exported · import in Config Builder v5', 3000);
 }
 
 // ── fine HDWc v24 Engine ───────────────────────────────────────────────
@@ -4853,7 +4854,7 @@ function applyDefaultEnginePreset() {
   _soglieUIUpdate(displayLabel + ' (preset default)');
   _engineConfigBadgeUpdate();
   renderEnginePresetPanel();
-  showToast('Engine preset "' + displayLabel + '" applicato — ricalcolo…', 3000);
+  showToast('Engine preset "' + displayLabel + '" applied — recalculating…', 3000);
   const lat = parseFloat(document.getElementById('iLat')?.value);
   const lng = parseFloat(document.getElementById('iLon')?.value);
   if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
@@ -4949,7 +4950,7 @@ function engineSetDefault(id) {
   try { localStorage.setItem(FM_ENGINE_LS_KEY, id); } catch(e) {}
   renderEnginePresetPanel();
   updateEngineActiveBar();
-  showToast(`Engine default fissato: ${ENGINES[id].flag} ${ENGINES[id].short}`, 2000);
+  showToast(`Engine default set: ${ENGINES[id].flag} ${ENGINES[id].short}`, 2000);
 }
 
 // Applica engine (full config) e aggiorna stato global
@@ -4982,7 +4983,7 @@ function engineApply(id, userTriggered=true) {
   renderEnginePresetPanel();
   updateEngineActiveBar();
   if (userTriggered) {
-    showToast(`Engine "${eng.short}" applicato — ricalcolo…`, 2800);
+    showToast(`Engine "${eng.short}" applied — recalculating…`, 2800);
     const lat = parseFloat(document.getElementById('iLat')?.value);
     const lng = parseFloat(document.getElementById('iLon')?.value);
     if (!isNaN(lat) && !isNaN(lng)) setTimeout(() => selectPoint(lat, lng), 300);
@@ -5016,7 +5017,7 @@ function engineRemove(id) {
   delete ENGINES[id];
   _saveCustomEngines();
   renderEnginePresetPanel();
-  showToast(`Engine "${id}" rimosso`, 1500);
+  showToast(`Engine "${id}" removed`, 1500);
 }
 
 function _saveCustomEngines() {
@@ -5052,7 +5053,7 @@ function _geoAutoDetectEngine(lat, lon) {
   // 3. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)
   engineApply(bestEng.id, false);
   updateEngineActiveBar();
-  showToast(`⬡ Zona: ${bestEng.flag || '📦'} ${bestEng.short}`, 2200);
+  showToast(`⬡ Zone: ${bestEng.flag || '📦'} ${bestEng.short}`, 2200);
 }
 
 function detectEngineFromCoords(lat, lon) {
@@ -5093,13 +5094,13 @@ function loadConfigPackage(file) {
         const id = (raw.meta.region_id || raw.meta.preset_name || `custom_${Date.now()}`)
           .toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
         engineAddCustom(id, raw);
-        showToast(`Engine "${raw.meta.preset_name || id}" caricato`, 2500);
+        showToast(`Engine "${raw.meta.preset_name || id}" loaded`, 2500);
         return;
       } else {
         // Oggetto chiave→config (formato pt_zones)
         configs = Object.values(raw);
       }
-      if (!configs.length) { showToast('⚠ Nessun config trovato nel pacchetto', 2000); return; }
+      if (!configs.length) { showToast('⚠ No config found in package', 2000); return; }
       let count = 0;
       const names = [];
       for (const cfg of configs) {
@@ -5119,7 +5120,7 @@ function loadConfigPackage(file) {
         _engineUserLocked = false;
         try { localStorage.removeItem(FM_ENGINE_LS_KEY); } catch(e) {}
       }
-      showToast(`📦 Pacchetto caricato: ${count} engine${hasBbox?' · geo-detection attiva':''} (${names.slice(0,3).join(', ')}${names.length>3?'…':''})`, 4000);
+      showToast(`📦 Package loaded: ${count} engine${hasBbox?' · geo-detection active':''} (${names.slice(0,3).join(', ')}${names.length>3?'…':''})`, 4000);
       renderEnginePresetPanel();
     } catch(err) {
       showToast('⚠ Error loading JSON package: ' + err.message, 3000);
@@ -5135,7 +5136,7 @@ function toggleEngineList() {
   if (!panel) return;
   const open = panel.style.display === 'none';
   panel.style.display = open ? 'block' : 'none';
-  if (btn) btn.textContent = open ? '▲ Chiudi' : '▼ Lista';
+  if (btn) btn.textContent = open ? '▲ Close' : '▼ List';
   if (open) renderEnginePresetPanel();
 }
 
@@ -5194,7 +5195,7 @@ function _engineRow(eng, activeId) {
     <span style="font-size:11px;min-width:18px">${eng.flag}</span>
     <span style="font-size:10px;flex:1;color:${isActive?'var(--text)':'var(--mid)'};
                  font-weight:${isActive?700:400}">${eng.short}</span>
-    <button onclick="engineApply('${eng.id}',true)" title="Applica"
+    <button onclick="engineApply('${eng.id}',true)" title="Apply"
       style="font-size:9px;padding:1px 7px;border:1px solid ${isActive?'var(--accent)':'var(--border)'};
              border-radius:3px;background:${isActive?'rgba(232,93,47,.15)':'none'};
              cursor:pointer;color:${isActive?'var(--accent)':'var(--dim)'};white-space:nowrap">
@@ -5202,7 +5203,7 @@ function _engineRow(eng, activeId) {
     <button onclick="engineSetDefault('${eng.id}')" title="${isDefault?'Default attivo':'Imposta default'}"
       style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;
              background:none;cursor:pointer;color:${isDefault?'#f59e0b':'var(--dim)'}">⭐</button>
-    ${eng._custom?`<button onclick="engineRemove('${eng.id}')" title="Rimuovi"
+    ${eng._custom?`<button onclick="engineRemove('${eng.id}')" title="Remove"
       style="font-size:9px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;
              background:none;cursor:pointer;color:var(--dim)">🗑</button>`:''}
   </div>`;
@@ -5321,13 +5322,13 @@ function renderPanel(icnf,meteo){
     const critHTML=crits.map(p=>{const g=p.end-p.start+1;const mv=Math.max(...hdwCum.slice(p.start,p.end+1));const s=hdwCumClass(mv);return`<div class="crit-box"><div class="t">⚠ Critical Period · ${g} days</div><div>${dayL[p.start]} → ${dayL[p.end]} · Peak HDWc: <strong>${mv.toFixed(1)}</strong> · <span style="color:${s.color};font-weight:700">${s.label}</span></div></div>`;}).join('');
     updateSemaforo(_currentRV, hdwC||0, _currentSimTopFire);
     document.getElementById('hdwcSummary').innerHTML=`
-    <div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">${_archiveMode ? '🌡 HDWc · ' + (_archiveRefDate ? new Date(_archiveRefDate+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : 'Arquivo') : '🌡 Cumulative HDW · Today'}</span><span class="sblock-arrow">▼</span></div>
+    <div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">${_archiveMode ? '🌡 HDWc · ' + (_archiveRefDate ? new Date(_archiveRefDate+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : 'Archive') : '🌡 Cumulative HDW · Today'}</span><span class="sblock-arrow">▼</span></div>
     <div class="sblock-body">
-      <div class="hdwc-badge" style="color:${cc.color};background:${cc.bg};border-color:${cc.border}">● HDWc: <strong>${hdwC!=null?hdwC.toFixed(1):'—'}</strong> · ${cc.label}${hdwcTrendHTML(hdwCum,ti)}${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[_refMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];var _aidx=(_archiveMode&&d&&d._csvBoundary)?d.time.reduce(function(b,dt,i){return dt<=d._csvBoundary?i:b;},hdwCum.length-1):hdwCum.length-1;var pk=Math.max.apply(null,hdwCum.slice(0,_aidx+1));if(!ms||pk<=ms.p95)return '';return '<span style="margin-left:6px;background:rgba(127,29,29,.15);border:1.5px solid rgba(127,29,29,.5);border-radius:4px;padding:2px 7px;color:#7f1d1d;font-family:var(--mono);font-size:10px;font-weight:700">&#9888; SEASONAL ANOMALY</span>';})()} ${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[_refMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];if(!ms||ms.low_confidence!==true)return '';var ny=ms.n_years!=null?' ('+ms.n_years+' yr)':'';return '<span style=\'margin-left:6px;background:rgba(161,98,7,.15);border:1px solid rgba(161,98,7,.4);border-radius:4px;padding:2px 7px;color:#92400e;font-family:var(--mono);font-size:10px;font-weight:700\'>&#9888; DATI INSUFF.'+ny+'</span>';})()} </div>
-      <div class="irow"><span class="l">HDW_inst oggi</span><span class="v" style="font-family:var(--mono)">${hdwArr[ti]!=null?hdwArr[ti].toFixed(1):'—'}</span></div>
-      <div class="irow"><span class="l">HDW_eff oggi</span><span class="v" style="font-family:var(--mono);color:${hdwAlphas&&hdwAlphas[ti]!=null?'var(--accent)':'inherit'}">${_hdwEffArr&&_hdwEffArr[ti]!=null?_hdwEffArr[ti].toFixed(1):'—'}</span></div>
-      <div class="alpha-row"><span class="alpha-lbl">Memória α</span><div class="alpha-bar"><div class="alpha-fill" style="width:${(alpha*100).toFixed(0)}%;background:${alphaColor}"></div></div><span class="alpha-val">${alpha.toFixed(2)}</span></div>
-      <div style="font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono)">${wu_hdw2?'✓ Warmup: 21 days históricos':'⚠ Sem warmup histórico'}${_archiveMode?' · <span style="color:#1e3a5f;font-weight:700">📂 CSV+Forecast</span>':''}</div>
+      <div class="hdwc-badge" style="color:${cc.color};background:${cc.bg};border-color:${cc.border}">● HDWc: <strong>${hdwC!=null?hdwC.toFixed(1):'—'}</strong> · ${cc.label}${hdwcTrendHTML(hdwCum,ti)}${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[_refMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];var _aidx=(_archiveMode&&d&&d._csvBoundary)?d.time.reduce(function(b,dt,i){return dt<=d._csvBoundary?i:b;},hdwCum.length-1):hdwCum.length-1;var pk=Math.max.apply(null,hdwCum.slice(0,_aidx+1));if(!ms||pk<=ms.p95)return '';return '<span style="margin-left:6px;background:rgba(127,29,29,.15);border:1.5px solid rgba(127,29,29,.5);border-radius:4px;padding:2px 7px;color:#7f1d1d;font-family:var(--mono);font-size:10px;font-weight:700">&#9888; SEASONAL ANOMALY</span>';})()} ${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[_refMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];if(!ms||ms.low_confidence!==true)return '';var ny=ms.n_years!=null?' ('+ms.n_years+' yr)':'';return '<span style=\'margin-left:6px;background:rgba(161,98,7,.15);border:1px solid rgba(161,98,7,.4);border-radius:4px;padding:2px 7px;color:#92400e;font-family:var(--mono);font-size:10px;font-weight:700\'>&#9888; LOW DATA'+ny+'</span>';})()} </div>
+      <div class="irow"><span class="l">HDW_inst today</span><span class="v" style="font-family:var(--mono)">${hdwArr[ti]!=null?hdwArr[ti].toFixed(1):'—'}</span></div>
+      <div class="irow"><span class="l">HDW_eff today</span><span class="v" style="font-family:var(--mono);color:${hdwAlphas&&hdwAlphas[ti]!=null?'var(--accent)':'inherit'}">${_hdwEffArr&&_hdwEffArr[ti]!=null?_hdwEffArr[ti].toFixed(1):'—'}</span></div>
+      <div class="alpha-row"><span class="alpha-lbl">Memory α</span><div class="alpha-bar"><div class="alpha-fill" style="width:${(alpha*100).toFixed(0)}%;background:${alphaColor}"></div></div><span class="alpha-val">${alpha.toFixed(2)}</span></div>
+      <div style="font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono)">${wu_hdw2?'✓ Warmup: 21 historical days':'⚠ No historical warmup'}${_archiveMode?' · <span style="color:#1e3a5f;font-weight:700">📂 CSV+Forecast</span>':''}</div>
       ${(()=>{var _aidx2=(_archiveMode&&d&&d._csvBoundary)?d.time.reduce(function(b,dt,i){return dt<=d._csvBoundary?i:b;},hdwCum.length-1):hdwCum.length-1;var _archSlice=hdwCum.slice(0,_aidx2+1);var _pk=Math.max.apply(null,_archSlice);var _pi=hdwCum.indexOf(_pk);var _pd=_pi>=0?new Date(dates[_pi]+"T12:00:00").toLocaleDateString('en-GB',{day:"2-digit",month:"2-digit"}):"";return hdwcSoglieHTML(hdwC,_pk,_pd);})()} 
       ${critHTML}
     </div></div>`;
@@ -5355,37 +5356,37 @@ function renderICNFBlock(a){
   if(!isNaN(rv)){
     const _ad=anosDesde;  
     const _ratio=(!isNaN(retMe)&&retMe>0)?(_ad/retMe):null;
-    const _rs=_ratio?`<strong>${_ad} anos</strong> sem fogo vs média de <strong>${retMe.toFixed(1)} anos</strong> = <strong>${_ratio.toFixed(1)}× o ciclo</strong>. `:'';
-    if(rv<=.001) interp=`Área ardeu apenas <strong>uma vez</strong> in 1975–2022. Cycle not calculable.`;
-    else if(rv<=.33)interp=`${_rs}Cycle exceeded mais de <strong>3×</strong>. Extreme biomass accumulation — <strong>extreme structural risk</strong>.`;
-    else if(rv<=.50)interp=`${_rs}Years without fire superam o <strong>double the mean return period</strong>. Structural risk <strong>very high</strong>.`;
+    const _rs=_ratio?`<strong>${_ad} years</strong> without fire vs mean of <strong>${retMe.toFixed(1)} years</strong> = <strong>${_ratio.toFixed(1)}× cycle</strong>. `:'';
+    if(rv<=.001) interp=`Area burned only <strong>once</strong> in 1975–2022. Cycle not calculable.`;
+    else if(rv<=.33)interp=`${_rs}Cycle exceeded more than <strong>3×</strong>. Extreme biomass accumulation — <strong>extreme structural risk</strong>.`;
+    else if(rv<=.50)interp=`${_rs}Years without fire exceed <strong>double the mean return period</strong>. Structural risk <strong>very high</strong>.`;
     else if(rv<=.75)interp=`${_rs}Years without fire clearly exceed mean return. <strong>High structural risk</strong>.`;
-    else if(rv<=.90)interp=`${_rs}Ciclo de retorno <strong>superado</strong>. Fuel type acumulado acima do normal.`;
-    else if(rv<=1.01)interp=`${_rs}No <strong>ciclo teórico</strong> de retorno — ignition probability at historical peak.`;
-    else if(rv<=1.33)interp=`${_rs}<strong>75–100% of cycle elapsed</strong>. Fuel type em acumulação progressiva — risco moderado-alto.`;
-    else if(rv<=2.00)interp=`${_rs}<strong>50–75% of cycle elapsed</strong>. Vegetação em fase de acumulação — moderate and increasing risk.`;
+    else if(rv<=.90)interp=`${_rs}Return cycle <strong>exceeded</strong>. Fuel accumulated above normal.`;
+    else if(rv<=1.01)interp=`${_rs}At <strong>theoretical return cycle</strong> — ignition probability at historical peak.`;
+    else if(rv<=1.33)interp=`${_rs}<strong>75–100% of cycle elapsed</strong>. Fuel in progressive accumulation — moderate-high risk.`;
+    else if(rv<=2.00)interp=`${_rs}<strong>50–75% of cycle elapsed</strong>. Vegetation in accumulation phase — moderate and increasing risk.`;
     else interp=`${_rs}Structural risk <strong>historically low</strong>.`;
   }
   return`
-  <div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">📊 Indicador de Return · ICNF</span><span class="sblock-arrow">▼</span></div>
+  <div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">📊 Return Indicator · ICNF</span><span class="sblock-arrow">▼</span></div>
   <div class="sblock-body">
     <div class="ret-big"><div class="ret-num" style="color:${cl.color}">${isNaN(rv)?'—':rv.toFixed(3)}</div><div class="ret-cls" style="color:${cl.color}">${cl.label}</div>${cl.note?`<div class="ret-note">${cl.note}</div>`:''}</div>
     ${rv>.001?`<div class="gauge-track"><div class="gauge-fill" style="width:${pct}%;background:${cl.color}"></div><div class="gauge-mkr" style="left:${cicloX}%"></div></div>
-    <div class="gauge-lbls"><span style="color:#b91c1c">← risco alto</span><span>↑ ciclo 1.0</span><span style="color:#15803d">risco baixo →</span></div>
+    <div class="gauge-lbls"><span style="color:#b91c1c">← high risk</span><span>↑ cycle 1.0</span><span style="color:#15803d">low risk →</span></div>
     <div style="font-size:10px;color:var(--dim);margin-top:4px;text-align:center;font-family:var(--mono)">
-      ${(()=>{const _a=anosDesde;const _r=(!isNaN(retMe)&&retMe>0)?(_a/retMe):null;if(!_r)return'';const _c=_r>=3?'#7f1d1d':_r>=2?'#b91c1c':_r>=1.33?'#e85d2f':_r>=1?'#d4740a':'#15803d';return `<span style="color:${_c};font-weight:700">${_a}a sem fogo</span> ÷ <span style="font-weight:600">${retMe.toFixed(1)}a médio</span> = <span style="color:${_c};font-weight:700">${_r.toFixed(1)}× o ciclo</span>`;})()}
+      ${(()=>{const _a=anosDesde;const _r=(!isNaN(retMe)&&retMe>0)?(_a/retMe):null;if(!_r)return'';const _c=_r>=3?'#7f1d1d':_r>=2?'#b91c1c':_r>=1.33?'#e85d2f':_r>=1?'#d4740a':'#15803d';return `<span style="color:${_c};font-weight:700">${_a}y without fire</span> ÷ <span style="font-weight:600">${retMe.toFixed(1)}y mean</span> = <span style="color:${_c};font-weight:700">${_r.toFixed(1)}× cycle</span>`;})()}
     </div>`:''}
     <div class="s2">
       <div class="sc"><div class="l">No. Fires</div><div class="v">${a.n_inc_unic??'—'}</div></div>
-      <div class="sc"><div class="l">Prob. Anual</div><div class="v">${isNaN(prob)?'—':prob.toFixed(1)}<span class="u">%</span></div></div>
-      <div class="sc"><div class="l">Último</div><div class="v">${a.ano_ultimo??'—'}</div></div>
-      <div class="sc"><div class="l">Years Desde</div><div class="v">${anosDesde}</div></div>
-      <div class="sc"><div class="l">Ret. Médio</div><div class="v">${isNaN(retMe)||retMe===0?'—':retMe.toFixed(1)}<span class="u">a</span></div></div>
-      <div class="sc"><div class="l">Área</div><div class="v">${isNaN(parseFloat(a.area_ha))?'—':parseFloat(a.area_ha).toFixed(0)}<span class="u">ha</span></div></div>
+      <div class="sc"><div class="l">Annual Prob.</div><div class="v">${isNaN(prob)?'—':prob.toFixed(1)}<span class="u">%</span></div></div>
+      <div class="sc"><div class="l">Last</div><div class="v">${a.ano_ultimo??'—'}</div></div>
+      <div class="sc"><div class="l">Years Since</div><div class="v">${anosDesde}</div></div>
+      <div class="sc"><div class="l">Mean Return</div><div class="v">${isNaN(retMe)||retMe===0?'—':retMe.toFixed(1)}<span class="u">y</span></div></div>
+      <div class="sc"><div class="l">Area</div><div class="v">${isNaN(parseFloat(a.area_ha))?'—':parseFloat(a.area_ha).toFixed(0)}<span class="u">ha</span></div></div>
     </div>
   </div></div>
   ${anos.length?`<div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">📅 Years with Fire (${anos.length})</span><span class="sblock-arrow">▼</span></div><div class="sblock-body"><div class="chips">${anos.map(a=>`<span class="chip ${parseInt(a)===ultimo?'last':''}">${a}</span>`).join('')}</div></div></div>`:''}
-  ${(a.mod_comb_pt||a.n4_desc_cos2018)?`<div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">🌿 Território</span><span class="sblock-arrow">▼</span></div><div class="sblock-body">${a.mod_comb_pt?`<div class="irow"><span class="l">Fuel type</span><span class="v">${a.mod_comb_pt}</span></div>`:''}${a.n4_desc_cos2018?`<div class="irow"><span class="l">Uso Solo 2018</span><span class="v">${a.n4_desc_cos2018}</span></div>`:''}</div></div>`:''}
+  ${(a.mod_comb_pt||a.n4_desc_cos2018)?`<div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">🌿 Territory</span><span class="sblock-arrow">▼</span></div><div class="sblock-body">${a.mod_comb_pt?`<div class="irow"><span class="l">Fuel type</span><span class="v">${a.mod_comb_pt}</span></div>`:''}${a.n4_desc_cos2018?`<div class="irow"><span class="l">Land Use 2018</span><span class="v">${a.n4_desc_cos2018}</span></div>`:''}</div></div>`:''}
   ${interp?`<div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">💡 Interpretation</span><span class="sblock-arrow">▼</span></div><div class="sblock-body"><div class="interp">${interp}</div></div></div>`:''}`;
 }
 
@@ -5513,7 +5514,7 @@ function toggle72DrillMode() {
   const cappedLabel = effectiveDays < daysRange ? ` (max ${DRILL_MAX_DAYS}d)` : '';
   if (btn) {
     btn.style.background = 'var(--accent)'; btn.style.color = '#fff';
-    btn.textContent = '✕ Sair drill';
+    btn.textContent = '✕ Exit drill';
   }
   if (lbl) lbl.textContent = `🔍 ${fmt(d1)} → ${fmt(d2eff)}${cappedLabel}`;
 
@@ -5578,7 +5579,7 @@ function _drill72Apply() {
     [1, Math.min(3, effectiveDays), effectiveDays].filter((v,i,a)=>a.indexOf(v)===i).forEach((d, idx) => {
       const b = document.createElement('button');
       b.className = 'ts-preset'; b.id = 'ts72pdrill'+d;
-      b.textContent = d+'d'; b.title = d+' dia(s)';
+      b.textContent = d+'d'; b.title = d+' day(s)';
       b.onclick = () => {
         const cutMs = new Date(timesDrill[0]).getTime() + d * 86400000;
         let ei = 0;
@@ -5874,7 +5875,7 @@ function draw72HDW(times, hdws, ws, wg, wd) {
     {
       x:times, y:wg, name:'Gust km/h', type:'scatter', mode:'lines',
       line:{color:'#7c3aed',width:2.5,dash:'solid'}, yaxis:'y2',
-      hovertemplate:'Rajada: %{y:.1f} km/h<extra></extra>'
+      hovertemplate:'Gust: %{y:.1f} km/h<extra></extra>'
     },
     {
       x:times, y:ws, name:'Wind km/h', type:'scatter', mode:'lines',
@@ -5982,6 +5983,16 @@ function updateWind72Stats(hourly, startDate, endDate, filter) {
   set('ws72-hdwmax',  hdw_vals.length ? max(hdw_vals).toFixed(1)  : '—');
   // Sync to fullscreen bar AFTER DOM update
   if(_fsActiveChart==='chart-72wind') _fsSyncWind72Stats();
+
+  // v46 fix: aggiorna il numero di ore nel titolo della rosa (normale + fullscreen)
+  // invece di lasciare il "72h" statico dal markup quando il range è diverso (es. 48h, 24h).
+  const hoursLbl = n + 'h';
+  const _titleSpan = document.getElementById('chart-72wind-title-range');
+  if (_titleSpan) _titleSpan.textContent = hoursLbl;
+  if (_fsActiveChart === 'chart-72wind') {
+    const _fsT = document.getElementById('fs-title');
+    if (_fsT) _fsT.textContent = '🌬 Wind Rose · ' + hoursLbl;
+  }
 }
 
 
@@ -6213,7 +6224,7 @@ function alphaUIInit() {
     } else {
       const sog = getActiveSoglie();
       const closest = Object.keys(ALPHA_PRESETS).find(r => HDWC_SOGLIE_PRESETS[r] === sog) || 'Greece';
-      note.textContent = `★ Custom · soglie: ${closest} (α-match)`;
+      note.textContent = `★ Custom · thresholds: ${closest} (α-match)`;
     }
   }
 
@@ -6989,7 +7000,7 @@ function drawPrec(meteo,todayIdx){
 
     HDW_V2.foehn_winds.winds.forEach((w, wi) => {
       const wColor = windColors[wi];
-      const wLabel = w.label || ('Vento ' + (wi + 1));
+      const wLabel = w.label || ('Wind ' + (wi + 1));
       const fd = _compassDeg(w.from), td = _compassDeg(w.to);
 
       // Raccolgo ogni giorno che matcha direzione (ignore min_speed per density collana)
@@ -7319,7 +7330,7 @@ function drawWindRose(hourly,mode,hourFilter,dateStart,dateEnd){
 
   var el=document.getElementById('chart-wind');
   if(!hourly||!hourly.windspeed_10m||!hourly.winddirection_10m){
-    el.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#374151;font-size:12px">Dados de vento horario nao disponiveis</div>';
+    el.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#374151;font-size:12px">Hourly wind data not available</div>';
     return;
   }
 
@@ -7828,7 +7839,7 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
       <td>${windDirLabel(d.winddirection_10m_dominant?.[i])}</td>
       <td style="color:#3b82f6">${d.precipitation_sum[i]!=null?d.precipitation_sum[i].toFixed(1):'—'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'—'}</td>
-      <td class="${hdwCumClass(hc||0).label==='MUITO BAIXO'?'td-hdw-mbx':hdwCumClass(hc||0).label==='BAIXO'?'td-hdw-bx':'td-hdw-alt'}">${hc!=null?hc.toFixed(1):'—'}</td>
+      <td class="${hdwCumClass(hc||0).label==='VERY LOW'?'td-hdw-mbx':hdwCumClass(hc||0).label==='LOW'?'td-hdw-bx':'td-hdw-alt'}">${hc!=null?hc.toFixed(1):'—'}</td>
       <td style="color:${hainesCellColor};font-weight:700">${atH?atH.haines:'—'}</td>
       <td style="color:#6b7280">${atH?atH.A:'—'}</td>
       <td style="color:#6b7280">${atH?atH.B:'—'}</td>
@@ -7843,7 +7854,7 @@ function renderCritTable(meteo,hdwArr,hdwCum,todayIdx){
     ? meteo._archiveHourly
     : meteo.hourly;
   if(!hSrc?.temperature_2m){
-    document.getElementById('tbl-crit-body').innerHTML='<tr><td colspan="9" style="text-align:center;color:#374151;padding:12px">Dados horários não disponíveis</td></tr>';
+    document.getElementById('tbl-crit-body').innerHTML='<tr><td colspan="9" style="text-align:center;color:#374151;padding:12px">Hourly data not available</td></tr>';
     return;
   }
   const h = hSrc;
@@ -7897,7 +7908,7 @@ function renderCritTable(meteo,hdwArr,hdwCum,todayIdx){
   }).sort((a,b)=>a.dt.localeCompare(b.dt)||HDW_PERIODOS.indexOf(a.periodo)-HDW_PERIODOS.indexOf(b.periodo));
 
   const critSrcLabel = _archiveMode ? 'in observed archive' : 'in next 16 days';
-  document.getElementById('tbl-crit-sub').textContent=`${critRows.length} períodos com HDW ≥ 15 · ${critSrcLabel}`;
+  document.getElementById('tbl-crit-sub').textContent=`${critRows.length} periods with HDW ≥ 15 · ${critSrcLabel}`;
 
   if(!critRows.length){
     const _emptyMsg = _archiveMode ? 'No critical periods in archive (HDW < 15)' : 'No critical periods in next 16 days';
@@ -7931,7 +7942,7 @@ function renderCritTable(meteo,hdwArr,hdwCum,todayIdx){
     const h1str=`${r.dt}T${String(Math.min(r.periodo.h1,23)).padStart(2,'0')}:59:00`;
 
     
-    const peakLabel=peakHour!=null?` (pico às ${String(peakHour).padStart(2,'0')}h)`:'';
+    const peakLabel=peakHour!=null?` (peak at ${String(peakHour).padStart(2,'0')}h)`:'';
     return`<tr
       data-isodate="${r.dt}"
       data-h0="${h0str}" data-h1="${h1str}"
@@ -7941,13 +7952,13 @@ function renderCritTable(meteo,hdwArr,hdwCum,todayIdx){
       title="Values at HDW peak hour${peakLabel} — click to zoom charts">
       <td class="td-date" data-iso="${r.dt}">${new Date(r.dt+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'2-digit'})}${isToday?' ●':''}</td>
       <td data-sort="${r.periodo.h0}">${r.periodo.icon} ${r.periodo.label}<br><span style="font-size:11px;color:#374151">${r.periodo.h0}h–${r.periodo.h1}h${peakLabel}</span></td>
-      <td style="color:#e85d2f" title="T na hora de pico HDW">${peakT!=null?peakT.toFixed(1):'—'}</td>
-      <td title="HR na hora di pico HDW">${peakRH!=null?peakRH.toFixed(0)+'%':'—'}</td>
+      <td style="color:#e85d2f" title="T at HDW peak hour">${peakT!=null?peakT.toFixed(1):'—'}</td>
+      <td title="RH at HDW peak hour">${peakRH!=null?peakRH.toFixed(0)+'%':'—'}</td>
       <td title="Wind at HDW peak hour (km/h)">${peakW_ms!=null?peakW_ms.toFixed(1):'—'}</td>
       <td class="${cls.td}" style="font-weight:700">${peakHDW.toFixed(1)}</td>
       <td><span class="crit-period-badge" style="color:${hdwColor(peakHDW)};border-color:${hdwColor(peakHDW)};background:${hdwColor(peakHDW)}18">${cls.label}</span></td>
-      <td class="${hcc.label==='MUITO BAIXO'||hcc.label==='BAIXO'?'td-hdw-mbx':'td-hdw-alt'}" title="HDWc diário (acumulador α dinamico, coerente com os gráficos)">${hc!=null?hc.toFixed(1):'—'}</td>
-      <td>${peakHDW>=150?'🔴 EXTREMO':peakHDW>=80?'🔴 ALTO':peakHDW>=40?'🟠 MODERADO':peakHDW>=15?'🟡 ATENÇÃO':'—'}</td>
+      <td class="${hcc.label==='VERY LOW'||hcc.label==='LOW'?'td-hdw-mbx':'td-hdw-alt'}" title="Daily HDWc (dynamic α accumulator, consistent with charts)">${hc!=null?hc.toFixed(1):'—'}</td>
+      <td>${peakHDW>=150?'🔴 EXTREME':peakHDW>=80?'🔴 HIGH':peakHDW>=40?'🟠 MODERATE':peakHDW>=15?'🟡 ATTENTION':'—'}</td>
     </tr>`;
   }).join('');
 }
@@ -7966,7 +7977,7 @@ function zoomChartsToRow(row){
       if(el&&el.layout)Plotly.relayout(id,{'xaxis.autorange':true});
     });
     redrawWindRose(); 
-    showToast('Zoom reposto',1500);
+    showToast('Zoom reset',1500);
     return;
   }
   _zoomHighlightRow=row;
@@ -8125,8 +8136,8 @@ function _ensureFSOverlay(){
   bar.style.cssText='height:44px;background:#111827;display:flex;align-items:center;gap:10px;padding:0 16px;flex-shrink:0';
   bar.innerHTML=`<span id="fs-title" style="color:#f9fafb;font-size:14px;font-weight:600;flex:1"></span>
     <div id="fs-wind72-stats" style="display:none;align-items:center;gap:12px;font-size:11px;color:#d1d5db;font-family:var(--mono)">
-      <span id="fs-ws72-period" style="color:#374151;font-size:10px"></span>
-      <span>💨 <span id="fs-ws72-vmean" style="color:#93c5fd;font-weight:700">—</span> máx <span id="fs-ws72-vmax" style="color:#60a5fa;font-weight:700">—</span></span>
+      <span id="fs-ws72-period" style="color:#f9fafb;font-size:10px;font-weight:600"></span>
+      <span>💨 <span id="fs-ws72-vmean" style="color:#93c5fd;font-weight:700">—</span> max <span id="fs-ws72-vmax" style="color:#60a5fa;font-weight:700">—</span></span>
       <span>🌪 <span id="fs-ws72-gmax" style="color:#c4b5fd;font-weight:700">—</span></span>
       <span>🌡 <span id="fs-ws72-tmax" style="color:#fca5a5;font-weight:700">—</span></span>
       <span>🧭 <span id="fs-ws72-dir" style="color:#fde68a;font-weight:700;font-size:13px">—</span></span>
@@ -8149,7 +8160,7 @@ function _ensureFSOverlay(){
         <option value="night">Night 18–24h</option>
       </select>
     </div>
-    <button onclick="closeFullscreen()" style="background:rgba(255,255,255,.1);border:none;border-radius:6px;color:#374151;width:30px;height:30px;font-size:17px;cursor:pointer;line-height:1" title="Fechar (Esc)">&#10005;</button>`;
+    <button onclick="closeFullscreen()" style="background:rgba(255,255,255,.1);border:none;border-radius:6px;color:#f9fafb;width:30px;height:30px;font-size:17px;cursor:pointer;line-height:1" title="Close (Esc)">&#10005;</button>`;
   _fsOverlay.appendChild(bar);
   
   const wrap=document.createElement('div');
@@ -8172,7 +8183,8 @@ function toggleFullscreen(cardId,chartId,contentId){
   const srcEl=document.getElementById(chartId);
   // For chart-72wind: side-by-side stats panel + rose filling full overlay
   if(chartId==='chart-72wind') {
-    document.getElementById('fs-title').textContent='🌬 Wind Rose · 72h';
+    const _curR = document.getElementById('chart-72wind-title-range')?.textContent || '72h';
+    document.getElementById('fs-title').textContent='🌬 Wind Rose · ' + _curR;
     _fsOverlay.style.display='flex';
 
     const wrap=document.getElementById('fs-plot-wrap');
@@ -8193,30 +8205,30 @@ function toggleFullscreen(cardId,chartId,contentId){
     // Build stats pane HTML mirroring main panel but in dark style
     const mkRow=(lbl,id,color)=>
       `<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0">
-        <span style="color:#374151">${lbl}</span>
+        <span style="color:#9ca3af">${lbl}</span>
         <span style="font-family:monospace;font-weight:700;color:${color}" id="fsp-${id}">—</span>
        </div>`;
     const mkSect=(icon,title)=>
       `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
-            color:#374151;border-top:1px solid #374151;padding-top:6px;margin-top:2px">${icon} ${title}</div>`;
+            color:#cbd5e1;border-top:1px solid #374151;padding-top:6px;margin-top:2px">${icon} ${title}</div>`;
 
     statsPane.innerHTML=`
       <div id="fsp-period" style="font-size:11px;font-weight:700;color:#f9fafb;
            border-bottom:1px solid #374151;padding-bottom:6px;margin-bottom:4px">—</div>
-      ${mkRow('Registos','n','#e5e7eb')}
+      ${mkRow('Records','n','#e5e7eb')}
       ${mkSect('💨','Wind')}
       ${mkRow('Mean speed','vmean','#93c5fd')}
-      ${mkRow('Vel. máxima','vmax','#60a5fa')}
-      ${mkSect('🌪','Rajadas')}
-      ${mkRow('Rajada média','gmean','#c4b5fd')}
+      ${mkRow('Max speed','vmax','#60a5fa')}
+      ${mkSect('🌪','Gusts')}
+      ${mkRow('Mean gust','gmean','#c4b5fd')}
       ${mkRow('Max gust','gmax','#a78bfa')}
       ${mkSect('🌡','Temperature')}
-      ${mkRow('T média','tmean','#fca5a5')}
-      ${mkRow('T maximum','tmax','#f87171')}
+      ${mkRow('Mean T','tmean','#fca5a5')}
+      ${mkRow('Max T','tmax','#f87171')}
       ${mkSect('🧭','Direction & HDW')}
-      ${mkRow('Dom. direction','dir','#fde68a')}
+      ${mkRow('Dom. dir.','dir','#fde68a')}
       ${mkRow('HDW mean','hdwmean','#fb923c')}
-      ${mkRow('HDW maximum','hdwmax','#ef4444')}
+      ${mkRow('HDW max','hdwmax','#ef4444')}
     `;
     wrap.appendChild(statsPane);
 
@@ -8260,7 +8272,7 @@ function toggleFullscreen(cardId,chartId,contentId){
       if(fwh2) fwh2.value=document.getElementById('wind72-hour-sel')?.value||'all';
     }
     if(fsWS2) fsWS2.style.display='flex';
-    showToast('Ecrã completo — Esc para fechar');
+    showToast('Full screen — Esc to close');
     return;
   }
   if(!srcEl||!srcEl.data){showToast('Wait for chart to load',1800);return;}
@@ -8345,7 +8357,7 @@ function toggleFullscreen(cardId,chartId,contentId){
       }
     }
   }
-  showToast('Ecrã completo — Esc para fechar');
+  showToast('Full screen — Esc to close');
 }
 
 function _fsSyncWind72Stats(){
@@ -8510,7 +8522,7 @@ function toggleAnnotationMode(chartId){
     }
     annotationMode=chartId;
     if(card)card.classList.add('annotation-mode-active');
-    showToast(`✏️ Annotation mode — clique no gráfico "${CHART_LABELS[chartId]||chartId}"`,3000);
+    showToast(`✏️ Annotation mode — click on the "${CHART_LABELS[chartId]||chartId}" chart`,3000);
   }
 }
 
@@ -8599,7 +8611,7 @@ function confirmAnnotation(){
   if(editId){
     const idx=chartAnnotations[chartId].findIndex(a=>a._id===editId);
     if(idx>=0){chartAnnotations[chartId][idx].x=x;chartAnnotations[chartId][idx].y=y;chartAnnotations[chartId][idx].text=htmlText;chartAnnotations[chartId][idx]._text=text;}
-    showToast('Yeartação atualizada ✓');
+    showToast('Annotation updated ✓');
   }else{
     chartAnnotations[chartId].push({
       x,y,xref:isTernary?'paper':'x',yref:isTernary?'paper':'y',
@@ -8608,7 +8620,7 @@ function confirmAnnotation(){
       bordercolor:'#e85d2f',borderwidth:1.5,borderpad:5,ax:40,ay:-45,
       captureevents:true,_id:Date.now(),_text:text
     });
-    showToast('Yeartação adicionada ✓');
+    showToast('Annotation added ✓');
   }
   try{
     const el=document.getElementById(chartId);
@@ -8641,7 +8653,7 @@ function startMoveAnnotation(){
   annotationMode=chartId;
   const el=document.getElementById(chartId);
   if(el){const c=el.closest('.chart-card');if(c)c.classList.add('annotation-mode-active');}
-  showToast('📍 Clique no gráfico para nova posição',4500);
+  showToast('📍 Click on the chart for a new position',4500);
 }
 
 function updateAnnotationsList(){
@@ -8669,7 +8681,7 @@ function deleteAnnotation(chartId,annotId){
     }
   }catch(e){}
   updateAnnotationsList();
-  showToast('Yeartação removida');
+  showToast('Annotation removed');
 }
 
 (function initPopupDrag(){
@@ -8739,7 +8751,7 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
   const h = hSrc;
   if(!h?.time){
     document.getElementById('tbl-hourly-body').innerHTML=
-      '<tr><td colspan="8" style="text-align:center;color:#374151;padding:12px">Dados horários não disponíveis</td></tr>';
+      '<tr><td colspan="8" style="text-align:center;color:#374151;padding:12px">Hourly data not available</td></tr>';
     return;
   }
   const refDateStr = _archiveMode && _archiveRefDate ? _archiveRefDate : new Date().toISOString().split('T')[0];
@@ -8796,7 +8808,7 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
 function exportCSVHourlyFiltered() {
   // Export only visible hourly rows (filtered by time slider)
   const tbl = document.getElementById('tbl-hourly');
-  if (!tbl) { showToast('Tabela horária não disponível', 2000); return; }
+  if (!tbl) { showToast('Hourly table not available', 2000); return; }
   const sep = ';';
   const rows = [];
   const ths = tbl.querySelectorAll('thead th');
@@ -8822,11 +8834,11 @@ function exportCSVHourlyFiltered() {
   const a = document.createElement('a');
   a.href = url; a.download = 'hourly_finestra_' + nome + '_' + dt + '.csv'; a.click();
   URL.revokeObjectURL(url);
-  showToast('CSV orario finestra (' + (rows.length - 1) + ' records) ✓', 2000);
+  showToast('Hourly CSV window (' + (rows.length - 1) + ' records) ✓', 2000);
 }
 
 function exportCSVHourly(){
-  if(!chartData.meteo?.hourly?.time){showToast('Dados horários não disponíveis',2000);return;}
+  if(!chartData.meteo?.hourly?.time){showToast('Hourly data not available',2000);return;}
   const h=chartData.meteo.hourly;
   const nome=(document.getElementById('iNome')?.value.trim()||'ponto').replace(/[^a-zA-Z0-9_\-]/g,'_');
   const dt=new Date().toISOString().split('T')[0];
@@ -8857,7 +8869,7 @@ function exportCSVHourly(){
   const a=document.createElement('a');
   a.href=url; a.download=`horario_${nome}_${dt}.csv`; a.click();
   setTimeout(()=>URL.revokeObjectURL(url),2000);
-  showToast('Hourly CSV exported ✓ ('+h.time.length+' recordos)',2200);
+  showToast('Hourly CSV exported ✓ ('+h.time.length+' records)',2200);
 }
 
 function exportCSV(tableId,baseName){
@@ -8886,20 +8898,57 @@ function exportCSV(tableId,baseName){
   const a=document.createElement('a');
   a.href=url;a.download=`${baseName}_${nome}_${dt}.csv`;a.click();
   URL.revokeObjectURL(url);
-  showToast('CSV exportado ✓',2000);
+  showToast('CSV exported ✓',2000);
 }
 
 async function exportPDF(){
   showToast('Generating PDF report... please wait',5000);
-  const nome=document.getElementById('iNome')?.value.trim()||'Ponto sem nome';
+  const nome=document.getElementById('iNome')?.value.trim()||'Unnamed location';
   const lat=document.getElementById('iLat')?.value||'—';
   const lon=document.getElementById('iLon')?.value||'—';
   const dt=new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
+  // ── Map snapshot (v46) — cattura runtime della mini-map via html2canvas, ──
+  // fallback a SVG schematico se html2canvas fallisce o non è disponibile.
+  async function _pdfMapSnapshot(latV, lonV) {
+    try {
+      const mapEl = document.getElementById('mini-map');
+      if (!mapEl || typeof html2canvas !== 'function') throw new Error('no html2canvas');
+      const canvas = await html2canvas(mapEl, {
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        width:  mapEl.offsetWidth,
+        height: mapEl.offsetHeight,
+      });
+      return { ok:true, src: canvas.toDataURL('image/png'), fallback:false };
+    } catch(e) {
+      console.warn('PDF map snapshot failed, using SVG fallback:', e);
+    }
+    const latN = parseFloat(latV), lonN = parseFloat(lonV);
+    const hemiN = (isNaN(latN) ? '—' : (latN >= 0 ? 'N' : 'S'));
+    const hemiE = (isNaN(lonN) ? '—' : (lonN >= 0 ? 'E' : 'W'));
+    const latS = isNaN(latN) ? String(latV) : Math.abs(latN).toFixed(4);
+    const lonS = isNaN(lonN) ? String(lonV) : Math.abs(lonN).toFixed(4);
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" style="background:#f1f5f9">
+        <rect x="0" y="0" width="400" height="220" fill="#f1f5f9"/>
+        <text x="200" y="30" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#dc2626" font-weight="bold">⚠ Map snapshot unavailable</text>
+        <text x="200" y="48" text-anchor="middle" font-size="10" font-family="sans-serif" fill="#6b7280">schematic location shown</text>
+        <circle cx="200" cy="120" r="7" fill="#e85d2f" stroke="#fff" stroke-width="2"/>
+        <text x="200" y="160" text-anchor="middle" font-size="11" font-family="monospace" fill="#111827">${latS} ${hemiN} · ${lonS} ${hemiE}</text>
+      </svg>`;
+    const b64 = btoa(unescape(encodeURIComponent(svg)));
+    return { ok:false, src: 'data:image/svg+xml;base64,' + b64, fallback:true };
+  }
+  const _mapSnap = await _pdfMapSnapshot(lat, lon);
+
   
   // ── 16-day charts ────────────────────────────────────────────────────
   const chartDefs=[
-    {id:'chart-temp', title:'Temperatura · 16 days'},
+    {id:'chart-temp', title:'Temperature · 16 days'},
     {id:'chart-hdw',  title:'HDW Instantaneous + Cumulative (HDWc)'},
     {id:'chart-prec', title:'Precipitation + Humidity + Wind'},
     {id:'chart-wind', title:'Wind Rose · 16 days'},
@@ -8915,7 +8964,7 @@ async function exportPDF(){
   const sect72=document.getElementById('section72h');
   const has72h = sect72 && sect72.style.display!=='none';
   const chart72Defs = has72h ? [
-    {id:'chart-72temp', title:'Temperatura & HR · 72h',      h:240},
+    {id:'chart-72temp', title:'Temperature & RH · 72h',      h:240},
     {id:'chart-72hdw',  title:'HDW_eff & Wind · 72h',      h:220},
     {id:'chart-72prec', title:'Precipitation & RH · 72h',    h:180},
     {id:'chart-72wind', title:'Wind Rose · 72h',      h:300},
@@ -8933,15 +8982,15 @@ async function exportPDF(){
     return `<table style="width:auto;min-width:340px;font-size:10px;margin-bottom:0">
       <tr><td style="color:#374151;padding:2px 8px">Period</td>
           <td style="font-weight:700;font-family:monospace">${get('wind72-stats-period')}</td></tr>
-      <tr><td style="color:#374151;padding:2px 8px">Mean speed / máx.</td>
+      <tr><td style="color:#374151;padding:2px 8px">Mean speed / max.</td>
           <td style="font-weight:700;font-family:monospace">${get('ws72-vmean')} / ${get('ws72-vmax')}</td></tr>
-      <tr><td style="color:#374151;padding:2px 8px">Rajada média / máx.</td>
+      <tr><td style="color:#374151;padding:2px 8px">Mean gust / max.</td>
           <td style="font-weight:700;font-family:monospace">${get('ws72-gmean')} / ${get('ws72-gmax')}</td></tr>
-      <tr><td style="color:#374151;padding:2px 8px">Temperature média / máx.</td>
+      <tr><td style="color:#374151;padding:2px 8px">Mean / max temperature</td>
           <td style="font-weight:700;font-family:monospace">${get('ws72-tmean')} / ${get('ws72-tmax')}</td></tr>
       <tr><td style="color:#374151;padding:2px 8px">Dominant direction</td>
           <td style="font-weight:700;font-family:monospace">${get('ws72-dir')}</td></tr>
-      <tr><td style="color:#374151;padding:2px 8px">HDW mean / máx.</td>
+      <tr><td style="color:#374151;padding:2px 8px">HDW mean / max.</td>
           <td style="font-weight:700;font-family:monospace">${get('ws72-hdwmean')} / ${get('ws72-hdwmax')}</td></tr>
     </table>`;
   })() : '';
@@ -9027,7 +9076,7 @@ async function exportPDF(){
       lines.push({ type: 'Engine config (JSON)', name: pn, detail: fn ? 'file: ' + fn : '' });
     } else {
       const pk = (typeof _activePreset !== 'undefined' && _activePreset) ? _activePreset.key : 'default';
-      lines.push({ type: 'Engine config', name: 'Preset builtin · ' + pk, detail: 'nessun file JSON caricato' });
+      lines.push({ type: 'Engine config', name: 'Builtin preset · ' + pk, detail: 'no JSON file loaded' });
     }
     // CSV eventi / perimetri (sourceTag csv + _csvBoundary)
     if (chartData.meteo?._csvBoundary || chartData.meteo?.daily?._csvBoundary) {
@@ -9075,11 +9124,11 @@ async function exportPDF(){
 
   // Rendering HTML per sostituire icnfRows e anosInc
   const metricsRowsHTML = [
-    ['HDWc referência',   _metrics.hdwcToday],
-    ['HDWc pico window',  _metrics.hdwcPeak + (_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : '')],
-    ['Dias HDW inst ≥ 80', _metrics.daysAbove80],
-    ['Dias class 2-3',    _metrics.daysCl23],
-    ['Haines Mid (oggi)', _metrics.hainesToday],
+    ['HDWc today',        _metrics.hdwcToday],
+    ['HDWc peak (window)',_metrics.hdwcPeak + (_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : '')],
+    ['Days HDW inst ≥ 80', _metrics.daysAbove80],
+    ['Days class 2-3',    _metrics.daysCl23],
+    ['Haines Mid (today)',_metrics.hainesToday],
     ['Haines Mid · peak', _metrics.hainesPeak + (_metrics.hainesPeakDate !== '—' ? ' · ' + _metrics.hainesPeakDate : '')],
     ['Ventilation Index', _metrics.viToday],
   ].map(([l,v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:10.5px">
@@ -9093,7 +9142,7 @@ async function exportPDF(){
         <div style="font-weight:700">${p.name}</div>
         ${p.detail ? `<div style="color:#6b7280;font-family:monospace;font-size:9px">${p.detail}</div>` : ''}
       </div>`).join('')
-    : '<div style="color:#6b7280;font-size:10px">Nenhuma fonte personalizada carregada</div>';
+    : '<div style="color:#6b7280;font-size:10px">No custom source loaded</div>';
 
   const auxLayersHTML = _auxLayers.length
     ? _auxLayers.map(a => `<div style="padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:10px">
@@ -9101,7 +9150,7 @@ async function exportPDF(){
         <span style="font-weight:700">${a.name}</span>
         ${a.url ? `<span style="color:#6b7280;font-family:monospace;font-size:9px"> · ${a.url}</span>` : ''}
       </div>`).join('')
-    : '<div style="color:#6b7280;font-size:10px">Nenhuma camada auxiliar activa</div>';
+    : '<div style="color:#6b7280;font-size:10px">No auxiliary layer active</div>';
 
   const retNum  =document.querySelector('.ret-num')?.textContent.trim()||'—';
   const retCls  =document.querySelector('.ret-cls')?.textContent.trim()||'';
@@ -9132,7 +9181,7 @@ async function exportPDF(){
   function simRankHTML(){
     const rows=Array.from(document.querySelectorAll('.sim-rank-row'));
     if(!rows.length)return'';
-    let tbl='<table><thead><tr><th>#</th><th>Year</th><th>Similaridade</th><th>Tipo</th><th>P mm</th><th>GDD</th><th>Def.</th><th>Secos</th></tr></thead><tbody>';
+    let tbl='<table><thead><tr><th>#</th><th>Year</th><th>Similarity</th><th>Type</th><th>P mm</th><th>GDD</th><th>Deficit</th><th>Dry</th></tr></thead><tbody>';
     rows.forEach((row,i)=>{
       const cells=Array.from(row.children);
       const isFire=row.classList.contains('fire-year');
@@ -9167,7 +9216,7 @@ async function exportPDF(){
   function hourlyTblHTML(){
     const h=chartData.meteo?.hourly;
     if(!h?.time) return '';
-    const hdrs='<tr><th>Data/Hora</th><th>T °C</th><th>RH %</th><th>Wind km/h</th><th>Gust km/h</th><th>Dir °</th><th>Precip mm</th><th>HDW inst.</th></tr>';
+    const hdrs='<tr><th>Date/Hour</th><th>T °C</th><th>RH %</th><th>Wind km/h</th><th>Gust km/h</th><th>Dir °</th><th>Precip mm</th><th>HDW inst.</th></tr>';
     const rows=h.time.map((ts,i)=>{
       const t=h.temperature_2m?.[i];
       const rh=h.relativehumidity_2m?.[i];
@@ -9191,7 +9240,7 @@ async function exportPDF(){
   const chartsSection=chartImgs.map(cd=>
     cd.img
       ?`<div class="cb"><div class="cl">${cd.title}</div><img src="${cd.img}"/></div>`
-      :`<div class="cb"><div class="cl">${cd.title}</div><div class="nc">Grafico nao disponivel</div></div>`
+      :`<div class="cb"><div class="cl">${cd.title}</div><div class="nc">Chart not available</div></div>`
   ).join('');
 
   // Build 72h section: 3 time charts (full width) + rose+stats side by side
@@ -9207,9 +9256,9 @@ async function exportPDF(){
       return `<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;margin-top:4px">
         <div>${roseImg?.img
           ?`<div class="cl">Wind Rose · 72h</div><img src="${roseImg.img}" style="width:100%;border:1px solid #e5e7eb;border-radius:5px"/>`
-          :`<div class="nc">Rosa nao disponivel</div>`}</div>
+          :`<div class="nc">Rose not available</div>`}</div>
         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;min-width:200px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#374151;margin-bottom:6px;border-bottom:1px solid #e5e7eb;padding-bottom:4px">Estatísticas · Vento 72h</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#374151;margin-bottom:6px;border-bottom:1px solid #e5e7eb;padding-bottom:4px">Statistics · Wind 72h</div>
           ${wind72StatsHTML}
         </div>
       </div>`;
@@ -9260,42 +9309,56 @@ td{padding:4px 7px;border-bottom:1px solid #e9ecf0;color:#1f2937;font-family:'Co
 tr.tr-today{border-left:2.5px solid #e85d2f;background:#fff8f5}
 tr:nth-child(even):not(.tr-today){background:#fafafa}
 .footer{margin-top:14px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:9px;color:#374151;display:flex;justify-content:space-between}
+.map-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;margin-bottom:14px}
+.map-box .mh{font-size:9.5px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+.map-box .mh .coords{font-family:monospace;font-size:10px;color:#111827;text-transform:none;letter-spacing:0}
+.map-box img{width:100%;max-height:260px;object-fit:cover;border:1px solid #e5e7eb;border-radius:4px;display:block}
+.map-box .warn{font-size:9px;color:#b91c1c;margin-top:4px;font-style:italic}
 @media print{body{padding:6px 10px}@page{margin:9mm;size:A4}table{font-size:8.5px!important}th{font-size:8px!important;padding:3px 4px!important}td{padding:2px 4px!important}img{max-width:100%!important}.two-col{grid-template-columns:1fr 1fr!important}h3{font-size:10px!important}}
 </style></head><body>
 
 <div class="cover">
   <div>
     <h1>Fire Meteo Report</h1>
-    <div class="sub">FireMeteo v14 · EFFIS + Open-Meteo · Generated on ${dt} · Preset α: ${ALPHA_PRESETS[_activePreset.key]?.flag||"✏"} ${_activePreset.key}</div>
+    <div class="sub">Fire Meteo v46 · EFFIS + Open-Meteo · Generated on ${dt} · Preset α: ${ALPHA_PRESETS[_activePreset.key]?.flag||"✏"} ${_activePreset.key}</div>
   </div>
-  <div class="ver">v14.0 · Giuseppe Cornaglia</div>
+  <div class="ver">v46.0 · Giuseppe Cornaglia</div>
 </div>
 
 <div class="cards">
-  <div class="card"><div class="l">Ponto</div><div class="v orange">${nome}</div><div class="n">${lat} N · ${lon} W</div></div>
-  <div class="card"><div class="l">HDWc · hoje / pico window</div><div class="v">${_metrics.hdwcToday}</div><div class="n">pico: ${_metrics.hdwcPeak}${_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : ''}</div></div>
+  <div class="card"><div class="l">Location</div><div class="v orange">${nome}</div><div class="n">${lat} N · ${lon} W</div></div>
+  <div class="card"><div class="l">HDWc · today / peak (window)</div><div class="v">${_metrics.hdwcToday}</div><div class="n">peak: ${_metrics.hdwcPeak}${_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : ''}</div></div>
   <div class="card"><div class="l">Haines Mid · Ventilation</div><div class="v" style="font-size:14px">${_metrics.hainesToday}</div><div class="n" style="font-size:9.5px">${_metrics.viToday}${_metrics.plumeAlert ? ' · <span style="color:#dc2626;font-weight:700">⚠ PLUME-ALERT</span>' : ''}</div></div>
 </div>
 
 ${interp?`<div class="interp">${interp}</div>`:''}
 
+<div class="map-box">
+  <div class="mh">
+    <span>Location</span>
+    <span class="coords">${nome} · ${lat}, ${lon}</span>
+  </div>
+  <img src="${_mapSnap.src}" alt="Location map"/>
+  ${_mapSnap.fallback?'<div class="warn">Map snapshot not captured — schematic view used</div>':''}
+</div>
+
 <div class="two-col">
   <div class="panel-box">
-    <div class="ph">Métricas da análise</div>
+    <div class="ph">Analysis metrics</div>
     ${metricsRowsHTML}
   </div>
   <div class="panel-box">
-    <div class="ph">Fontes de dados · provenance</div>
+    <div class="ph">Data sources · provenance</div>
     ${provenanceRowsHTML}
   </div>
 </div>
 
 <div class="panel-box" style="margin-bottom:14px">
-  <div class="ph">Camadas auxiliares activas</div>
+  <div class="ph">Active auxiliary layers</div>
   ${auxLayersHTML}
 </div>
 
-<div class="section-hdr">GRAFICOS METEOROLOGICOS · 16 DIAS</div>
+<div class="section-hdr">METEOROLOGICAL CHARTS · 16 DAYS</div>
 <div class="cg">${chartsSection}</div>
 
 ${section72HTML}
@@ -9307,17 +9370,17 @@ ${document.getElementById('tbl-crit-content')?.classList.contains('collapsed')?'
 ${simSection}
 
 <div class="footer">
-  <span>FireMeteo v14 · EFFIS2022 + Open-Meteo · Giuseppe Cornaglia</span>
+  <span>Fire Meteo v46 · EFFIS + Open-Meteo · Giuseppe Cornaglia</span>
   <span>${nome} · ${lat}, ${lon} · ${dt}</span>
 </div>
 <script>window.onload=function(){window.print();}<\/script>
 </body></html>`;
 
   const win=window.open('','_blank','width=1100,height=860');
-  if(!win){showToast('Popup bloqueado — permita popups para este site',4500);return;}
+  if(!win){showToast('Popup blocked — allow popups for this site',4500);return;}
   win.document.write(html);
   win.document.close();
-  showToast('Relatorio pronto — Ctrl+P / Guardar como PDF',5000);
+  showToast('Report ready — Ctrl+P / Save as PDF',5000);
 }
 
 let _tsDates = [];
@@ -9462,7 +9525,7 @@ function _filterTableRows() {
     });
     ['tbl-meteo-toggle','tbl-hourly-toggle','tbl-crit-toggle'].forEach(id => {
       const btn = document.getElementById(id);
-      if (btn) btn.textContent = '\u{1F4CB} Tutti';
+      if (btn) btn.textContent = '\u{1F4CB} All';
     });
     return;
   }
@@ -9492,7 +9555,7 @@ function _filterTableRows() {
   const subH = document.getElementById('tbl-hourly-sub');
   if (subH && _tableFilterActive) {
     const nDays = Math.round(nHourly / 24);
-    subH.textContent = nHourly + ' records (' + nDays + 'd selezionati) · click column to sort';
+    subH.textContent = nHourly + ' records (' + nDays + 'd selected) · click column to sort';
   }
 
   // ── Tabella critical events ───────────────────────────────────────────
@@ -9552,7 +9615,7 @@ function exportCSVFiltered(tableId, baseName) {
   const a = document.createElement('a');
   a.href = url; a.download = baseName + '_' + nome + '_' + dt + '.csv'; a.click();
   URL.revokeObjectURL(url);
-  showToast('CSV finestra (' + (rows.length - 1) + ' righe) \u2713', 2000);
+  showToast('CSV window (' + (rows.length - 1) + ' rows) \u2713', 2000);
 }
 
 
@@ -9579,7 +9642,7 @@ function setForecastHorizon(days) {
   _forecastDays = days;
   _syncForecastHorizonBtns();
   // Re-render charts with new horizon (redraw only, no new fetch needed)
-  if (!window._lastMeteo) { showToast(`Forecast: ${days} dias`, 1500); return; }
+  if (!window._lastMeteo) { showToast(`Forecast: ${days} days`, 1500); return; }
   const meteo = window._lastMeteo;
   const d = meteo.daily;
   if (!d) return;
@@ -9616,7 +9679,7 @@ function setForecastHorizon(days) {
       tsUpdate();
     }
   }
-  showToast(`Forecast: ${days} dias`, 1500);
+  showToast(`Forecast: ${days} days`, 1500);
 }
 
 function _syncForecastHorizonBtns() {
@@ -9845,7 +9908,7 @@ async function runSimilarityAnalysis(lat,lng,fireYears,currentMeteo){
 
     const nFire=results.filter(r=>r.isFire).length;
     const nTotal=results.length;
-    const warnTxt = nTotal < 6 ? ' ⚠ amostra reduzida' : (nFire < 3 ? ' ⚠ poucos anos with fire' : '');
+    const warnTxt = nTotal < 6 ? ' ⚠ small sample' : (nFire < 3 ? ' ⚠ few years with fire' : '');
     simStatus.textContent=`${nTotal} years · ${nFire} with fire · 90-day window${warnTxt}`;
     if(warnTxt) simStatus.style.color='#d97706';
     else simStatus.style.color='';
@@ -9864,7 +9927,7 @@ async function runSimilarityAnalysis(lat,lng,fireYears,currentMeteo){
 
   }catch(e){
     simLoading.style.display='none';
-    simStatus.textContent='Erro na análise';
+    simStatus.textContent='Analysis error';
     simBody.innerHTML=`<div style="padding:14px;color:#b91c1c;font-size:12px">⚠ Error: ${e.message}</div>`;
     console.error('Similarity error:',e);
   }
@@ -9885,13 +9948,13 @@ function _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear){
 
   
   let interpTxt='';
-  const pré=currFeatures._sumP!=null?`90-day accumulated precipitation: <strong>${currFeatures._sumP.toFixed(0)} mm</strong> · GDD: <strong>${(currFeatures._sumGDD||currFeatures.f3).toFixed(0)}</strong> · Deficit hídrico: <strong>${(currFeatures._deficit||currFeatures.f4).toFixed(0)}</strong>.`:'' ;
+  const pref=currFeatures._sumP!=null?`90-day accumulated precipitation: <strong>${currFeatures._sumP.toFixed(0)} mm</strong> · GDD: <strong>${(currFeatures._sumGDD||currFeatures.f3).toFixed(0)}</strong> · Water deficit: <strong>${(currFeatures._deficit||currFeatures.f4).toFixed(0)}</strong>.`:'' ;
   if(topSim.isFire&&topSim.simDisplay>80){
-    interpTxt=`<strong>⚠ Atenção:</strong> O pre-conditioning dos últimos 90 days é muito semelhante ao ano <strong>${topSim.year}</strong> (${topSim.simDisplay.toFixed(0)}% similaridade) — which recorded fire at this point. ${pré}`;
+    interpTxt=`<strong>⚠ Warning:</strong> The pre-conditioning of the last 90 days is very similar to year <strong>${topSim.year}</strong> (${topSim.simDisplay.toFixed(0)}% similarity) — which recorded fire at this point. ${pref}`;
   } else if(fireMoreSim){
-    interpTxt=`<strong>Nota:</strong> O perfil de pre-conditioning actual assemelha-se mais aos anos <strong>with fire</strong> (média ${avgSimFire.toFixed(0)}%) do que aos reference years (${avgSimRef.toFixed(0)}%). ${pré}`;
+    interpTxt=`<strong>Note:</strong> The current pre-conditioning profile resembles <strong>fire years</strong> more (mean ${avgSimFire.toFixed(0)}%) than reference years (${avgSimRef.toFixed(0)}%). ${pref}`;
   } else {
-    interpTxt=`O pre-conditioning actual assemelha-se mais a anos <strong>sem incêndio</strong> recordado. Similaridade média com anos de incêndio: ${avgSimFire.toFixed(0)}%. ${pré}`;
+    interpTxt=`The current pre-conditioning resembles more closely years <strong>without recorded fire</strong>. Mean similarity to fire years: ${avgSimFire.toFixed(0)}%. ${pref}`;
   }
 
   
@@ -9912,7 +9975,7 @@ function _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear){
       :(r.sim>0.7?'#374151':'#93c5fd');
     const badgeCls=r.isFire?'fire':'nofire';
     const badgeTxt=r.isFire?'Incêndio':'Referência';
-    const badgeTitle=r.isFire?'Year com recordo de incêndio neste ponto (ICNF GIFR)':'Year sem recordo de incêndio — usado como baseline de comparação';
+    const badgeTitle=r.isFire?'Year with recorded fire at this point (ICNF GIFR)':'Year without recorded fire — used as comparison baseline';
     const rowBg=r.isFire?(i===0?'rgba(185,28,28,.07)':'rgba(232,93,47,.03)'):'';
     return`<div class="sim-rank-row${r.isFire?' fire-year':''}" style="background:${rowBg};grid-template-columns:38px 48px 1fr 76px 52px 52px 52px 52px">
       <span style="font-weight:700;color:#374151;font-family:var(--mono)">${i+1}</span>
@@ -9932,7 +9995,7 @@ function _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear){
   
   const chartHTML=`<div class="sim-grid">
     <div>
-      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Ranking · Similaridade Pré-condicionamento</div>
+      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Ranking · Pre-conditioning similarity</div>
       <div id="simChartBar" style="height:270px"></div>
     </div>
     <div>
@@ -9956,7 +10019,7 @@ function _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear){
     ${chartHTML}
     <div style="padding:0 12px">
       <div style="font-size:11px;color:#374151;padding:6px 0 2px;font-style:italic">
-        P mm = precipitação acumulada 90gg · GDD = graus-dia crescimento (Σ max(0,Tmax−10)) · Def. = deficit hídrico (Σ Tmax − 2×P) · Secos = days P&lt;1mm
+        P mm = accumulated precipitation 90d · GDD = growing degree-days (Σ max(0,Tmax−10)) · Def. = water deficit (Σ Tmax − 2×P) · Dry = days P&lt;1mm
       </div>
       ${hdrRow}${rows}
     </div>
@@ -9984,7 +10047,7 @@ function _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear){
     paper_bgcolor:'white',plot_bgcolor:'white',
     shapes:[{type:'line',x0:avgLine,x1:avgLine,y0:-0.5,y1:topN-0.5,
              line:{color:'#374151',width:1,dash:'dot'}}],
-    annotations:[{x:avgLine,y:topN-0.5,text:'média',showarrow:false,
+    annotations:[{x:avgLine,y:topN-0.5,text:'mean',showarrow:false,
                   font:{size:8,color:'#374151'},xanchor:'left',yanchor:'bottom',xshift:3}],
     hoverlabel:{bgcolor:'#1f2937',font:{size:10,color:'#f9fafb'},bordercolor:'#374151'},
   },{responsive:true,displayModeBar:false});
@@ -9993,7 +10056,7 @@ function _renderSimilarityResults(results,currFeatures,todayMMDD,currentYear){
   var hmEl=document.getElementById('simChartRadar');
   if(hmEl){
     var hmKeys=['f2','f3','f4','f6','f8','f9'];
-    var hmLabels=['Precip.','GDD','Deficit','HDW>=15','HDWc pk','Secos'];
+    var hmLabels=['Precip.','GDD','Deficit','HDW>=15','HDWc pk','Dry'];
     var hmFlip=[true,false,false,false,false,false];
     var hmAll=[...results,{year:currentYear,features:currFeatures,isFire:false,isCurrent:true}]
       .sort(function(a,b){return a.year-b.year;});
@@ -10310,13 +10373,13 @@ function renderCmpDrawer(){
     const cc     = hdwCumClass(p.hdwC);
     const semHtml= `<span class="cmp-sem" style="color:${p.risk.color};background:${p.risk.bg};border-color:${p.risk.border}">● ${p.risk.label}</span>`;
     return `<div class="cmp-card">
-      <button class="cmp-card-remove" onclick="removePinned(${i})" title="Remover">✕</button>
+      <button class="cmp-card-remove" onclick="removePinned(${i})" title="Remove">✕</button>
       <div class="cmp-card-name">${semHtml}</div>
       <div class="cmp-card-coords">${p.nome}<br>${p.lat.toFixed(4)}° N  ${Math.abs(p.lng).toFixed(4)}° W</div>
       <div class="cmp-row"><span class="lbl">ICNF Return</span><span class="val" style="color:${isNaN(p.rv)?'var(--dim)':p.rv<=0.75?'#b91c1c':'#15803d'}">${rvStr}</span></div>
-      <div class="cmp-row"><span class="lbl">HDWc hoje</span><span class="val" style="color:${cc.color}">${hdwcStr} · ${cc.label} ${p.trendHTML}</span></div>
-      <div class="cmp-row"><span class="lbl">HDW inst. máx 16d</span><span class="val" style="color:${p.hdwMax>=40?'#e85d2f':'var(--text)'}">${p.hdwMax.toFixed(1)}</span></div>
-      ${p.simTopFire!=null?`<div class="cmp-row"><span class="lbl">Sim. top ano incêndio</span><span class="val" style="color:${p.simTopFire>=70?'#b91c1c':p.simTopFire>=55?'#e85d2f':'var(--dim)'}">${p.simTopFire}%</span></div>`:''}
+      <div class="cmp-row"><span class="lbl">HDWc today</span><span class="val" style="color:${cc.color}">${hdwcStr} · ${cc.label} ${p.trendHTML}</span></div>
+      <div class="cmp-row"><span class="lbl">HDW inst. max 16d</span><span class="val" style="color:${p.hdwMax>=40?'#e85d2f':'var(--text)'}">${p.hdwMax.toFixed(1)}</span></div>
+      ${p.simTopFire!=null?`<div class="cmp-row"><span class="lbl">Sim. top fire year</span><span class="val" style="color:${p.simTopFire>=70?'#b91c1c':p.simTopFire>=55?'#e85d2f':'var(--dim)'}">${p.simTopFire}%</span></div>`:''}
       <button class="btn-go" style="width:100%;margin-top:7px;padding:4px" onclick="goToPinned(${i})">↗ Ir para este ponto</button>
     </div>`;
   }).join('');
@@ -10338,7 +10401,7 @@ function goToPinned(idx){
 
 function errorHTML(err){
   const isCors=err.message&&(err.message.includes('fetch')||err.message.includes('Network'));
-  return`<div class="sblock"><div class="sblock-body"><div class="errbox"><div class="t">Query error</div><div>${err.message}</div>${isCors?`<div class="corshint">Possível CORS → use <code>python -m http.server 8080</code></div>`:''}</div></div></div>`;
+  return`<div class="sblock"><div class="sblock-body"><div class="errbox"><div class="t">Query error</div><div>${err.message}</div>${isCors?`<div class="corshint">Likely CORS issue → use <code>python -m http.server 8080</code></div>`:''}</div></div></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -10355,12 +10418,18 @@ let _customLayersObj={};
 let _basemapLayer=null, _activeBasemap='voyager';
 
 // ── Basemap ────────────────────────────────────────────────────────────────
+// satellite è composito: imagery Esri + reference (confini/etichette) Esri
+// osm usa il mirror francese (openstreetmap.fr) perché il server ufficiale
+// openstreetmap.org blocca il referer da file:// locali
 const BASEMAPS = {
-  voyager:   {url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',attr:'© CartoDB'},
-  satellite: {url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attr:'© Esri'},
-  osm:       {url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',attr:'© OpenStreetMap'},
-  terrain:   {url:'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png',attr:'© Stadia Maps'},
-  dark:      {url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',attr:'© CartoDB'},
+  voyager:   {url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',attr:'© CartoDB',subdomains:'abcd'},
+  satellite: {composite: [
+    {url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attr:'© Esri World Imagery'},
+    {url:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',attr:'© Esri Boundaries & Places'},
+    {url:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',attr:'© Esri Transportation'},
+  ]},
+  osm:       {url:'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',attr:'© OpenStreetMap France',subdomains:'abc'},
+  dark:      {url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',attr:'© CartoDB',subdomains:'abcd'},
 };
 
 // ── GWIS Global Layer Support ─────────────────────────────────────────────
@@ -10408,9 +10477,8 @@ function _v5PostMapInit() {
     panel.style.cssText='position:absolute;bottom:72px;left:10px;z-index:600;background:white;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none;min-width:155px';
     panel.innerHTML=`<div style="font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Basemap</div>
       <button class="bmap-opt active" onclick="setBasemap('voyager',this)">🗺 Voyager (default)</button>
-      <button class="bmap-opt" onclick="setBasemap('satellite',this)">🛰 Satellite (Esri)</button>
+      <button class="bmap-opt" onclick="setBasemap('satellite',this)">🛰 Satellite Hybrid (Esri)</button>
       <button class="bmap-opt" onclick="setBasemap('osm',this)">🌐 OpenStreetMap</button>
-      <button class="bmap-opt" onclick="setBasemap('terrain',this)">🏔 Terrain (Stadia)</button>
       <button class="bmap-opt" onclick="setBasemap('dark',this)">🌙 Dark Matter</button>`;
     mapEl.appendChild(panel);
     // Style buttons
@@ -10433,8 +10501,18 @@ function setBasemap(name, btn) {
   if(btn){btn.classList.add('active');}
   if(_basemapLayer) map.removeLayer(_basemapLayer);
   const b=BASEMAPS[name];
-  _basemapLayer=L.tileLayer(b.url,{maxZoom:19,attribution:b.attr}).addTo(map);
-  _basemapLayer.bringToBack();
+  // Composito (es. satellite hybrid: imagery + reference labels)
+  // oppure singolo tile layer
+  const tiles = b.composite || [b];
+  const layers = tiles.map(t => L.tileLayer(t.url, {
+    maxZoom: 19,
+    attribution: t.attr,
+    ...(t.subdomains ? {subdomains: t.subdomains} : {})
+  }));
+  _basemapLayer = L.layerGroup(layers).addTo(map);
+  // Il primo layer (imagery / base) va sul fondo; gli altri (etichette) restano sopra
+  if (layers[0]) layers[0].bringToBack();
+  _activeBasemap = name;
   document.getElementById('basemapPanel').style.display='none';
 }
 
@@ -10740,7 +10818,7 @@ function _populateFireEvent(lat, lng, props) {
   if (area)      { _setInput('archiveDateAreaHa', parseFloat(area).toFixed(0)); }
 
   selectPoint(lat, lng);
-  showToast(`🔥 ${pLow['name']||pLow['fire_id']||pLow['nome']||'Incêndio'} · ${dateStart||'?'} → ${dateEnd||'?'} · caricamento ERA5…`, 3500);
+  showToast(`🔥 ${pLow['name']||pLow['fire_id']||pLow['nome']||'Fire'} · ${dateStart||'?'} → ${dateEnd||'?'} · loading ERA5…`, 3500);
   setTimeout(() => applyArchiveDateRange(), 700);
 }
 
@@ -11112,7 +11190,7 @@ function loadNamedPreset(name){
     } catch(e) {}
   }
   alphaUpdateBadge();
-  showToast(`✓ Preset "${name}" — ricalcolo…`, 2200);
+  showToast(`✓ Preset "${name}" — recalculating…`, 2200);
   const lat=parseFloat(document.getElementById('iLat')?.value);
   const lng=parseFloat(document.getElementById('iLon')?.value);
   if(!isNaN(lat)&&!isNaN(lng)) setTimeout(()=>selectPoint(lat,lng),300);
@@ -11317,7 +11395,7 @@ function drawAlphaSensitivity(meteo) {
       <td style="padding:1px 4px;text-align:right;color:${muColor};font-size:9px"
           title="μ_HDW usato: ${mu_use.toFixed(1)} (${source})">${mu_use.toFixed(1)}</td>
       <td style="padding:1px 4px;text-align:right;color:var(--dim);font-size:9px"
-          title="h̄_loc: media HDW osservata in ${MONTH_NAMES[m]} in questa località">${hBarStr}</td>
+          title="h̄_loc: mean HDW observed in ${MONTH_NAMES[m]} at this location">${hBarStr}</td>
       <td style="padding:1px 5px;text-align:right;color:#374151">${eMin}</td>
       <td style="padding:1px 5px;text-align:right;color:var(--accent)">${eMean}</td>
       <td style="padding:1px 5px;text-align:right;color:#b91c1c">${eMax}</td>
@@ -11328,7 +11406,7 @@ function drawAlphaSensitivity(meteo) {
   if (table) {
     const nWith365 = monthStats365 ? monthStats365.filter(ms => ms && ms.n >= MIN_RELIABLE).length : 0;
     const srcNote = nWith365 >= 6
-      ? `ERA5 365d · h̄_loc per mese · ${nWith365}/12 mesi completi`
+      ? `ERA5 365d · h̄_loc per month · ${nWith365}/12 complete months`
       : `warmup ${n}d global (ERA5 365d insufficiente: ${nWith365}/12 mesi)`;
     table.innerHTML = `
       <div style="font-size:9.5px;font-weight:700;color:var(--dim);
@@ -11343,7 +11421,7 @@ function drawAlphaSensitivity(meteo) {
           <th style="padding:1px 4px;text-align:right;font-size:9px"
               title="μ_HDW used in calculation (green=monthly, gray=global)">μ̄</th>
           <th style="padding:1px 4px;text-align:right;font-size:9px"
-              title="h̄_loc: media HDW osservata in questo mese in questa località">h̄_loc</th>
+              title="h̄_loc: mean HDW observed in this month at this location">h̄_loc</th>
           <th style="padding:1px 5px;text-align:right">Min</th>
           <th style="padding:1px 5px;text-align:right">E[HDWc]</th>
           <th style="padding:1px 5px;text-align:right">Max</th>
@@ -11351,7 +11429,7 @@ function drawAlphaSensitivity(meteo) {
         <tbody>${tableRows}</tbody>
       </table>
       <div style="font-size:9px;color:var(--dim);margin-top:3px">
-        ● h̄_loc mensile &nbsp; ◑ blending mensile+global &nbsp; ? global warmup &nbsp;|&nbsp; ±1.5σ asintotica
+        ● h̄_loc monthly &nbsp; ◑ blending monthly+global &nbsp; ? global warmup &nbsp;|&nbsp; ±1.5σ asymptotic
       </div>`;
   }
 
@@ -11733,7 +11811,7 @@ function drawAlphaSensChart() {
       high:     { icon:'●', color:'#16a34a', tip:'Alta · n≥28 campioni/mese' },
       medium:   { icon:'◑', color:'#d97706', tip:'Media · n 20–27 campioni/mese' },
       low:      { icon:'○', color:'#dc2626', tip:'Bassa · n<20 — blended con media global' },
-      fallback: { icon:'?', color:'#4b5563', tip:'Fallback global — nessun dato per questo mese' },
+      fallback: { icon:'?', color:'#4b5563', tip:'Global fallback — no data for this month' },
     };
     const rows = Object.entries(monthlyStats).map(([m, v]) => {
       const cb = CONF_BADGE[v.confidence] || CONF_BADGE.fallback;
@@ -11750,7 +11828,7 @@ function drawAlphaSensChart() {
         <span style="font-size:9px;color:${muColor};margin-left:1px"
               title="μ̄ usato nel calcolo: ${muUsedStr} (${v.source})">[μ̄=${muUsedStr}]</span>
         <span style="font-size:8px;color:var(--dim);margin-left:1px"
-              title="h̄_loc: media HDW mensile osservata in questa località">h̄=${hBarStr}</span>
+              title="h̄_loc: monthly mean HDW observed at this location">h̄=${hBarStr}</span>
         <span style="font-size:9px;opacity:.6;margin-left:auto">α=${v.alpha.toFixed(2)}</span>
       </div>`;
     }).join('');
@@ -11765,7 +11843,7 @@ function drawAlphaSensChart() {
         E[HDWc] monthly · ${srcLabel}
        </div>
        <div style="font-size:9px;color:var(--dim);margin-bottom:4px;display:flex;gap:8px;flex-wrap:wrap">
-         <span style="color:#16a34a">● h̄_loc mensile</span>
+         <span style="color:#16a34a">● h̄_loc monthly</span>
          <span style="color:#d97706">◑ blending</span>
          <span style="color:#4b5563">? global</span>
          <span style="color:var(--dim)">μ̄ green = monthly used</span>
@@ -11807,7 +11885,7 @@ function toggleAlphaSection() {
 <div id="cmpDrawer">
   <div class="cmp-hdr">
     <span class="cmp-hdr-title">📌 Point Comparison</span>
-    <button class="cmp-hdr-close" onclick="toggleCmpDrawer()" title="Fechar">✕</button>
+    <button class="cmp-hdr-close" onclick="toggleCmpDrawer()" title="Close">✕</button>
   </div>
   <div class="cmp-body" id="cmpBody">
     <div class="cmp-empty">No fixed points yet.<br>Load a point and click<br><strong>📌 Fix for comparison</strong>.</div>
