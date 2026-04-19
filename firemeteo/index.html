@@ -2137,7 +2137,7 @@ async function fetchMeteo(lat,lng){
     daily:'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean,precipitation_probability_max,winddirection_10m_dominant',
     hourly:'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation,' +
            'temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,boundary_layer_height',
-    forecast_days:16,timezone:'Europe/Lisbon'});
+    forecast_days:16,timezone: _getTimezone()});
 
   
   const today=new Date();
@@ -2159,10 +2159,10 @@ async function fetchMeteo(lat,lng){
   const pH=new URLSearchParams({latitude:lat,longitude:lng,
     daily:'temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean,windspeed_10m_max,windgusts_10m_max',
     hourly:'temperature_850hPa,relative_humidity_850hPa,temperature_700hPa,boundary_layer_height,windspeed_10m',
-    past_days:21, forecast_days:0, timezone:'Europe/Lisbon'});
+    past_days:21, forecast_days:0, timezone: _getTimezone()});
   const p365=new URLSearchParams({latitude:lat,longitude:lng,
     daily:'temperature_2m_max,relative_humidity_2m_mean,windspeed_10m_max,windgusts_10m_max',
-    start_date:fmt(start365),end_date:fmt(endH),timezone:'Europe/Lisbon'});
+    start_date:fmt(start365),end_date:fmt(endH),timezone: _getTimezone()});
 
   const [rF,rH,r365]=await Promise.all([
     fetch(`${METEO_URL}?${pF}`),
@@ -2657,7 +2657,7 @@ async function applyCSVArchive() {
       latitude: lat, longitude: lon,
       daily: 'temperature_2m_max,relative_humidity_2m_mean,windspeed_10m_max,windgusts_10m_max',
       start_date: warmupStartVal, end_date: warmupEndVal,
-      timezone: 'Europe/Lisbon'
+      timezone: _getTimezone()
     });
 
     // Fetch Open-Meteo forecast (post-CSV period) — always 16 days so the horizon selector works
@@ -2665,7 +2665,7 @@ async function applyCSVArchive() {
       latitude: lat, longitude: lon,
       daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean,precipitation_probability_max,winddirection_10m_dominant',
       hourly: 'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation',
-      forecast_days: 16, timezone: 'Europe/Lisbon'
+      forecast_days: 16, timezone: _getTimezone()
     });
 
     const [rWarmup, rForecast] = await Promise.all([
@@ -2878,7 +2878,7 @@ async function applyArchiveDateRange() {
     const warmupStart = new Date(startDate); warmupStart.setUTCDate(warmupStart.getUTCDate() - 21);
     const warmupEnd   = new Date(startDate); warmupEnd.setUTCDate(warmupEnd.getUTCDate() - 1);
     const fmt = d => d.toISOString().slice(0,10);
-    const base = 'latitude=' + lat + '&longitude=' + lng + '&timezone=Europe%2FLisbon';
+    const base = 'latitude=' + lat + '&longitude=' + lng + '&timezone=' + encodeURIComponent(_getTimezone());
     const dv = 'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,windgusts_10m_max,relative_humidity_2m_mean';
     const hv = 'windspeed_10m,winddirection_10m,temperature_2m,relativehumidity_2m,windgusts_10m,precipitation';
     // v43 C7 fix: pressure levels NON disponibili via archive-api (ERA5 reanalysis).
@@ -3403,6 +3403,8 @@ const HDW_V2 = {
   streak_days:      4,
   T_night_warm:    18,  T_night_tropical: 20,  T_night_severe: 25,
   night_hours_min:  4,
+  night_window_start: "20:00",
+  night_window_end:   "08:00",
   washout_enabled: true,
   beta_thresholds: [2, 10, 20, 30],
   beta_values:     [0.95, 0.85, 0.75, 0.65],
@@ -3430,6 +3432,16 @@ const HDW_V2 = {
 // ── Engine config persistence ─────────────────────────────────────────────────
 const ENGINE_CONFIG_LS_KEY = 'firemeteo_engine_config';
 let _activeEngineConfig = null; // full JSON from config builder when loaded
+
+// Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
+// detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
+// which is critical for night-window NS calculations outside Europe/Lisbon.
+console.log('%c[FireMeteo v46 + TZ-FIX 19/4/26 21h]%c Timezone fix loaded', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+function _getTimezone() {
+  const tz = _activeEngineConfig?.meta?.timezone;
+  if (tz && typeof tz === 'string' && tz.length > 0) return tz;
+  return 'auto';
+}
 
 function _applyEngineConfig(cfg) {
   // Applies a full engine config JSON (Mode C) to HDW_V2 and ALPHA_MENSILE
@@ -3469,6 +3481,8 @@ function _applyEngineConfig(cfg) {
   if (hp.k_high  != null) HDW_V2.k_high  = hp.k_high;
   if (hp.delta_rel_threshold != null) HDW_V2.delta_rel_threshold = hp.delta_rel_threshold;
   if (ni.night_hours_min != null) HDW_V2.night_hours_min = ni.night_hours_min;
+  if (ni.night_window_start != null) HDW_V2.night_window_start = ni.night_window_start;
+  if (ni.night_window_end   != null) HDW_V2.night_window_end   = ni.night_window_end;
   // Vegetazione — parametri stored per uso futuro (non sovrascrivono i parametri operativi)
   // classification.Tmax_class2/3 e streak.streak_activation_days hanno priorità
   const vg = cfg.vegetation || {};
@@ -3720,6 +3734,8 @@ function _rainHoursInDay(date, hourlyTimes, hourlyPrecip, minPrecip=0.1) {
 function _nightHoursAbove(date, hourlyTimes, hourlyTemps, threshold) {
   if (!hourlyTimes || !hourlyTemps || !date) return null;
   const nh = HDW_V2.night_hours_min;
+  const nStart = parseInt((HDW_V2.night_window_start || '20:00').slice(0,2));
+  const nEnd   = parseInt((HDW_V2.night_window_end   || '08:00').slice(0,2));
   const prev = new Date(date + 'T12:00:00Z'); prev.setUTCDate(prev.getUTCDate() - 1);
   const prevStr = prev.toISOString().slice(0, 10);
   let count = 0;
@@ -3727,8 +3743,8 @@ function _nightHoursAbove(date, hourlyTimes, hourlyTemps, threshold) {
     const ts = hourlyTimes[i];              // "YYYY-MM-DDTHH:00" locale
     const tsDate = ts.slice(0, 10);
     const tsHour = parseInt(ts.slice(11, 13));
-    // Finestra: giorno precedente 20–23 + giorno corrente 00–07
-    if ((tsDate === prevStr && tsHour >= 20) || (tsDate === date && tsHour < 8)) {
+    // Finestra notturna: letta da HDW_V2 (default 20:00–08:00)
+    if ((tsDate === prevStr && tsHour >= nStart) || (tsDate === date && tsHour < nEnd)) {
       if ((hourlyTemps[i] ?? -99) >= threshold) count++;
     }
   }
@@ -3740,6 +3756,8 @@ function _nightHoursAbove(date, hourlyTimes, hourlyTemps, threshold) {
 // Usata da calcNightScore_v2 per rilevare notti secche anche in assenza di stress termico.
 function _nightHoursBelow(date, hourlyTimes, hourlyRH, threshold) {
   if (!hourlyTimes || !hourlyRH || !date) return null;
+  const nStart = parseInt((HDW_V2.night_window_start || '20:00').slice(0,2));
+  const nEnd   = parseInt((HDW_V2.night_window_end   || '08:00').slice(0,2));
   const prev = new Date(date + 'T12:00:00Z'); prev.setUTCDate(prev.getUTCDate() - 1);
   const prevStr = prev.toISOString().slice(0, 10);
   let count = 0;
@@ -3748,7 +3766,8 @@ function _nightHoursBelow(date, hourlyTimes, hourlyRH, threshold) {
     if (!ts) continue;
     const tsDate = ts.slice(0, 10);
     const tsHour = parseInt(ts.slice(11, 13));
-    if ((tsDate === prevStr && tsHour >= 20) || (tsDate === date && tsHour < 8)) {
+    // Finestra notturna: letta da HDW_V2 (default 20:00–08:00)
+    if ((tsDate === prevStr && tsHour >= nStart) || (tsDate === date && tsHour < nEnd)) {
       const rh = hourlyRH[i];
       if (rh != null && rh <= threshold) count++;
     }
@@ -9699,7 +9718,7 @@ async function _fetchPreconWindow(lat,lng,year,todayMMDD){
     latitude:lat,longitude:lng,
     daily:'temperature_2m_max,relative_humidity_2m_mean,windspeed_10m_max,windgusts_10m_max,precipitation_sum',
     start_date:fmt(start),end_date:fmt(end),
-    timezone:'Europe/Lisbon'
+    timezone: _getTimezone()
   });
   const r=await fetch(`${ARCH_URL}?${p}`);
   if(!r.ok)throw new Error(`Archive ${year} HTTP ${r.status}`);
@@ -9837,7 +9856,7 @@ async function runSimilarityAnalysis(lat,lng,fireYears,currentMeteo){
     const currArchP=fetch(`${ARCH_URL}?`+new URLSearchParams({
       latitude:lat,longitude:lng,
       daily:'temperature_2m_max,relative_humidity_2m_mean,windspeed_10m_max,windgusts_10m_max,precipitation_sum',
-      start_date:win90startStr,end_date:yestStr,timezone:'Europe/Lisbon'
+      start_date:win90startStr,end_date:yestStr,timezone: _getTimezone()
     })).then(r=>r.json()).catch(()=>null);
 
     
