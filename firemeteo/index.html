@@ -5097,7 +5097,7 @@ function _saveCustomEngines() {
 function _geoAutoDetectEngine(lat, lon) {
   const _lat = parseFloat(lat), _lon = parseFloat(lon);
 
-  // 1. PRIORITÀ: Custom engines (package caricati dall'utente)
+  // 1. PRIORITÀ ASSOLUTA: Custom engines (ignorano sempre user lock)
   let bestEng = null;
   for (const eng of Object.values(ENGINES)) {
     if (eng._custom && eng.bbox) {
@@ -5108,29 +5108,40 @@ function _geoAutoDetectEngine(lat, lon) {
     }
   }
 
-  // 2. FALLBACK: Built-in engines con bbox (se nessun custom match)
-  if (!bestEng) {
-    // Ordine di specificità: più specifici prima (Sardinia > Greece > Mediterranean)
-    const ordered = ['greece_aegean','sardinia','turkey','portugal','greece','california','chile','australia','canada','mediterranean'];
-    for (const id of ordered) {
-      const eng = ENGINES[id];
-      if (eng && eng.bbox) {
-        const [lo, hi, la, lb] = eng.bbox;
-        if (_lon >= lo && _lon <= hi && _lat >= la && _lat <= lb) {
-          bestEng = eng; break;
-        }
+  // Se trovato custom engine, applica sempre (ignora user lock)
+  if (bestEng) {
+    const curId = _activeEngineConfig?.meta?.region_id || _activeEngineId;
+    if (curId === bestEng.id) return; // già attivo
+    
+    engineApply(bestEng.id, false);
+    updateEngineActiveBar();  
+    showToast(`⬡ Zone: ${bestEng.flag || '📦'} ${bestEng.short}`, 2200);
+    return;
+  }
+
+  // 2. FALLBACK: Built-in engines (SOLO se user non locked)
+  if (_engineUserLocked) {
+    console.log('🔒 User locked - skipping built-in geo-detection');
+    return; // User ha fatto Apply manuale → rispetta la scelta
+  }
+
+  // Cerca built-in engines solo se user non ha scelto esplicitamente
+  const ordered = ['greece_aegean','sardinia','turkey','portugal','greece','california','chile','australia','canada','mediterranean'];
+  for (const id of ordered) {
+    const eng = ENGINES[id];
+    if (eng && eng.bbox) {
+      const [lo, hi, la, lb] = eng.bbox;
+      if (_lon >= lo && _lon <= hi && _lat >= la && _lat <= lb) {
+        bestEng = eng; break;
       }
     }
   }
 
-  if (!bestEng) return;  // nessuna zona copre questo punto → lascia preset attivo
+  if (!bestEng) return;  // nessuna zona copre questo punto
 
-  // 3. Non rieseguire se già attivo
   const curId = _activeEngineConfig?.meta?.region_id || _activeEngineId;
-  if (curId === bestEng.id) return;
+  if (curId === bestEng.id) return; // già attivo
 
-  // 4. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)  
-  // IMPORTANTE: Custom engines vincono sempre, built-in rispettano user preferences
   engineApply(bestEng.id, false);
   updateEngineActiveBar();
   showToast(`⬡ Zone: ${bestEng.flag || '🌍'} ${bestEng.short}`, 2200);
