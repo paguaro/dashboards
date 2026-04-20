@@ -84,14 +84,14 @@
 <div class="top-bar">
   <div>
     <h1>🔥 HDWc Batch Analysis · Mediterraneo</h1>
-    <div class="sub" id="engineSub">Carica un file per iniziare</div>
+    <div class="sub" id="engineSub">Load a file to start</div>
   </div>
-  <label class="file-label">📂 Incendi (GeoJSON / CSV)<input type="file" id="fileInput" accept=".geojson,.json,.csv"></label>
+  <label class="file-label">📂 Fires (GeoJSON / CSV)<input type="file" id="fileInput" accept=".geojson,.json,.csv"></label>
 
   <!-- Config JSON custom -->
-  <label class="file-label" title="Carica config JSON FireMeteo (Mode C)">⚙ Config JSON<input type="file" id="configInput" accept=".json"></label>
+  <label class="file-label" title="Load FireMeteo JSON config (Mode C)">⚙ Config JSON<input type="file" id="configInput" accept=".json"></label>
   <!-- Pacchetto zone multiple -->
-  <label class="file-label" title="Carica pacchetto JSON con più zone (es. pt_zones_config.json)" style="background:#1e3a5f;border-color:#2563eb">
+  <label class="file-label" title="Load JSON package with multiple zones (e.g. pt_zones_config.json)" style="background:#1e3a5f;border-color:#2563eb">
     📦 Pacchetto zone<input type="file" id="packageInput" accept=".json">
   </label>
 
@@ -101,19 +101,29 @@
 
   <!-- Anno -->
   <select id="selYear" style="padding:5px 10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;display:none" onchange="applyFilters()">
-    <option value="all">Tutti gli anni</option>
+    <option value="all">All years</option>
   </select>
 
   <!-- Finestra temporale -->
-  <select id="selDays" style="padding:5px 10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer" title="Giorni pre-evento da analizzare">
-    <option value="90">90gg</option>
-    <option value="120">120gg</option>
-    <option value="150">150gg</option>
-    <option value="180">180gg</option>
+  <select id="selDays" style="padding:5px 10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer" title="Pre-ignition days to analyze (engine warmup + prior historical series)">
+    <option value="90">−90gg</option>
+    <option value="120">−120gg</option>
+    <option value="150">−150gg</option>
+    <option value="180">−180gg</option>
+  </select>
+
+  <!-- Finestra post-ignizione (attiva solo se CSV/JSON non ha date_end; ignorata quando date_end è presente perché in quel caso si fetcha anno intero) -->
+  <select id="selDaysAfter" style="padding:5px 10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer" title="Post-ignition days to include in fetch. Active only for records without date_end. Post-ignition HDWc represents atmospheric evolution independent of fire activity (useful to assess whether conditions remained favorable after ignition).">
+    <option value="0">+0gg</option>
+    <option value="10">+10gg</option>
+    <option value="20">+20gg</option>
+    <option value="30">+30gg</option>
+    <option value="60">+60gg</option>
+    <option value="90">+90gg</option>
   </select>
 
   <span id="fireCount" style="font-size:12px;color:var(--dim)"></span>
-  <button class="btn btn-primary" id="btnRun" style="display:none" onclick="runAnalysis()">▶ Avvia analisi</button>
+  <button class="btn btn-primary" id="btnRun" style="display:none" onclick="runAnalysis()">▶ Run analysis</button>
   <button class="btn btn-stop" id="btnStop" style="display:none" onclick="stopAnalysis()">■ Stop</button>
   <div class="progress-bar" id="progBar" style="display:none">
     <div class="progress-fill" id="progFill" style="width:0%"></div>
@@ -126,22 +136,22 @@
 <!-- ── Layout ── -->
 <div class="main">
   <div class="sidebar">
-    <div class="nav-section">Analisi</div>
-    <div class="nav-item active" onclick="showTab('summary')">📊 Riepilogo</div>
+    <div class="nav-section">Analysis</div>
+    <div class="nav-item active" onclick="showTab('summary')">📊 Summary</div>
     <div class="nav-item" onclick="showTab('scatter')">◎ HDWc vs Area</div>
-    <div class="nav-item" onclick="showTab('alarm')">🚨 Pre-allarme</div>
+    <div class="nav-item" onclick="showTab('alarm')">🚨 Pre-alert</div>
     <div class="nav-item" onclick="showTab('slope')">📈 Trend 7gg</div>
-    <div class="nav-item" onclick="showTab('peak')">⛰ Prossimità al picco</div>
+    <div class="nav-item" onclick="showTab('peak')">⛰ Proximity to peak</div>
     <div class="nav-section">Dati</div>
-    <div class="nav-item" onclick="showTab('table')">☰ Tabella dettaglio</div>
-    <div class="nav-item" onclick="showTab('map')">🗺 Mappa incendi</div>
-    <div class="nav-item" onclick="showTab('errors')" id="navErrors" style="display:none">⚠ Errori fetch</div>
+    <div class="nav-item" onclick="showTab('table')">☰ Detail table</div>
+    <div class="nav-item" onclick="showTab('map')">🗺 Fires map</div>
+    <div class="nav-item" onclick="showTab('errors')" id="navErrors" style="display:none">⚠ Fetch errors</div>
     <div class="nav-section">Operativo</div>
-    <div class="nav-item" onclick="showTab('monitor')">🛰 Monitoraggio punti</div>
+    <div class="nav-item" onclick="showTab('monitor')">🛰 Point monitoring</div>
     <div class="nav-item" onclick="showTab('engines')">⚙ Engine attivi</div>
   </div>
   <div class="content" id="content">
-    <div class="empty"><big>📂</big>Carica il file <b>fires_1000ha.geojson</b><br>per avviare l'analisi batch</div>
+    <div class="empty"><big>📂</big>Load the file <b>fires_1000ha.geojson</b><br>to start batch analysis</div>
   </div>
 </div>
 
@@ -277,6 +287,10 @@ function deleteEngine(id) {
     ? `Eliminare l'engine default "${label}"?\nVerrà rimosso fino al prossimo ricaricamento della pagina.`
     : `Eliminare l'engine "${label}"?`;
   if (!confirm(msg)) return;
+  // Cattura il riferimento PRIMA del delete per confronto di identità affidabile.
+  // (Se facciamo il confronto dopo, ENGINES[id] è undefined e non possiamo più sapere
+  // se currentEngine puntava a questo engine.)
+  const deletedEngine = ENGINES[id];
   delete ENGINES[id];
   // Rimuovi bbox custom (mantieni quelle hardcoded per coerenza GEO_REGIONS)
   if (!DEFAULT_ENGINE_IDS.has(id)) delete BBOXES[id];
@@ -285,8 +299,28 @@ function deleteEngine(id) {
   const opt = sel?.querySelector(`option[value="${id}"]`);
   if (opt) opt.remove();
   // Se l'engine eliminato era il currentEngine, reset a 'all' (o al primo disponibile)
-  if (currentEngine === (ENGINES[id] ?? null) || !Object.keys(ENGINES).length) {
-    currentEngine = ENGINES.all || Object.values(ENGINES)[0];
+  if (currentEngine === deletedEngine || !Object.keys(ENGINES).length) {
+    currentEngine = ENGINES.all || Object.values(ENGINES)[0] || null;
+  }
+  // Ricostruisci il selettore regione se abbiamo incendi caricati, così la
+  // voce "🌍 Tutto il dataset" resta sempre disponibile anche dopo delete
+  // di un engine default (es. portugal).
+  if (allFeatures.length) {
+    const sel2 = document.getElementById('selRegion');
+    // Se l'opzione cancellata era quella attualmente selezionata, ripiega su "all"
+    // per evitare che buildRegionSelector scelga una zona custom casuale.
+    if (sel2 && (sel2.value === id || sel2.dataset._prevValue === id || !sel2.value)) {
+      sel2.dataset._prevValue = 'all';
+    }
+    buildRegionSelector(allFeatures);
+    // Sanity: se per qualche motivo il selettore non ha un valore valido dopo rebuild,
+    // cade su 'all' (che esiste sempre in BBOXES). Così il bottone "Avvia analisi"
+    // si ripresenta con il conteggio totale invece di restare nascosto.
+    if (sel2 && (!sel2.value || !BBOXES[sel2.value])) {
+      sel2.value = 'all';
+      sel2.dataset._prevValue = 'all';
+    }
+    applyFilters();   // sincronizza subtitle "N incendi (regione)" e visibilità btnRun
   }
   showTab('engines');
 }
@@ -363,10 +397,19 @@ function dc(he,tmax,rain,n,rhMean,strict=false) {
   const P=currentEngine.p;
   if ((rain||0)>=P.rain_eff) return 0;
   let d;
+  const mc2 = P.mc2 || 'OR';   // default: OR (AND_c3only nuovo default v2.1)
+  const mc3 = P.mc3 || 'AND';  // default: AND (class3 severa)
   if (strict) {
-    // AND gate puro per class 3: ns solo → max class 2 (già gestito via dn in alpha())
-    if ((tmax||0)>=P.tc3 && he>=P.hc3) d=3;
-    else if (((tmax||0)>=P.tc2 && he>=P.hc2) || n>=2) d=2;
+    // class3: AND default, OR se configurato
+    const c3_and = (tmax||0)>=P.tc3 && he>=P.hc3;
+    const c3_or  = (tmax||0)>=P.tc3 || he>=P.hc3;
+    const c3_hit = (mc3==='AND') ? c3_and : c3_or;
+    // class2: OR default (AND_c3only), AND se configurato (vecchio comportamento strict)
+    const c2_and = (tmax||0)>=P.tc2 && he>=P.hc2;
+    const c2_or  = (tmax||0)>=P.tc2 || he>=P.hc2;
+    const c2_hit = ((mc2==='AND') ? c2_and : c2_or) || n>=2;
+    if (c3_hit) d=3;
+    else if (c2_hit) d=2;
     else d=1;
   } else {
     // OR gate display: ns>=2 richiede segnale atmosferico parziale per class 3
@@ -463,7 +506,9 @@ function _fclassBonus(he, tmax, prevHe) {
 }
 
 function runEngine(days) {
-  let prev=0,sk=0,prevHe=0,prevA=null; const out=[];
+  let prev=0,sk=0,prevHe=0,prevA=null;
+  let prevD1=null;                      // Δ¹HDWc del giorno precedente (per Δ²)
+  const out=[];
   for (const d of days) {
     const m=parseInt(d.date.slice(5,7))-1;
     const aRef=currentEngine.alpha[m];
@@ -479,6 +524,12 @@ function runEngine(days) {
     const a=alpha(aRef,d_s,n,sk,foehDelta);
     const c=he+a*(beta(d.rain,d.rain_hours)*prev);
     const da=prevA!==null ? parseFloat((a-prevA).toFixed(4)) : 0;
+    // Derivata prima e seconda di HDWc (Δ¹ = velocità, Δ² = accelerazione)
+    // Δ¹_t = HDWc_t − HDWc_{t−1}
+    // Δ²_t = Δ¹_t − Δ¹_{t−1}  =  HDWc_t − 2·HDWc_{t−1} + HDWc_{t−2}
+    // Entrambe valgono 0 nei giorni iniziali in cui non sono calcolabili.
+    const d1 = (out.length >= 1) ? parseFloat((c - prev).toFixed(2)) : 0;
+    const d2 = (prevD1 !== null) ? parseFloat((d1 - prevD1).toFixed(2)) : 0;
     // ── Componenti Δα per tooltip ──────────────────────────────────────────
     const P_=currentEngine.p;
     const da_dry   = sk>=P_.streak ? (d_s===2?P_.dd2 : d_s===3?P_.dd3 : 0) : 0;
@@ -487,11 +538,12 @@ function runEngine(days) {
     const da_night = P_.dn[n] || 0;
     const da_relief= d_s===0 ? P_.drel : 0;
     out.push({date:d.date,hdwc:c,he,he_raw,alpha:a,aRef,delta_alpha:da,
+              delta_hdwc_1:d1, delta_hdwc_2:d2,
               da_dry,da_long,da_night,da_relief,
               dc:d_,ns:n,sk,
               wind:d.wind??null, gust:d.gust??null, tmin:d.tmin??null, tmax:d.tmax??null,
               rain:d.rain??0, rh:d.rh??null, dir:d.dir??null});
-    prev=c; prevHe=he; prevA=a;
+    prev=c; prevHe=he; prevA=a; prevD1=d1;
   }
   return out;
 }
@@ -537,6 +589,8 @@ document.getElementById('packageInput').addEventListener('change', e => {
             rain_eff: cl.Rain_effective_mm ?? 2,
             tc2: cl.Tmax_class2 ?? 30,   tc3: cl.Tmax_class3 ?? 35,
             hc2: cl.HDW_eff_class2 ?? 65, hc3: cl.HDW_eff_class3 ?? 130,
+            mc2: (cl.mode_class2==='AND'||cl.mode_class2==='OR') ? cl.mode_class2 : 'OR',
+            mc3: (cl.mode_class3==='AND'||cl.mode_class3==='OR') ? cl.mode_class3 : 'AND',
             streak: st.streak_activation_days ?? 4,
             dd2: st.delta_alpha_dry_class2 ?? 0.004,
             dd3: st.delta_alpha_dry_class3 ?? 0.009,
@@ -590,15 +644,23 @@ document.getElementById('packageInput').addEventListener('change', e => {
       });
 
       const msg = ok > 0
-        ? `✓ ${ok} zone caricate:
-${names.map(n=>'  • '+n).join('\n')}${skip ? '\n\n⚠ ' + skip + ' zone saltate (struttura non valida)' : ''}`
-        : `✗ Nessuna zona valida trovata nel pacchetto.
+        ? `✓ ${ok} zones loaded:
+${names.map(n=>'  • '+n).join('\n')}${skip ? '\n\n⚠ ' + skip + ' skipped zones (invalid structure)' : ''}`
+        : `✗ No valid zone found in the package.
 Formato atteso: {"1":{config}, "2":{config}, ...}`;
 
       alert(msg);
       e.target.value = '';
+      // Ricostruisci il selettore regione per garantire che l'opzione
+      // "🌍 Tutto il dataset" sia sempre presente come prima opzione,
+      // insieme alle zone custom appena caricate (evita che appendChild
+      // lasci il dropdown senza "all" quando allFeatures è già popolato).
+      if (allFeatures.length) {
+        buildRegionSelector(allFeatures);
+        applyFilters();   // sincronizza subtitle + btnRun con la regione effettivamente selezionata
+      }
 
-    } catch(err) { alert('Errore parsing JSON: ' + err.message); }
+    } catch(err) { alert('JSON parsing error: ' + err.message); }
   };
   r.readAsText(file);
 });
@@ -611,7 +673,7 @@ document.getElementById('configInput').addEventListener('change', e => {
       const cfg = JSON.parse(ev.target.result);
       // Valida struttura minima Mode C
       if (!cfg.alpha?.alpha_ref || !cfg.soglie?.hdwc?.mensile) {
-        alert('JSON non valido: mancano alpha.alpha_ref o soglie.hdwc.mensile'); return;
+        alert('Invalid JSON: missing alpha.alpha_ref or soglie.hdwc.mensile'); return;
       }
       const id = cfg.meta?.region_id || 'custom_' + Date.now();
       const name = cfg.meta?.preset_name || file.name.replace('.json','');
@@ -635,6 +697,8 @@ document.getElementById('configInput').addEventListener('change', e => {
           rain_eff: cl.Rain_effective_mm ?? 2,
           tc2: cl.Tmax_class2 ?? 30, tc3: cl.Tmax_class3 ?? 35,
           hc2: cl.HDW_eff_class2 ?? 65, hc3: cl.HDW_eff_class3 ?? 130,
+          mc2: (cl.mode_class2==='AND'||cl.mode_class2==='OR') ? cl.mode_class2 : 'OR',
+          mc3: (cl.mode_class3==='AND'||cl.mode_class3==='OR') ? cl.mode_class3 : 'AND',
           streak: st.streak_activation_days ?? 4,
           dd2: st.delta_alpha_dry_class2 ?? 0.004,
           dd3: st.delta_alpha_dry_class3 ?? 0.009,
@@ -668,20 +732,24 @@ document.getElementById('configInput').addEventListener('change', e => {
       sel.value = id;
       if (allFeatures.length) buildRegionSelector(allFeatures); // rebuild con nuovo engine
       applyFilters();
-      alert(`✓ Engine caricato: ${name}\nSelezionalo dal menu Regione per usarlo.`);
-    } catch(err) { alert('Errore parsing JSON: ' + err.message); }
+      alert(`✓ Engine loaded: ${name}\nSelect it from the Region menu to use it.`);
+    } catch(err) { alert('JSON parsing error: ' + err.message); }
   };
   r.readAsText(file);
 });
 
 function applyFilters() {
-  const region = document.getElementById('selRegion').value || 'all';
+  const sel = document.getElementById('selRegion');
+  const region = sel?.value || 'all';
+  if (sel) sel.dataset._prevValue = region;   // memorizza per sopravvivere ai rebuild
   const year   = document.getElementById('selYear').value;
   currentEngine = ENGINES[region] || ENGINES.all;
   const winDays = document.getElementById('selDays')?.value || '90';
   document.getElementById('engineSub').textContent =
     `Engine: ${currentEngine.name} · ${winDays}gg pre-evento · Open-Meteo ERA5 archive`;
-  const [lonMin,lonMax,latMin,latMax] = BBOXES[region];
+  // Fallback bbox: se region non esiste in BBOXES (es. engine cancellato che teneva la sua bbox),
+  // cade su 'all' per evitare crash.
+  const [lonMin,lonMax,latMin,latMax] = BBOXES[region] || BBOXES.all;
   fires = allFeatures.filter(f => {
     const [lon,lat] = f.geometry.coordinates;
     const inBbox = lon>=lonMin&&lon<=lonMax&&lat>=latMin&&lat<=latMax;
@@ -729,11 +797,23 @@ function dailyFromAPI(d, i) {
   };
 }
 async function analyzeFire(fire) {
-  const {date,area_ha,size_class,fire_id}=fire.properties;
+  const {date,date_end,area_ha,size_class,fire_id}=fire.properties;
   const [lon,lat]=fire.geometry.coordinates;
-  const winDays = parseInt(document.getElementById('selDays')?.value || '90');
-  const start=dateAdd(date, -winDays);
-  const data=await fetchERA5(lat,lon,start,date);
+  const winDays  = parseInt(document.getElementById('selDays')?.value || '90');
+  const postDays = parseInt(document.getElementById('selDaysAfter')?.value || '0');
+  // Se date_end disponibile: fetch copre tutto il periodo di burn (anno intero per coprire start→end)
+  // Altrimenti: finestra [−winDays, +postDays] attorno alla data di ignizione
+  let start, end;
+  if (date_end) {
+    const yearStart = date.slice(0, 4);
+    const yearEnd   = date_end.slice(0, 4);
+    start = `${yearStart}-01-01`;
+    end   = `${yearEnd}-12-31`;
+  } else {
+    start = dateAdd(date, -winDays);
+    end   = postDays > 0 ? dateAdd(date, +postDays) : date;
+  }
+  const data=await fetchERA5(lat,lon,start,end);
   const d=data.daily;
   const days=d.time.map((dt,i)=>({
     date:dt,tmax:d.temperature_2m_max[i],tmin:d.temperature_2m_min[i],
@@ -747,18 +827,36 @@ async function analyzeFire(fire) {
   const fireEngineId = detectRegion(lon, lat);
   currentEngine = ENGINES[fireEngineId] || ENGINES.all;
   const series=runEngine(days);
-  const n=series.length-1; const d0=series[n];
+  // d0 = giorno di ignizione. Quando postDays>0 (o date_end presente con fetch anno intero),
+  // la serie contiene giorni oltre l'ignizione. d0 NON è l'ultimo giorno: lo cerchiamo per data.
+  let d0Idx = series.findIndex(s => s.date === date);
+  if (d0Idx < 0) d0Idx = series.length - 1;   // fallback: data non trovata → ultimo giorno
+  const n = d0Idx; const d0 = series[d0Idx];
   const m=parseInt(date.slice(5,7))-1;
   const thr=currentEngine.hdwc_m[m];
   let do_=null,dr=null;
+  // Cerco days_orange/days_red solo nei giorni ANTECEDENTI all'ignizione (lead time pre-evento)
   for(let i=0;i<=n;i++){
     if(series[i].hdwc>=thr[2]&&do_===null) do_=n-i;
     if(series[i].hdwc>=thr[3]&&dr===null)  dr=n-i;
   }
+  // Picco HDWc sull'intera serie (anche giorni post-ignizione, se presenti)
   let mx=0,mi=0;
   for(let i=0;i<series.length;i++) if(series[i].hdwc>mx){mx=series[i].hdwc;mi=i;}
   const s7 =n>=7 ?(d0.hdwc-series[n-7].hdwc)/7 :null;
   const s14=n>=14?(d0.hdwc-series[n-14].hdwc)/14:null;
+  // ── Derivate HDWc: Δ¹ al D0 + Δ² al D0 + inflection point pre-D0 ─────
+  // Δ² misura l'accelerazione della curva. Il giorno di massimo Δ² pre-D0
+  // identifica il "punto di inflessione" — quando il sistema è entrato
+  // nella fase di escalation più ripida. Lead time operativamente utile.
+  const d1_d0 = d0.delta_hdwc_1 ?? 0;
+  const d2_d0 = d0.delta_hdwc_2 ?? 0;
+  let d2MaxPre = -Infinity, d2MaxIdx = -1;
+  for (let i = 2; i <= n; i++) {   // skip i<2 (Δ² non calcolabile)
+    const v = series[i].delta_hdwc_2 ?? 0;
+    if (v > d2MaxPre) { d2MaxPre = v; d2MaxIdx = i; }
+  }
+  if (d2MaxIdx < 0) { d2MaxPre = 0; d2MaxIdx = n; }
   const result = {
     fire_id,date,area_ha,size_class,lat:+lat.toFixed(2),lon:+lon.toFixed(2),
     engine_id: fireEngineId,
@@ -768,26 +866,37 @@ async function analyzeFire(fire) {
     days_from_peak:n-mi, days_orange:do_, days_red:dr,
     slope7d:s7!=null?Math.round(s7*10)/10:null,
     slope14d:s14!=null?Math.round(s14*10)/10:null,
+    // Derivate discrete della curva HDWc
+    delta1_d0: Math.round(d1_d0*10)/10,              // velocità al D0
+    delta2_d0: Math.round(d2_d0*10)/10,              // accelerazione al D0
+    delta2_max: Math.round(d2MaxPre*10)/10,          // accelerazione massima pre-D0
+    delta2_max_date: series[d2MaxIdx]?.date ?? null, // data del picco di accelerazione
+    delta2_max_lead: n - d2MaxIdx,                   // giorni tra picco-accelerazione e D0
     thr_orange:thr[2], thr_red:thr[3]
   };
   seriesCache[fire_id] = series;
   // FWI canadese al D0 e statistiche finestra
   const fwiS = calcFWI(series);
   const fwiD0 = fwiS[n]?.fwi ?? null;
-  const fwiMax = fwiS.reduce((mx,s)=>s.fwi>mx?s.fwi:mx, 0);
-  const fwiDays30 = fwiS.filter(s=>s.fwi>=30).length;
-  const fwiDays50 = fwiS.filter(s=>s.fwi>=50).length;
+  // Metriche riepilogative: solo sulla finestra pre-ignizione (0..n) per preservare
+  // semantica delle colonne della tabella batch. La serie completa (inclusi giorni
+  // post-ignizione se postDays>0) resta disponibile in seriesCache per i grafici di dettaglio.
+  const fwiPre = fwiS.slice(0, n+1);
+  const fwiMax = fwiPre.reduce((mx,s)=>s.fwi>mx?s.fwi:mx, 0);
+  const fwiDays30 = fwiPre.filter(s=>s.fwi>=30).length;
+  const fwiDays50 = fwiPre.filter(s=>s.fwi>=50).length;
   result.fwi_d0    = fwiD0!=null ? Math.round(fwiD0*10)/10 : null;
   result.fwi_max   = Math.round(fwiMax*10)/10;
   result.fwi_d30   = fwiDays30;
   result.fwi_d50   = fwiDays50;
-  // ── Green Streak — finestra di accumulo combustibile sotto stress atmosferico ──
+  // Green Streak — finestra di accumulo combustibile sotto stress atmosferico
   // Condizione gap: HDWc≥soglia_gialla AND FWI<30 AND pioggia<2mm
   // Misura: durata, intensità, struttura episodica, timing chiusura gap
+  // Anche qui: solo periodo pre-ignizione (0..n) per coerenza con le altre metriche.
   let _gs=0, gsMax=0, gsTot=0, gsIntensity=0.0;
   let gsEpisodes=0, gsEpOpen=false;
   let gsCloseDate=null;  // prima data in cui il gap si chiude (FWI≥30 con HDWc ancora carico)
-  for(let i=0;i<series.length;i++){
+  for(let i=0;i<=n;i++){
     const mi=parseInt(series[i].date.slice(5,7))-1;
     const ti=currentEngine.hdwc_m[mi];
     const fwi_i = fwiS[i]?.fwi??0;
@@ -837,6 +946,34 @@ async function analyzeFire(fire) {
 // ── State ─────────────────────────────────────────────────────────────────
 let fires=[], results=[], errors=[], abort=false, currentTab='summary', sortCol='hdwc_d0', sortDir=-1;
 const seriesCache = {};
+
+// ── Tabella: colonne fissate (freeze) + preset rapidi ──────────────────────
+// Lista ordinata: le chiavi appaiono in questo ordine all'inizio della tabella
+// e restano sticky durante scroll orizzontale. Non persiste tra sessioni.
+let _tblFrozen = ['date','engine_id','area_ha'];
+const TBL_PRESETS = {
+  'Identity':    ['date','engine_id','area_ha'],
+  'HDWc focus':  ['date','engine_id','area_ha','hdwc_d0','hdwc_max'],
+  'Dinamica':    ['date','engine_id','area_ha','delta1_d0','delta2_d0','delta2_max_lead'],
+  'GS focus':    ['date','engine_id','area_ha','gs_intensity','fire_load'],
+  'Pre-alert': ['date','engine_id','area_ha','days_orange','days_red','slope7d']
+};
+// Toggle di una colonna nel set frozen (pin icon)
+function _togglePin(key) {
+  // Le chiavi identità restano sempre frozen (hanno senso solo come contesto)
+  if (key === 'date') return;
+  const i = _tblFrozen.indexOf(key);
+  if (i >= 0) _tblFrozen.splice(i, 1);
+  else _tblFrozen.push(key);
+  renderCurrentTab();
+}
+// Applica preset
+function _applyTblPreset(name) {
+  if (TBL_PRESETS[name]) {
+    _tblFrozen = [...TBL_PRESETS[name]];
+    renderCurrentTab();
+  }
+}
 
 const SC = {'Large 1000–5000 ha':'#4f8ef7','Very large 5000–10000 ha':'#f97316','Megafire ≥10000 ha':'#ef4444'};
 const SS = {'Large 1000–5000 ha':'Large','Very large 5000–10000 ha':'VeryLarge','Megafire ≥10000 ha':'Megafire'};
@@ -904,11 +1041,11 @@ function parseCSV(text) {
   const yearCol = headers.indexOf('year_');
 
   if (ci.date < 0 && yearCol < 0) {
-    alert(`CSV: colonna data non trovata.\nColonne riconoscibili: date_start, date, data, fecha, ignition_date\nTrovate: ${headers.join(', ')}`);
+    alert(`CSV: date column not found.\nRecognized columns: date_start, date, data, fecha, ignition_date\nFound: ${headers.join(', ')}`);
     return [];
   }
   if (ci.lat < 0 || ci.lon < 0) {
-    alert(`CSV: colonne lat/lon non trovate.\nTrovate: ${headers.join(', ')}`);
+    alert(`CSV: lat/lon columns not found.\nFound: ${headers.join(', ')}`);
     return [];
   }
 
@@ -967,7 +1104,9 @@ function parseCSV(text) {
 
 // ── Popola menu regione dai dati caricati ─────────────────────────────────
 function buildRegionSelector(features) {
-  // Conta eventi per regione rilevata
+  // Conta eventi per regione rilevata. detectRegion() dà priorità alle custom
+  // (sub-regioni più specifiche), quindi se una zona PT custom matcha,
+  // counts['pt_xxx'] cresce e counts['portugal'] resta 0.
   const counts = {};
   for (const f of features) {
     const [lon, lat] = f.geometry.coordinates;
@@ -976,27 +1115,57 @@ function buildRegionSelector(features) {
   }
   const sel = document.getElementById('selRegion');
   const opts = [];
-  // Aggiungi "Tutto il dataset" sempre per primo
+
+  // 1. "Tutto il dataset" sempre per primo
   opts.push(`<option value="all">🌍 Tutto il dataset (${features.length})</option>`);
-  // Aggiungi regioni trovate ordinate per conteggio
-  const found = Object.entries(counts).filter(([k])=>k!=='all').sort((a,b)=>b[1]-a[1]);
-  for (const [rid, cnt] of found) {
-    const def = GEO_REGIONS.find(r=>r.id===rid);
+
+  // 2. Zone CUSTOM con count > 0 (priorità: sono le più specifiche)
+  //    Ordinate per conteggio decrescente
+  const customWithCount = Object.entries(counts)
+    .filter(([k]) => k !== 'all' && ENGINES[k]?._custom)
+    .sort((a,b) => b[1] - a[1]);
+  for (const [rid, cnt] of customWithCount) {
+    opts.push(`<option value="${rid}">📦 ${ENGINES[rid].name} (${cnt})</option>`);
+  }
+
+  // 3. Regioni HARDCODED con count > 0 (incendi non coperti da nessuna custom)
+  //    Ordinate per conteggio decrescente
+  const hardcodedWithCount = Object.entries(counts)
+    .filter(([k]) => k !== 'all' && !ENGINES[k]?._custom)
+    .sort((a,b) => b[1] - a[1]);
+  for (const [rid, cnt] of hardcodedWithCount) {
+    const def = GEO_REGIONS.find(r => r.id === rid);
     if (def) {
-      const label = `${def.flag} ${def.name} (${cnt})`;
-      opts.push(`<option value="${rid}">${label}</option>`);
+      opts.push(`<option value="${rid}">${def.flag} ${def.name} (${cnt})</option>`);
     }
   }
-  // Aggiungi engine custom caricati via ⚙ che non sono nei GEO_REGIONS
+
+  // 4. Zone CUSTOM senza match (caricate ma nessun incendio dentro la bbox)
+  //    Permettono comunque selezione manuale per casi edge
   for (const id of Object.keys(ENGINES)) {
-    if (!GEO_REGIONS.find(r=>r.id===id) && id!=='all' && ENGINES[id]._custom) {
-      opts.push(`<option value="${id}">📋 ${ENGINES[id].name}</option>`);
+    if (id !== 'all' && ENGINES[id]._custom && !(id in counts)) {
+      opts.push(`<option value="${id}">📋 ${ENGINES[id].name} (0)</option>`);
     }
   }
+
   sel.innerHTML = opts.join('');
   sel.style.display = '';
-  // Seleziona automaticamente la regione con più eventi
-  if (found.length > 0) sel.value = found[0][0];
+
+  // Preserva la selezione corrente se ancora valida (e con conteggio > 0).
+  // Altrimenti auto-select: prima zona custom popolata, poi prima hardcoded popolata, poi 'all'.
+  const prevValue = sel.dataset._prevValue || sel.value;
+  const prevHasOption = prevValue && sel.querySelector(`option[value="${prevValue}"]`);
+  const prevHasFires = prevValue && (counts[prevValue] || 0) > 0;
+  if (prevHasOption && (prevValue === 'all' || prevHasFires)) {
+    sel.value = prevValue;
+  } else if (customWithCount.length > 0) {
+    sel.value = customWithCount[0][0];
+  } else if (hardcodedWithCount.length > 0) {
+    sel.value = hardcodedWithCount[0][0];
+  } else {
+    sel.value = 'all';
+  }
+  sel.dataset._prevValue = sel.value;
 }
 
 document.getElementById('fileInput').addEventListener('change', e => {
@@ -1030,14 +1199,14 @@ document.getElementById('fileInput').addEventListener('change', e => {
           }
           return f;
         });
-      } catch { alert('File non valido: non è GeoJSON né CSV'); return; }
+      } catch { alert('Invalid file: neither GeoJSON nor CSV'); return; }
     }
-    if (!features.length) { alert('Nessun evento valido trovato nel file'); return; }
+    if (!features.length) { alert('No valid event found in the file'); return; }
     allFeatures = features;
     // Popola anni
     const years = [...new Set(allFeatures.map(f=>f.properties.date.slice(0,4)))].sort();
     const selY = document.getElementById('selYear');
-    selY.innerHTML = '<option value="all">Tutti gli anni</option>' +
+    selY.innerHTML = '<option value="all">All years</option>' +
       years.map(y=>`<option value="${y}">${y}</option>`).join('');
     selY.style.display = '';
     buildRegionSelector(allFeatures);
@@ -1118,7 +1287,7 @@ function v(arr,k) { return arr.map(x=>x[k]).filter(x=>x!=null); }
 
 // ── Summary ───────────────────────────────────────────────────────────────
 function renderSummary(c) {
-  if(!results.length) { c.innerHTML=`<div class="empty"><big>⏳</big>Avvia l'analisi per vedere i risultati</div>`; return; }
+  if(!results.length) { c.innerHTML=`<div class="empty"><big>⏳</big>Run analysis to see results</div>`; return; }
   const bc=byClass();
   const classes=['Large 1000–5000 ha','Very large 5000–10000 ha','Megafire ≥10000 ha'];
 
@@ -1192,12 +1361,12 @@ function renderSummary(c) {
       <div class="stat-card" style="border-left:3px solid #86efac;padding-left:12px">
         <div class="stat-label">🌿 GS Intensity mediana</div>
         <div class="stat-value" style="color:#86efac;font-size:28px">${Math.round(median(allGSI)||0).toLocaleString()}</div>
-        <div class="stat-sub">Σ HDWc×(1−FWI/30) giorni gap · r=+0.27</div>
+        <div class="stat-sub">Σ HDWc×(1−FWI/30) gap days · r=+0.27</div>
       </div>
       <div class="stat-card" style="border-left:3px solid #facc15;padding-left:12px">
         <div class="stat-label">🌙 Night Score mediano</div>
         <div class="stat-value" style="color:#facc15;font-size:28px">${(median(allNS)||0).toFixed(1)}</div>
-        <div class="stat-sub">0=normale · 1=calda · 2=tropicale · 3=severa · r=+0.23</div>
+        <div class="stat-sub">0=normal · 1=warm · 2=tropical · 3=severe · r=+0.23</div>
       </div>
     </div>
 
@@ -1208,19 +1377,19 @@ function renderSummary(c) {
     </div>
     <div class="summary-grid" style="margin-bottom:14px">
       <div class="stat-card">
-        <div class="stat-label">Incendi analizzati</div>
+        <div class="stat-label">Fires analyzed</div>
         <div class="stat-value" style="color:var(--blue)">${results.length}</div>
         <div class="stat-sub">${fires.length} nel dataset · ${megaN} Megafire (${megaPct}%)</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">HDWc D0 mediano</div>
         <div class="stat-value" style="color:var(--orange)">${Math.round(median(allHDW)||0)}</div>
-        <div class="stat-sub">al giorno ignizione · r=+0.18</div>
+        <div class="stat-sub">at ignition day · r=+0.18</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">GS max mediano</div>
         <div class="stat-value" style="color:var(--green)">${Math.round(median(allGSM)||0)}gg</div>
-        <div class="stat-sub">streak accumulo più lunga · r=+0.26</div>
+        <div class="stat-sub">longest accumulation streak · r=+0.26</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">FWI D0 mediano</div>
@@ -1230,13 +1399,13 @@ function renderSummary(c) {
       <div class="stat-card">
         <div class="stat-label">GS→D0 mediano</div>
         <div class="stat-value" style="color:#86efac">${Math.round(median(allGSD)||0)}gg</div>
-        <div class="stat-sub">tra chiusura gap e ignizione</div>
+        <div class="stat-sub">between gap closure and ignition</div>
       </div>
     </div>
 
     <!-- ── TABELLA PER CLASSE ── -->
     <div class="card" style="margin-bottom:10px">
-      <div class="card-title">Metriche mediane per classe dimensionale</div>
+      <div class="card-title">Median metrics by size class</div>
       <div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Classe</th><th title="Numero eventi">N</th>
@@ -1245,7 +1414,7 @@ function renderSummary(c) {
           <th title="Night Score mediano" onclick="setSort('ns_d0')" style="cursor:pointer;color:#facc15">🌙 NS ↕</th>
           <th title="HDWc D0 mediano" onclick="setSort('hdwc_d0')" style="cursor:pointer">HDWc D0 ↕</th>
           <th title="FWI D0 mediano">FWI D0</th>
-          <th title="Percentuale Megafire nella classe" style="color:var(--red)">% Mega</th>
+          <th title="Percentage of Megafires in the class" style="color:var(--red)">% Mega</th>
         </tr></thead>
         <tbody>${classRows}</tbody>
       </table></div>
@@ -1253,13 +1422,13 @@ function renderSummary(c) {
 
     <!-- ── RECORD PER CLASSE ── -->
     <div class="card" style="margin-bottom:10px">
-      <div class="card-title">Record per classe dimensionale</div>
+      <div class="card-title">Record by size class</div>
       <div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Classe</th>
-          <th title="Evento con FireLoad massimo" style="color:var(--orange)">🔥 Max FireLoad</th>
-          <th title="Evento con area bruciata massima" style="color:var(--blue)">📐 Max area</th>
-          <th title="Evento con GS Intensity massima" style="color:#86efac">🌿 Max GS_int</th>
+          <th title="Event with maximum FireLoad" style="color:var(--orange)">🔥 Max FireLoad</th>
+          <th title="Event with maximum burned area" style="color:var(--blue)">📐 Max area</th>
+          <th title="Event with maximum GS Intensity" style="color:#86efac">🌿 Max GS_int</th>
         </tr></thead>
         <tbody>${recordRows}</tbody>
       </table></div>
@@ -1267,10 +1436,10 @@ function renderSummary(c) {
 
     <!-- ── INFO-BOX ── -->
     <div class="info-box">
-      <b>Gerarchia degli indicatori</b> (per correlazione con area bruciata — 217 eventi PT) <br>
+      <b>Indicator hierarchy</b> (by correlation with burned area — 217 PT events) <br>
       <span style="color:#f97316">●</span> <b>FireLoad v2</b> r=+0.31 — GS_intensity × (1+0.1×NS) × √(HDWc/thr_rossa): indice composito triade, predittore più robusto &nbsp;·&nbsp;
       <span style="color:#86efac">●</span> <b>GS intensity</b> r=+0.27 — Σ(HDWc×(1−FWI/30)) giorni gap: proxy del combustibile fine accumulato &nbsp;·&nbsp;
-      <span style="color:#facc15">●</span> <b>NS D0</b> r=+0.23 — Night Score: 0=normale · 1=calda≥18°C · 2=tropicale≥20°C · 3=severa≥25°C &nbsp;·&nbsp;
+      <span style="color:#facc15">●</span> <b>NS D0</b> r=+0.23 — Night Score: 0=normale · 1=calda≥${(currentEngine?.p?.tw ?? 18)}°C · 2=tropicale≥${(currentEngine?.p?.tt ?? 20)}°C · 3=severa≥${(currentEngine?.p?.ts ?? 25)}°C &nbsp;·&nbsp;
       <span style="color:#9ca3af">●</span> <b>HDWc D0</b> r=+0.18 — memoria atmosferica stagionale &nbsp;·&nbsp;
       <span style="color:#9ca3af">●</span> <b>FWI D0</b> r≈0 su area diretta — utile come modulatore del gap, non come predittore autonomo &nbsp;·&nbsp;
       <b>Luglio</b>: mese più difficile per tutti gli indici (r&lt;0.15) — varianza dominata da fattori non atmosferici &nbsp;·&nbsp;
@@ -1280,7 +1449,7 @@ function renderSummary(c) {
 
 // ── Scatter ───────────────────────────────────────────────────────────────
 function renderScatter(c) {
-  c.innerHTML=`<div class="card"><div class="card-title">HDWc al giorno ignizione vs Area bruciata</div><div id="plotScatter" style="height:380px"></div></div>`;
+  c.innerHTML=`<div class="card"><div class="card-title">HDWc at ignition day vs Burned area</div><div id="plotScatter" style="height:380px"></div></div>`;
   if(!results.length) return;
   const classes=['Large 1000–5000 ha','Very large 5000–10000 ha','Megafire ≥10000 ha'];
   const traces=classes.map(cl=>({
@@ -1293,7 +1462,7 @@ function renderScatter(c) {
   }));
   Plotly.newPlot('plotScatter', traces, {
     paper_bgcolor:'transparent',plot_bgcolor:'transparent',
-    xaxis:{title:'HDWc al giorno ignizione',color:'#8890a8',gridcolor:'#2e3347',zeroline:false},
+    xaxis:{title:'HDWc at ignition day',color:'#8890a8',gridcolor:'#2e3347',zeroline:false},
     yaxis:{title:'Area bruciata (ha)',color:'#8890a8',gridcolor:'#2e3347',zeroline:false},
     legend:{font:{color:'#8890a8',size:11}}, margin:{t:10,r:20,b:50,l:60},
     font:{color:'#8890a8'}
@@ -1304,14 +1473,14 @@ function renderScatter(c) {
 function renderAlarm(c) {
   c.innerHTML=`
     <div class="card" style="margin-bottom:10px">
-      <div class="card-title">Distribuzione FireLoad per classe · concentrazione Megafire per quartile</div>
+      <div class="card-title">FireLoad distribution by class · Megafire concentration by quartile</div>
       <div id="plotAlarmFL" style="height:300px"></div>
-      <div class="info-box" style="margin-top:8px">FireLoad = GS_intensity × (1+0.1×NS) × √(HDWc/thr_rossa) · Q4 concentra il 20–30% dei Megafire in solo il 25% degli eventi · Q1 = 0 Megafire su 217 eventi PT</div>
+      <div class="info-box" style="margin-top:8px">FireLoad = GS_intensity × (1+0.1×NS) × √(HDWc/thr_red) · Q4 concentrates 20–30% of Megafires in only 25% of events · Q1 = 0 Megafires across 217 PT events</div>
     </div>
     <div class="card">
-      <div class="card-title">Distribuzione giorni pre-allarme rosso (HDWc &gt; soglia) prima dell'ignizione</div>
+      <div class="card-title">Distribution of red pre-alert days (HDWc &gt; threshold) before ignition</div>
       <div id="plotAlarm" style="height:280px"></div>
-      <div class="info-box" style="margin-top:8px">Valori alti = finestra operativa di preavviso · 0gg = sistema supera soglia rossa solo al D0 · nota: l'assenza di pre-allarme non implica incendio minore — vedi Megafire giugno 2017</div>
+      <div class="info-box" style="margin-top:8px">Higher values = wider operational pre-alert window · 0d = system crosses red threshold only at D0 · note: absence of pre-alert does not imply a smaller fire — see June 2017 Megafire</div>
     </div>`;
   if(!results.length) return;
 
@@ -1349,7 +1518,7 @@ function renderAlarm(c) {
 
 // ── Slope ─────────────────────────────────────────────────────────────────
 function renderSlope(c) {
-  c.innerHTML=`<div class="card"><div class="card-title">Variazione HDWc nei 7gg pre-ignizione (Δ/giorno) · i megafire partono in fase di accumulo rapido?</div><div id="plotSlope" style="height:300px"></div></div>`;
+  c.innerHTML=`<div class="card"><div class="card-title">HDWc variation in the 7d pre-ignition (Δ/day) · do megafires start during rapid accumulation phase?</div><div id="plotSlope" style="height:300px"></div></div>`;
   if(!results.length) return;
   const bins=[[-999,-10],[-10,-5],[-5,0],[0,5],[5,10],[10,20],[20,40],[40,999]];
   const labels=['<-10','-10–-5','-5–0','0–5','5–10','10–20','20–40','>40'];
@@ -1369,7 +1538,7 @@ function renderSlope(c) {
 
 // ── Peak proximity ────────────────────────────────────────────────────────
 function renderPeak(c) {
-  c.innerHTML=`<div class="card"><div class="card-title">Distanza tra ignizione e picco HDWc · 0=ignizione al picco · negativo=prima del picco</div>
+  c.innerHTML=`<div class="card"><div class="card-title">Distance between ignition and HDWc peak · 0 = ignition at peak · negative = before peak</div>
     <div id="plotPeak" style="height:280px"></div>
     <div class="info-box" style="margin-top:8px">
       Concentrazione intorno a 0 = gli incendi partono al picco atmosferico · distribuzione ampia = il D0 può cadere lontano dal picco (tipico di incendi da accumulo combustibile con HDWc già in discesa) ·
@@ -1400,7 +1569,11 @@ function setSort(col) {
 }
 function renderTable(c) {
   // [chiave, etichetta, tooltip]
-  const cols=[
+  // Soglie NS live dal config engine corrente (fallback 18/20/25 se non caricato)
+  const _tw = currentEngine?.p?.tw ?? 18;
+  const _tt = currentEngine?.p?.tt ?? 20;
+  const _ts = currentEngine?.p?.ts ?? 25;
+  const colsDef=[
     ['date',          'Data',       "Data di ignizione dell'incendio"],
     ['engine_id',     'Engine',     'Config engine usato — riflette il pacchetto zone caricato'],
     ['area_ha',       'Area ha',    'Superficie bruciata in ettari (fonte EFFIS/VIIRS)'],
@@ -1409,7 +1582,7 @@ function renderTable(c) {
     ['hdweff_d0',     'HDW D0',    'Valore istantaneo HDW_eff al D0 — intensità atmosferica puntuale'],
     ['alpha_d0',      'α D0',      'Coefficiente di memoria dinamico al D0 (0.40–0.95): più alto = sistema più condizionato dai giorni secchi precedenti'],
     ['streak_d0',     'Streak',    'Giorni consecutivi di classe 2–3 (aggravamento) al D0'],
-    ['ns_d0',         'NS',        'Night Score al D0: 0=normale · 1=calda≥18°C · 2=tropicale≥20°C · 3=severa≥25°C'],
+    ['ns_d0',         'NS',        `Night Score al D0: 0=normale · 1=calda≥${_tw}°C · 2=tropicale≥${_tt}°C · 3=severa≥${_ts}°C`],
     ['dc_d0',         'DC',        'Day Class al D0: 0=disagravamento · 1=neutro · 2=aggravamento · 3=forte'],
     ['hdwc_max',      'HDWc max',  'Picco HDWc nella finestra di analisi (90gg pre-ignizione)'],
     ['days_from_peak','Δpicco',    'Giorni tra D0 e il picco HDWc: 0=picco al D0 · >0=dopo il picco · negativo=prima del picco'],
@@ -1417,6 +1590,11 @@ function renderTable(c) {
     ['days_red',      'Gg pre-🔴', 'Giorni prima del D0 in cui HDWc supera la soglia rossa mensile — pre-allarme severo'],
     ['slope7d',       'Δ7gg',      'Variazione media giornaliera HDWc nei 7 giorni pre-ignizione — velocità di accumulo recente'],
     ['slope14d',      'Δ14gg',     'Variazione media giornaliera HDWc nei 14 giorni pre-ignizione'],
+    ['delta1_d0',     'Δ¹ D0',     'Derivata prima di HDWc al giorno di ignizione: velocità istantanea di accumulo (HDWc/gg). Positiva = curva in salita · negativa = in discesa'],
+    ['delta2_d0',     'Δ² D0',     'Derivata seconda di HDWc al giorno di ignizione: accelerazione. Positiva = curva convessa (in accelerazione, pericolo crescente) · negativa = concava (in flessione)'],
+    ['delta2_max',    'Δ² max',    'Accelerazione massima registrata nel periodo pre-ignizione. Identifica il punto di inflessione in cui il sistema è entrato nella fase più ripida di escalation'],
+    ['delta2_max_date','Δ² max gg','Data del picco di accelerazione pre-ignizione'],
+    ['delta2_max_lead','Lead Δ²', 'Giorni tra il picco di accelerazione e l\'ignizione. Lead time teorico di pre-allerta: più alto = più tempo disponibile per elevare allerta prima del fuoco'],
     ['fwi_d0',        'FWI D0 ⋮',    'Canadian Fire Weather Index (Van Wagner 1987) al D0 — indice di superficie: reagisce in ore a T, RH, vento, pioggia'],
     ['fwi_max',       'FWI max',   'Picco FWI nella finestra: EFFIS — moderato≥10 · alto≥30 · molto alto≥45 · estremo≥50'],
     ['fwi_d30',       'FWI≥30gg',  'Giorni con FWI≥30 nella finestra (soglia EFFIS "alto rischio")'],
@@ -1430,49 +1608,96 @@ function renderTable(c) {
     ['gs_to_d0',     'GS→D0',     'Giorni tra prima chiusura gap e ignizione D0 — lead time del segnale di essiccazione rispetto all\'evento'],
     ['fire_load',    '🔥 FireLoad',  'FireLoad v2 — formula ottimizzata su 185 eventi Portogallo: GS_intensity × (1 + 0.1×NS) × √(HDWc_D0/thr_rossa). √ comprime l\'escursione di HDWc senza cap rigido. NS×0.1 è il peso ottimale empirico (r=+0.287 vs gs_int +0.268). Guadagno principale in giugno (+0.37 vs −0.13 di gs_int da sola)'],
   ];
+  // ── Riordino: colonne frozen prima (nell'ordine di _tblFrozen),
+  // poi le altre nell'ordine originale.
+  const colsMap = Object.fromEntries(colsDef.map(r => [r[0], r]));
+  const frozenRows = _tblFrozen.map(k => colsMap[k]).filter(Boolean);
+  const frozenKeys = new Set(_tblFrozen);
+  const otherRows  = colsDef.filter(r => !frozenKeys.has(r[0]));
+  const cols       = [...frozenRows, ...otherRows];
+  const stickyN    = frozenRows.length;
+
   const sorted=[...results].sort((a,b)=>{
     const av=a[sortCol]??-Infinity, bv=b[sortCol]??-Infinity;
     return sortDir*(typeof av==='number'?bv-av:String(bv).localeCompare(String(av)));
   });
   const SEP_COLS = new Set(['fwi_d0','gs_d0','fire_load']);
-  const thead=cols.map(([k,l,tip])=>
-    `<th onclick="setSort('${k}')" title="${tip}"
-      style="cursor:pointer;white-space:nowrap;${SEP_COLS.has(k)?'border-left:2px solid var(--border);':''
-      }${sortCol===k?'color:var(--blue)':''}"
-    >${l}${sortCol===k?(sortDir<0?'↓':'↑'):''}</th>`).join('');
-  const tbody=sorted.map((r,i)=>`<tr style="cursor:pointer" onclick="showDetail('${r.fire_id}','${r.date}',${r.lat},${r.lon},'${r.area_ha}')">
-    <td>${r.date}</td>
-    <td style="font-size:10px;color:${r.engine_id&&r.engine_id!=='portugal'&&r.engine_id!=='all'?'#86efac':'var(--dim)'}" title="${r.engine_id??''}">${r.engine_id&&r.engine_id!=='portugal'&&r.engine_id!=='all'?'📦 '+(r.engine_id||'—'):(r.engine_id||'—')}</td>
-    <td>${r.area_ha?.toLocaleString()}</td>
-    <td><span class="pill pill-${SP[r.size_class]}">${SS[r.size_class]}</span></td>
-    <td style="font-weight:600">${r.hdwc_d0}</td>
-    <td>${r.hdweff_d0}</td>
-    <td>${r.alpha_d0}</td>
-    <td style="${r.streak_d0>30?'color:var(--red);font-weight:600':r.streak_d0>14?'color:var(--orange)':''}">${r.streak_d0}</td>
-    <td>${r.ns_d0}</td>
-    <td>${r.dc_d0}</td>
-    <td>${r.hdwc_max}</td>
-    <td style="${r.days_from_peak<=3?'color:var(--red);font-weight:600':''}">${r.days_from_peak??'—'}</td>
-    <td>${r.days_orange??'—'}</td>
-    <td style="${r.days_red===0?'color:var(--red)':r.days_red!=null&&r.days_red<7?'color:var(--orange)':''}">${r.days_red??'—'}</td>
-    <td style="${r.slope7d>20?'color:var(--red)':r.slope7d>10?'color:var(--orange)':''}">${r.slope7d??'—'}</td>
-    <td>${r.slope14d??'—'}</td>
-    <td style="border-left:2px solid var(--border);font-weight:600;color:${r.fwi_d0>=50?'var(--red)':r.fwi_d0>=30?'var(--orange)':'var(--fg)'}">${r.fwi_d0??'—'}</td>
-    <td style="color:${r.fwi_max>=50?'var(--red)':r.fwi_max>=30?'var(--orange)':''}">${r.fwi_max??'—'}</td>
-    <td>${r.fwi_d30??'—'}</td>
-    <td style="color:${r.fwi_d50>0?'var(--red)':''}">${r.fwi_d50??'—'}</td>
-    <td style="border-left:2px solid var(--border);font-weight:600;color:${r.gs_d0>=30?'var(--green)':r.gs_d0>=14?'#86efac':''}">${r.gs_d0??'—'}</td>
-    <td style="color:${r.gs_max>=45?'var(--green)':r.gs_max>=21?'#86efac':''}">${r.gs_max??'—'}</td>
-    <td>${r.gs_total??'—'}</td>
-    <td style="color:${r.gs_intensity>=10000?'var(--green)':r.gs_intensity>=4000?'#86efac':''}">${r.gs_intensity!=null?r.gs_intensity.toLocaleString():'—'}</td>
-    <td>${r.gs_episodes??'—'}</td>
-    <td style="font-size:10px">${r.gs_close??'—'}</td>
-    <td style="color:${r.gs_to_d0>=30?'var(--green)':r.gs_to_d0>=14?'#86efac':''}">${r.gs_to_d0!=null?r.gs_to_d0+'gg':'—'}</td>
-    <td style="border-left:2px solid var(--border);font-weight:700;color:${r.fire_load>=9000?'var(--red)':r.fire_load>=5000?'var(--orange)':r.fire_load>=2000?'#86efac':''}">${r.fire_load!=null?r.fire_load.toLocaleString():'—'}</td>
+  const thead=cols.map(([k,l,tip])=>{
+    const isFrozen = frozenKeys.has(k);
+    const isPinnable = k !== 'date';  // date è sempre ancorata
+    const pinIcon = isPinnable
+      ? `<span onclick="event.stopPropagation();_togglePin('${k}')"
+              title="${isFrozen?'Unfreeze column':'Pin this column (sticky)'}"
+              style="cursor:pointer;opacity:${isFrozen?'1':'0.35'};margin-right:4px;font-size:10px;transition:opacity 0.15s"
+              onmouseover="this.style.opacity='1'"
+              onmouseout="this.style.opacity='${isFrozen?'1':'0.35'}'">📌</span>`
+      : '';
+    return `<th onclick="setSort('${k}')" title="${tip}"
+      style="cursor:pointer;white-space:nowrap;${SEP_COLS.has(k)?'border-left:2px solid var(--border);':''}${sortCol===k?'color:var(--blue)':''}"
+    >${pinIcon}${l}${sortCol===k?(sortDir<0?'↓':'↑'):''}</th>`;
+  }).join('');
+
+  // Cell renderer per chiave — isolato in funzione per riuso in ordine dinamico
+  const cellFor = (r, k) => {
+    switch(k) {
+      case 'date':            return `<td>${r.date}</td>`;
+      case 'engine_id':       return `<td style="font-size:10px;color:${r.engine_id&&r.engine_id!=='portugal'&&r.engine_id!=='all'?'#86efac':'var(--dim)'}" title="${r.engine_id??''}">${r.engine_id&&r.engine_id!=='portugal'&&r.engine_id!=='all'?'📦 '+(r.engine_id||'—'):(r.engine_id||'—')}</td>`;
+      case 'area_ha':         return `<td>${r.area_ha?.toLocaleString()}</td>`;
+      case 'size_class':      return `<td><span class="pill pill-${SP[r.size_class]}">${SS[r.size_class]}</span></td>`;
+      case 'hdwc_d0':         return `<td style="font-weight:600">${r.hdwc_d0}</td>`;
+      case 'hdweff_d0':       return `<td>${r.hdweff_d0}</td>`;
+      case 'alpha_d0':        return `<td>${r.alpha_d0}</td>`;
+      case 'streak_d0':       return `<td style="${r.streak_d0>30?'color:var(--red);font-weight:600':r.streak_d0>14?'color:var(--orange)':''}">${r.streak_d0}</td>`;
+      case 'ns_d0':           return `<td>${r.ns_d0}</td>`;
+      case 'dc_d0':           return `<td>${r.dc_d0}</td>`;
+      case 'hdwc_max':        return `<td>${r.hdwc_max}</td>`;
+      case 'days_from_peak':  return `<td style="${r.days_from_peak<=3?'color:var(--red);font-weight:600':''}">${r.days_from_peak??'—'}</td>`;
+      case 'days_orange':     return `<td>${r.days_orange??'—'}</td>`;
+      case 'days_red':        return `<td style="${r.days_red===0?'color:var(--red)':r.days_red!=null&&r.days_red<7?'color:var(--orange)':''}">${r.days_red??'—'}</td>`;
+      case 'slope7d':         return `<td style="${r.slope7d>20?'color:var(--red)':r.slope7d>10?'color:var(--orange)':''}">${r.slope7d??'—'}</td>`;
+      case 'slope14d':        return `<td>${r.slope14d??'—'}</td>`;
+      case 'delta1_d0':       return `<td style="${r.delta1_d0>20?'color:var(--red)':r.delta1_d0>0?'color:var(--orange)':r.delta1_d0<0?'color:#86efac':''}">${r.delta1_d0??'—'}</td>`;
+      case 'delta2_d0':       return `<td style="${r.delta2_d0>10?'color:var(--red)':r.delta2_d0>0?'color:var(--orange)':r.delta2_d0<0?'color:#86efac':''}">${r.delta2_d0??'—'}</td>`;
+      case 'delta2_max':      return `<td>${r.delta2_max??'—'}</td>`;
+      case 'delta2_max_date': return `<td style="font-size:10px">${r.delta2_max_date??'—'}</td>`;
+      case 'delta2_max_lead': return `<td style="${r.delta2_max_lead<=7?'color:var(--red);font-weight:600':r.delta2_max_lead<=14?'color:var(--orange)':''}">${r.delta2_max_lead!=null?r.delta2_max_lead+'gg':'—'}</td>`;
+      case 'fwi_d0':          return `<td style="border-left:2px solid var(--border);font-weight:600;color:${r.fwi_d0>=50?'var(--red)':r.fwi_d0>=30?'var(--orange)':'var(--fg)'}">${r.fwi_d0??'—'}</td>`;
+      case 'fwi_max':         return `<td style="color:${r.fwi_max>=50?'var(--red)':r.fwi_max>=30?'var(--orange)':''}">${r.fwi_max??'—'}</td>`;
+      case 'fwi_d30':         return `<td>${r.fwi_d30??'—'}</td>`;
+      case 'fwi_d50':         return `<td style="color:${r.fwi_d50>0?'var(--red)':''}">${r.fwi_d50??'—'}</td>`;
+      case 'gs_d0':           return `<td style="border-left:2px solid var(--border);font-weight:600;color:${r.gs_d0>=30?'var(--green)':r.gs_d0>=14?'#86efac':''}">${r.gs_d0??'—'}</td>`;
+      case 'gs_max':          return `<td style="color:${r.gs_max>=45?'var(--green)':r.gs_max>=21?'#86efac':''}">${r.gs_max??'—'}</td>`;
+      case 'gs_total':        return `<td>${r.gs_total??'—'}</td>`;
+      case 'gs_intensity':    return `<td style="color:${r.gs_intensity>=10000?'var(--green)':r.gs_intensity>=4000?'#86efac':''}">${r.gs_intensity!=null?r.gs_intensity.toLocaleString():'—'}</td>`;
+      case 'gs_episodes':     return `<td>${r.gs_episodes??'—'}</td>`;
+      case 'gs_close':        return `<td style="font-size:10px">${r.gs_close??'—'}</td>`;
+      case 'gs_to_d0':        return `<td style="color:${r.gs_to_d0>=30?'var(--green)':r.gs_to_d0>=14?'#86efac':''}">${r.gs_to_d0!=null?r.gs_to_d0+'gg':'—'}</td>`;
+      case 'fire_load':       return `<td style="border-left:2px solid var(--border);font-weight:700;color:${r.fire_load>=9000?'var(--red)':r.fire_load>=5000?'var(--orange)':r.fire_load>=2000?'#86efac':''}">${r.fire_load!=null?r.fire_load.toLocaleString():'—'}</td>`;
+      default:                return `<td>${r[k]??'—'}</td>`;
+    }
+  };
+  const tbody = sorted.map(r => `<tr style="cursor:pointer" onclick="showDetail('${r.fire_id}','${r.date}',${r.lat},${r.lon},'${r.area_ha}')">
+    ${cols.map(([k]) => cellFor(r, k)).join('')}
   </tr>`).join('');
+
+  // ── Chip preset rapidi ─────────────────────────────────────────────────
+  const presetChips = Object.keys(TBL_PRESETS).map(name => {
+    const preset = TBL_PRESETS[name];
+    const matches = preset.length === _tblFrozen.length
+      && preset.every((k,i) => k === _tblFrozen[i]);
+    const style = matches
+      ? 'background:var(--blue);color:#fff;border-color:var(--blue)'
+      : 'background:transparent;color:var(--dim);border-color:var(--border)';
+    return `<button onclick="_applyTblPreset('${name}')"
+      style="${style};padding:3px 10px;border-radius:12px;border:1px solid;font-size:10px;cursor:pointer;transition:all 0.15s"
+      onmouseover="if(!this.style.background.includes('var(--blue)')){this.style.background='rgba(255,255,255,0.05)';this.style.color='var(--fg)'}"
+      onmouseout="if(!${matches}){this.style.background='transparent';this.style.color='var(--dim)'}"
+      title="Freeze: ${preset.join(' · ')}">${name} <span style="opacity:0.6;font-size:9px">(${preset.length})</span></button>`;
+  }).join(' ');
+
   c.innerHTML=`<div class="card" style="padding:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
-      <div class="card-title" style="margin:0">${sorted.length} eventi · <span style="color:var(--dim)">28 colonne — scorri → per FWI · GS · FireLoad</span> · click intestazione per ordinare</div>
+      <div class="card-title" style="margin:0">${sorted.length} eventi · <span style="color:var(--dim)">33 columns — scroll → for Δ · FWI · GS · FireLoad</span> · click header to sort</div>
       <button id="btnExportAllPDF" onclick="exportAllChartsPDF()"
         style="font-size:11px;padding:4px 12px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer"
         onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'"
@@ -1480,8 +1705,13 @@ function renderTable(c) {
         📄 Esporta tutti i grafici PDF
       </button>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+      <span style="font-size:10px;color:var(--dim);letter-spacing:.05em">FROZEN COLUMNS (${stickyN}):</span>
+      ${presetChips}
+      <span style="font-size:10px;color:var(--dim);margin-left:8px">· click 📌 on header to toggle</span>
+    </div>
     <div style="font-size:10px;color:var(--dim);margin-bottom:3px;display:flex;justify-content:space-between;align-items:center">
-      <span style="color:var(--dim)">📌 Data · Area · Classe bloccate &nbsp;|&nbsp; scorri → per FWI · GS · FireLoad</span>
+      <span style="color:var(--dim)">📌 fissate: ${_tblFrozen.join(' · ')} &nbsp;|&nbsp; scroll → per le altre</span>
       <span style="font-weight:600;font-size:10px">
         <span style="color:var(--orange)">🔥 FL</span> &nbsp;
         <span style="color:#86efac">🌿 GS</span> &nbsp;
@@ -1504,15 +1734,13 @@ function renderTable(c) {
     const mainScroll = document.getElementById('tblMain');
     const tbl = document.getElementById('tblData');
     if (!topScroll || !mainScroll || !tbl) return;
-    // Sync larghezza scrollbar in cima
     function syncW(){ document.getElementById('tblTopInner').style.width = tbl.offsetWidth + 'px'; }
     syncW(); setTimeout(syncW, 400);
-    // Scroll bidirezionale
     let _lock = false;
     topScroll.addEventListener('scroll', function(){ if(_lock) return; _lock=true; mainScroll.scrollLeft=topScroll.scrollLeft; _lock=false; });
     mainScroll.addEventListener('scroll', function(){ if(_lock) return; _lock=true; topScroll.scrollLeft=mainScroll.scrollLeft; _lock=false; });
-    // Sticky prime 3 colonne
-    const STICKY_N = 3;
+    // Sticky prime stickyN colonne (dinamico, in base a _tblFrozen)
+    const STICKY_N = stickyN;
     const allRows = [...tbl.querySelectorAll('thead tr, tbody tr')];
     allRows.forEach(function(row){
       let acc = 0;
@@ -1527,7 +1755,7 @@ function renderTable(c) {
         }
       });
     });
-    // Ombra sulla 3a colonna quando scrollato
+    // Ombra sulla ultima frozen quando scrollato
     mainScroll.addEventListener('scroll', function(){
       const sh = mainScroll.scrollLeft > 5 ? '4px 0 8px rgba(0,0,0,.4)' : 'none';
       allRows.forEach(function(row){ const c=row.cells[STICKY_N-1]; if(c) c.style.boxShadow=sh; });
@@ -1588,6 +1816,16 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
   let panel = document.getElementById('detailPanel');
   if (!panel) return;
   panel.style.display = '';
+  // Guardia difensiva: se currentEngine è stato staccato (engine cancellato, state corrotto),
+  // ricostruisci un fallback valido per evitare "undefined.hdwc_m".
+  if (!currentEngine || !currentEngine.hdwc_m) {
+    currentEngine = ENGINES[detectRegion(lon, lat)] || ENGINES.all || Object.values(ENGINES)[0] || null;
+    if (!currentEngine || !currentEngine.hdwc_m) {
+      panel.insertAdjacentHTML('beforeend',
+        `<div class="card" style="margin-bottom:10px"><div style="color:var(--red);font-size:12px;padding:8px">Error: no valid engine available. Reload the page.</div></div>`);
+      return;
+    }
+  }
   // Mostra loading nel container senza cancellare pannelli già aperti
   const loaderId = 'loader_' + Date.now();
   panel.insertAdjacentHTML('beforeend',
@@ -1597,7 +1835,8 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
   loaderEl?.scrollIntoView({behavior:'smooth', block:'nearest'});
 
   try {
-    const winDays = parseInt(document.getElementById('selDays')?.value || '90');
+    const winDays  = parseInt(document.getElementById('selDays')?.value || '90');
+    const postDays = parseInt(document.getElementById('selDaysAfter')?.value || '0');
 
     // Usa cache se disponibile (evita 429) — altrimenti fetch con retry
     let series;
@@ -1607,7 +1846,7 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
       loaderEl.innerHTML = `<div class="card-title">⏳ Fetch ERA5 · ${fireId} · attendi…</div>`;
       await new Promise(r => setTimeout(r, 1200)); // pausa anti-429
       // Se data inizio+fine disponibili: fetch anno intero (Jan 1 → Dec 31)
-      // Altrimenti: finestra mobile winDays prima dell'ignizione
+      // Altrimenti: finestra [−winDays, +postDays] attorno all'ignizione
       let startDate, endDate;
       if (dateEnd) {
         const yearStart = date.slice(0, 4);
@@ -1616,7 +1855,7 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
         endDate   = `${yearEnd}-12-31`;
       } else {
         startDate = dateAdd(date, -winDays);
-        endDate   = date;
+        endDate   = postDays > 0 ? dateAdd(date, +postDays) : date;
       }
       const data = await fetchERA5(lat, lon, startDate, endDate);
       const d = data.daily;
@@ -1643,7 +1882,12 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     const DC_COLOR = {'0':'#3b82f6','1':'#4b5563','2':'#f97316','3':'#dc2626'};
     const DC_NAME  = {'0':'disagravamento','1':'neutro','2':'aggravamento','3':'aggravamento forte'};
     const NS_COLOR = {'0':'#4b5563','1':'#facc15','2':'#f97316','3':'#dc2626'};
-    const NS_NAME  = {'0':'normale','1':'calda ≥18°C','2':'tropicale ≥20°C','3':'severa ≥25°C'};
+    // Etichette night score: leggono dinamicamente le soglie dal config attivo (currentEngine.p.tw/tt/ts)
+    // Fallback 18/20/25 se config non ancora caricato
+    const _nsTw = currentEngine?.p?.tw ?? 18;
+    const _nsTt = currentEngine?.p?.tt ?? 20;
+    const _nsTs = currentEngine?.p?.ts ?? 25;
+    const NS_NAME  = {'0':'normale','1':`calda ≥${_nsTw}°C`,'2':`tropicale ≥${_nsTt}°C`,'3':`severa ≥${_nsTs}°C`};
 
     const dates    = series.map(s=>s.date);
     const hdwcArr  = series.map(s=>parseFloat(s.hdwc.toFixed(1)));
@@ -1651,6 +1895,7 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
 
     // ── FWI stats (richiede dates e hdwcArr) ────────────────────────────
     const d0IdxFWI  = Math.max(0, dates.indexOf(date) !== -1 ? dates.indexOf(date) : series.length-1);
+    const d0Idx     = d0IdxFWI;   // alias usato da CDI / toggle legenda
     const fwiMax    = Math.max(...fwiArr.slice(0,d0IdxFWI+1).filter(v=>!isNaN(v)),0);
     const fwiMaxIdx = fwiArr.indexOf(fwiMax);
     const fwiMaxDate= series[fwiMaxIdx]?.date??'—';
@@ -1658,12 +1903,12 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     const fwiMean   = fwiSlice.length ? (fwiSlice.reduce((a,b)=>a+b,0)/fwiSlice.length).toFixed(1) : '—';
     const fwiDays30 = fwiSlice.filter(v=>v>=30).length;
     const fwiDays50 = fwiSlice.filter(v=>v>=50).length;
-    // Lead time FWI ≥30 prima di D0 (quanti gg continuativi sopra soglia fino a D0)
+    // Lead time FWI ≥30 before D0 (quanti gg continuativi sopra soglia fino a D0)
     let fwiLeadIdx=null;
     for(let li=d0IdxFWI;li>=0;li--){if(fwiArr[li]<30){fwiLeadIdx=li+1;break;}}
     if(fwiLeadIdx===null&&fwiArr[0]>=30)fwiLeadIdx=0;
     const fwiLead = fwiLeadIdx!=null ? d0IdxFWI-fwiLeadIdx : null;
-    // Lead time HDWc ≥ soglia arancio prima di D0
+    // Lead time HDWc ≥ soglia arancio before D0
     let hdwLeadIdx=null;
     for(let li=d0IdxFWI;li>=0;li--){if(hdwcArr[li]<thr[2]){hdwLeadIdx=li+1;break;}}
     if(hdwLeadIdx===null&&hdwcArr[0]>=thr[2])hdwLeadIdx=0;
@@ -1775,9 +2020,10 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     const fcstStreak = streakArr.slice(splitIdx);
     const hasFcst    = fcstLen > 0;
 
-    // ── Shapes: soglie + D0 + inizio run ────────────────────────────────
-    const shapes = [
-      // Sfondo zona previsione
+    // ── Shapes raggruppate per key: consentono toggle dalla legenda superiore ─
+    // Always-on: soglie, background fcst (non toggleabili).
+    // Per-key: D0, dateEnd, runMarkers (inizio run), gsEpisodes, gapClose.
+    const _shapesAlways = [
       ...(hasFcst && fcstDates.length>1 ? [{
         type:'rect', xref:'x', yref:'paper',
         x0:fcstDates[0], x1:fcstDates[fcstDates.length-1], y0:0, y1:1,
@@ -1787,36 +2033,89 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
        line:{color:'#f97316',width:1,dash:'dot'},layer:'below'},
       {type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:thr[3],y1:thr[3],
        line:{color:'#dc2626',width:1,dash:'dot'},layer:'below'},
-      // Oggi marker
-      {type:'line',xref:'x',yref:'paper',x0:date,x1:date,y0:0,y1:1,
-       line:{color:'#ffffff',width:2,dash:'dash'},layer:'above'}
     ];
-    // Inizio ogni run come linea verde verticale
-    streakRuns.forEach(r=>{
-      shapes.push({
+    const _shapesByKey = {
+      d0: [
+        {type:'line',xref:'x',yref:'paper',x0:date,x1:date,y0:0,y1:1,
+         line:{color:'#ffffff',width:2,dash:'dash'},layer:'above'}
+      ],
+      dateEnd: dateEnd ? [{
+        type:'line', xref:'x', yref:'paper',
+        x0:dateEnd, x1:dateEnd, y0:0, y1:1,
+        line:{color:'#60a5fa',width:2,dash:'dashdot'}, layer:'above'
+      }] : [],
+      runMarkers: streakRuns.map(r => ({
         type:'line',xref:'x',yref:'paper',
         x0:dates[r.start],x1:dates[r.start],y0:0,y1:1,
         line:{color:'#22c55e',width:1.5,dash:'dot'},layer:'below'
-      });
-    });
-    // ── Green Streak episodes: rettangolo verde semitrasparente ──────────
-    gsRuns.forEach(r=>{
-      shapes.push({
+      })),
+      gsEpisodes: gsRuns.map(r => ({
         type:'rect', xref:'x', yref:'paper',
         x0:dates[r.start], x1:dates[r.end], y0:0, y1:1,
         fillcolor:'rgba(134,239,172,0.07)',
         line:{color:'rgba(134,239,172,0.35)',width:1,dash:'dot'},
         layer:'below'
-      });
-    });
-    // Chiusura gap: linea verticale ambra (momento critico essiccazione)
-    if (gsCloseIdx!==null) {
-      shapes.push({
+      })),
+      gapClose: gsCloseIdx !== null ? [{
         type:'line', xref:'x', yref:'paper',
         x0:dates[gsCloseIdx], x1:dates[gsCloseIdx], y0:0, y1:1,
         line:{color:'#fbbf24',width:2,dash:'dashdot'}, layer:'above'
-      });
+      }] : [],
+      // ── CDI post-ignizione: shading per livello di rischio ─────────────
+      // Analogo al GS pre-ignizione (rettangolo verde) ma bidirezionale:
+      // giallo  = cautela (HDWc ≥ thr[1], sotto arancione) → bonifica con attenzione
+      // arancio = difficoltà (thr[2] ≤ HDWc < thr[3])     → operazioni rischiose
+      // rosso   = impossibile (HDWc ≥ thr[3])              → rischio riaccensione alto
+      // Giorni con HDWc < thr[1] non vengono colorati → finestra operativa sicura.
+      cdi: (function() {
+        const rects = [];
+        if (d0Idx >= series.length - 1) return rects;  // nessun giorno post
+        const fill = {
+          yellow: 'rgba(251,191,36,0.08)',
+          orange: 'rgba(249,115,22,0.10)',
+          red:    'rgba(220,38,38,0.12)'
+        };
+        const stroke = {
+          yellow: 'rgba(251,191,36,0.30)',
+          orange: 'rgba(249,115,22,0.35)',
+          red:    'rgba(220,38,38,0.40)'
+        };
+        // Raggruppa giorni consecutivi per livello post-D0
+        let segStart = null, segLevel = null;
+        for (let i = d0Idx + 1; i <= series.length; i++) {
+          let lvl = null;
+          if (i < series.length) {
+            const h = series[i].hdwc;
+            if      (h >= thr[3]) lvl = 'red';
+            else if (h >= thr[2]) lvl = 'orange';
+            else if (h >= thr[1]) lvl = 'yellow';
+          }
+          if (lvl !== segLevel) {
+            if (segLevel && segStart !== null) {
+              rects.push({
+                type:'rect', xref:'x', yref:'paper',
+                x0:dates[segStart], x1:dates[i-1], y0:0, y1:1,
+                fillcolor:fill[segLevel],
+                line:{color:stroke[segLevel], width:1, dash:'dot'},
+                layer:'below'
+              });
+            }
+            segStart = (lvl !== null) ? i : null;
+            segLevel = lvl;
+          }
+        }
+        return rects;
+      })()
+    };
+    // Helper: compone l'array shapes finale filtrando per stato toggle
+    function _composeShapes(state) {
+      const out = [..._shapesAlways];
+      for (const k of Object.keys(_shapesByKey)) {
+        if (state[k] !== false) out.push(..._shapesByKey[k]);
+      }
+      return out;
     }
+    const shapes = _composeShapes({});  // stato iniziale: tutto attivo
 
     // ── Traces ───────────────────────────────────────────────────────────
     const barColors = dcArr.map(dc=>DC_COLOR[dc]||'#4b5563');
@@ -1938,71 +2237,71 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
         hovertemplate:'FWI: %{y:.1f}<extra></extra>', yaxis:'y5' },
     ];
 
-    // ── Annotations ──────────────────────────────────────────────────────
+    // ── Annotations raggruppate per key (allineate alle shapes toggle) ────
     const monR = monResults.find(x=>x.name===fireId);
     const fcstLabel = monR ? ` · HDWc+16gg: ${monR.hdwc16d} (${monR.delta16>0?'+':''}${monR.delta16}) ${monR.trend}` : '';
-    const annotations = [
+    const _annotAlways = [
       {xref:'paper',yref:'paper',x:0,y:1.07,showarrow:false,xanchor:'left',
        text:`${fireId} · ${date} · streak: ${series[splitIdx]?.sk??'—'}gg · ${winDays}gg${fcstLabel}`,
        font:{size:11,color:'#8890a8'}},
-      {xref:'x',yref:'paper',x:date,y:1.04,showarrow:false,
-       text:hasFcst?'Oggi':'D0',font:{size:10,color:'#ffffff'},bgcolor:'#374151',borderpad:2},
+      {xref:'paper',yref:'y',x:1.01,y:thr[2],showarrow:false,xanchor:'left',text:'🟠',font:{size:10}},
+      {xref:'paper',yref:'y',x:1.01,y:thr[3],showarrow:false,xanchor:'left',text:'🔴',font:{size:10}}
     ];
-    streakRuns.filter(r=>r.len>=4).forEach(r=>{
-      annotations.push({xref:'x',yref:'paper',x:dates[r.start],y:1.01,showarrow:false,
-        text:`+${r.len}`,font:{size:9,color:'#22c55e'},bgcolor:'#0f1117',borderpad:1});
-    });
-    // ── Green Streak annotations: span ◀▶ con durata ──────────────────
-    gsRuns.forEach(r=>{
-      // Label centrata sull'episodio — usa data di mezzo per posizionare
+    const _annotByKey = {
+      d0: [{xref:'x',yref:'paper',x:date,y:1.04,showarrow:false,
+            text:hasFcst?'Oggi':'D0',font:{size:10,color:'#ffffff'},bgcolor:'#374151',borderpad:2}],
+      dateEnd: dateEnd ? [{
+        xref:'x', yref:'paper', x:dateEnd, y:1.04, showarrow:false,
+        text:'Extinguished', font:{size:10,color:'#ffffff'}, bgcolor:'#2563eb', borderpad:2
+      }] : [],
+      runMarkers: streakRuns.filter(r=>r.len>=4).map(r=>({
+        xref:'x',yref:'paper',x:dates[r.start],y:1.01,showarrow:false,
+        text:`+${r.len}`,font:{size:9,color:'#22c55e'},bgcolor:'#0f1117',borderpad:1
+      })),
+      gsEpisodes: [],
+      gapClose: [],
+      gustArrows: topPeaks.filter(i=>gustArr[i]!=null).map(i=>({
+        xref:'x',yref:'y4',x:dates[i],y:gustArr[i]+4,
+        text:dirSymbol(dirArr[i]),showarrow:false,
+        font:{size:10,color:'#38bdf8'},bgcolor:'rgba(15,17,23,0.75)',borderpad:2
+      }))
+    };
+    gsRuns.forEach(r => {
       const midI = Math.floor((r.start+r.end)/2);
       const midDate = dates[midI];
-      annotations.push({
-        xref:'x', yref:'paper', x:midDate, y:0.97,
-        showarrow:false, xanchor:'center',
-        text:`◄► GS ${r.len}gg`,
-        font:{size:9, color:'#86efac'},
-        bgcolor:'rgba(15,17,23,0.80)', borderpad:2,
-        bordercolor:'rgba(134,239,172,0.4)', borderwidth:1
-      });
-      // Freccia sinistra all'inizio
-      annotations.push({
-        xref:'x', yref:'paper', x:dates[r.start], y:0.97,
-        showarrow:true, axref:'x', ax:dates[r.start],
-        ayref:'paper', ay:0.97,
-        arrowhead:2, arrowsize:0.8, arrowcolor:'#86efac', arrowwidth:1.2,
-        text:'', xanchor:'right'
-      });
-      // Freccia destra alla fine
-      annotations.push({
-        xref:'x', yref:'paper', x:dates[r.end], y:0.97,
-        showarrow:true, axref:'x', ax:dates[r.end],
-        ayref:'paper', ay:0.97,
-        arrowhead:2, arrowsize:0.8, arrowcolor:'#86efac', arrowwidth:1.2,
-        text:'', xanchor:'left'
-      });
+      _annotByKey.gsEpisodes.push(
+        {xref:'x', yref:'paper', x:midDate, y:0.97, showarrow:false, xanchor:'center',
+         text:`◄► GS ${r.len}gg`, font:{size:9, color:'#86efac'},
+         bgcolor:'rgba(15,17,23,0.80)', borderpad:2,
+         bordercolor:'rgba(134,239,172,0.4)', borderwidth:1},
+        {xref:'x', yref:'paper', x:dates[r.start], y:0.97, showarrow:true,
+         axref:'x', ax:dates[r.start], ayref:'paper', ay:0.97,
+         arrowhead:2, arrowsize:0.8, arrowcolor:'#86efac', arrowwidth:1.2,
+         text:'', xanchor:'right'},
+        {xref:'x', yref:'paper', x:dates[r.end], y:0.97, showarrow:true,
+         axref:'x', ax:dates[r.end], ayref:'paper', ay:0.97,
+         arrowhead:2, arrowsize:0.8, arrowcolor:'#86efac', arrowwidth:1.2,
+         text:'', xanchor:'left'}
+      );
     });
-    // Marker chiusura gap ─ linea ambra + label
-    if (gsCloseIdx!==null) {
-      annotations.push({
+    if (gsCloseIdx !== null) {
+      _annotByKey.gapClose.push({
         xref:'x', yref:'paper', x:dates[gsCloseIdx], y:0.91,
         showarrow:true, ax:0, ay:-20,
         arrowhead:3, arrowsize:0.9, arrowcolor:'#fbbf24', arrowwidth:1.5,
-        text:'⚠️ gap chiude', xanchor:'left',
+        text:'⚠️ gap closes', xanchor:'left',
         font:{size:9, color:'#fbbf24'},
         bgcolor:'rgba(15,17,23,0.80)', borderpad:2
       });
     }
-    topPeaks.forEach(i=>{
-      if (gustArr[i]==null) return;
-      annotations.push({xref:'x',yref:'y4',x:dates[i],y:gustArr[i]+4,
-        text:dirSymbol(dirArr[i]),showarrow:false,
-        font:{size:10,color:'#38bdf8'},bgcolor:'rgba(15,17,23,0.75)',borderpad:2});
-    });
-    annotations.push(
-      {xref:'paper',yref:'y',x:1.01,y:thr[2],showarrow:false,xanchor:'left',text:'🟠',font:{size:10}},
-      {xref:'paper',yref:'y',x:1.01,y:thr[3],showarrow:false,xanchor:'left',text:'🔴',font:{size:10}}
-    );
+    function _composeAnnot(state) {
+      const out = [..._annotAlways];
+      for (const k of Object.keys(_annotByKey)) {
+        if (state[k] !== false) out.push(..._annotByKey[k]);
+      }
+      return out;
+    }
+    const annotations = _composeAnnot({});
 
     const layout = {
       paper_bgcolor:'transparent', plot_bgcolor:'transparent',
@@ -2025,34 +2324,182 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
       shapes, annotations, font:{color:'#8890a8'}, barmode:'stack'
     };
 
+    // ── ID pannello + chart (necessari già in legendHTML per data-chart) ──
+    const panelId = 'dp_' + Date.now();
+    const chartId = 'ch_' + panelId;
+
     // ── Legenda manuale ───────────────────────────────────────────────────
+    // ── Legenda interattiva: ogni item toggleabile è cliccabile ─────────────
+    // Stile comune: cursor pointer + transizione opacity per feedback
+    const _togStyle = 'cursor:pointer;user-select:none;transition:opacity 0.15s;padding:2px 4px;border-radius:3px';
+    const _mkTog = (key, inner) =>
+      `<span class="chart-tog" data-chart="${chartId}" data-key="${key}" style="${_togStyle};display:inline-flex;align-items:center;gap:3px"
+         onclick="_toggleChartElem(this)"
+         onmouseover="this.style.background='rgba(255,255,255,0.06)'"
+         onmouseout="this.style.background='transparent'">${inner}</span>`;
     const legendHTML =
-      `<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--dim);margin-bottom:6px">` +
+      `<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:var(--dim);margin-bottom:6px;align-items:center">` +
+      // C0-C3 (non toggleabili — sono i colori delle barre, informativi)
       Object.entries(DC_COLOR).map(([dc,col])=>
-        `<span style="display:inline-flex;align-items:center;gap:3px">
+        `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 4px">
           <span style="width:10px;height:10px;background:${col};border-radius:2px;opacity:0.6;display:inline-block"></span>
           C${dc} ${DC_NAME[dc]}</span>`).join('') +
-      `<span style="margin-left:8px;display:inline-flex;align-items:center;gap:3px">
-        <span style="width:10px;height:2px;background:#22c55e;display:inline-block"></span> inizio run</span>` +
-      `<span style="display:inline-flex;align-items:center;gap:3px">
-        <span style="width:10px;height:2px;background:#ffffff;display:inline-block"></span> ${hasFcst?'Oggi':'D0'}</span>` +
-      `<span style="margin-left:8px">NS: ` +
-      [1,2,3].map(n=>`<span style="color:${NS_COLOR[n]}">●${n}=${NS_NAME[n].split(' ')[0]}</span>`).join(' ') +
-      `</span>` +
-      `<span style="margin-left:10px;display:inline-flex;align-items:center;gap:4px">` +
-        `<span style="width:12px;height:8px;background:rgba(134,239,172,0.15);border:1px dashed rgba(134,239,172,0.4);display:inline-block;border-radius:1px"></span>` +
-        `<span style="color:#86efac">◀▶ GS accumulo</span>` +
-      `</span>` +
-      `<span style="margin-left:8px;display:inline-flex;align-items:center;gap:4px">` +
-        `<span style="width:2px;height:10px;background:#fbbf24;display:inline-block"></span>` +
-        `<span style="color:#fbbf24">⚠ gap chiude</span>` +
-      `</span>` +
+      // inizio run (toggle)
+      _mkTog('runMarkers', `<span style="width:10px;height:2px;background:#22c55e;display:inline-block"></span> inizio run`) +
+      // D0 (toggle)
+      _mkTog('d0', `<span style="width:10px;height:2px;background:#ffffff;display:inline-block"></span> ${hasFcst?'Oggi':'D0'}`) +
+      // Extinguished (toggle, solo se presente)
+      (dateEnd ? _mkTog('dateEnd',
+        `<span style="width:10px;height:2px;background:#60a5fa;display:inline-block"></span>
+         <span style="color:#93c5fd">Extinguished (${dateEnd})</span>`) : '') +
+      // NS 1/2/3 (toggle unico, agisce sulla trace 'Notte')
+      _mkTog('nsCircles',
+        `<span style="color:var(--dim)">NS:</span> ` +
+        [1,2,3].map(n=>`<span style="color:${NS_COLOR[n]}">●${n}=${NS_NAME[n].split(' ')[0]}</span>`).join(' ')
+      ) +
+      // GS accumulation (toggle)
+      _mkTog('gsEpisodes',
+        `<span style="width:12px;height:8px;background:rgba(134,239,172,0.15);border:1px dashed rgba(134,239,172,0.4);display:inline-block;border-radius:1px"></span>
+         <span style="color:#86efac">◀▶ GS accumulation</span>`) +
+      // gap closes (toggle)
+      _mkTog('gapClose',
+        `<span style="width:2px;height:10px;background:#fbbf24;display:inline-block"></span>
+         <span style="color:#fbbf24">⚠ gap closes</span>`) +
+      // gust arrows (freccette vento — toggle)
+      _mkTog('gustArrows',
+        `<span style="color:#38bdf8">↘ gusts</span>`) +
+      // CDI post-ignizione (toggle, visibile solo se ci sono giorni post)
+      (d0Idx < series.length - 1 ? _mkTog('cdi',
+        `<span style="display:inline-flex;gap:2px">
+          <span style="width:8px;height:8px;background:rgba(251,191,36,0.25);border:1px dashed rgba(251,191,36,0.5);display:inline-block"></span>
+          <span style="width:8px;height:8px;background:rgba(249,115,22,0.30);border:1px dashed rgba(249,115,22,0.55);display:inline-block"></span>
+          <span style="width:8px;height:8px;background:rgba(220,38,38,0.35);border:1px dashed rgba(220,38,38,0.60);display:inline-block"></span>
+         </span>
+         <span>CDI mop-up</span>`) : '') +
       `</div>`;
+
+    // ── CDI (Containment Difficulty Index) ────────────────────────────────
+    // Calcolato sulla finestra post-D0, opzionalmente suddiviso in fight/mopup
+    // quando dateEnd è disponibile nel CSV.
+    // fight  = persistenza regime ostile tra D0 e dateEnd (difficoltà estinzione)
+    // mopup  = persistenza regime ostile dopo dateEnd (rischio riaccensione/bonifica)
+    // Senza dateEnd → un unico indice "post" su tutta la finestra post-D0.
+    const cdiStats = (() => {
+      if (d0Idx >= series.length - 1) return null;
+      const count = (from, to) => {
+        let yellow=0, orange=0, red=0, safe=0;
+        let firstSafeRun = null;   // primo giorno di N consecutivi sotto thr[1]
+        let _safeRun = 0, _safeStart = null, _N = 3;  // finestra sicura >= 3gg
+        for (let i = from; i <= to && i < series.length; i++) {
+          const h = series[i].hdwc;
+          if      (h >= thr[3]) { red++;    _safeRun=0; _safeStart=null; }
+          else if (h >= thr[2]) { orange++; _safeRun=0; _safeStart=null; }
+          else if (h >= thr[1]) { yellow++; _safeRun=0; _safeStart=null; }
+          else {
+            safe++;
+            if (_safeRun === 0) _safeStart = i;
+            _safeRun++;
+            if (_safeRun === _N && firstSafeRun === null) firstSafeRun = _safeStart;
+          }
+        }
+        return { yellow, orange, red, safe, total: (yellow+orange+red+safe), firstSafeRun };
+      };
+      const dateEndIdx = dateEnd ? series.findIndex(s => s.date === dateEnd) : -1;
+      if (dateEndIdx > d0Idx) {
+        return {
+          fight: count(d0Idx+1, dateEndIdx),
+          mopup: count(dateEndIdx+1, series.length-1)
+        };
+      }
+      return { post: count(d0Idx+1, series.length-1) };
+    })();
+
+    const _cdiBadge = (stats, label) => {
+      if (!stats || !stats.total) return '';
+      const {yellow, orange, red, safe, total, firstSafeRun} = stats;
+      const hostile = yellow + orange + red;
+      const hostilePct = Math.round(100 * hostile / total);
+      const firstSafeDate = firstSafeRun != null ? dates[firstSafeRun] : null;
+      return `<div style="display:inline-block;margin-right:16px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border);font-size:11px">
+        <div style="color:var(--dim);font-size:10px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">${label}</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span>${total}gg:</span>
+          ${red   ? `<span style="color:#f87171">●${red} rossi</span>` : ''}
+          ${orange? `<span style="color:#fb923c">●${orange} arancio</span>` : ''}
+          ${yellow? `<span style="color:#fbbf24">●${yellow} gialli</span>` : ''}
+          ${safe  ? `<span style="color:#86efac">●${safe} sicuri</span>` : ''}
+          <span style="color:${hostilePct>60?'#f87171':hostilePct>30?'#fb923c':'#86efac'};font-weight:600">
+            ${hostilePct}% ostile
+          </span>
+          ${firstSafeDate ? `<span style="color:var(--dim);border-left:1px solid var(--border);padding-left:8px">First safe window ≥3d: <b style="color:#86efac">${firstSafeDate}</b></span>` : ''}
+        </div>
+      </div>`;
+    };
+
+    const cdiHTML = cdiStats ? `
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+          CDI · Containment Difficulty Index (post-ignizione)
+        </div>
+        ${cdiStats.fight ? _cdiBadge(cdiStats.fight, 'Active suppression (D0 → Extinguished)') : ''}
+        ${cdiStats.mopup ? _cdiBadge(cdiStats.mopup, 'Post-containment mop-up') : ''}
+        ${cdiStats.post  ? _cdiBadge(cdiStats.post,  'Post-ignizione (senza data estinzione)') : ''}
+      </div>` : '';
+
+    // ── Dinamica della curva HDWc: Δ¹ (velocità) e Δ² (accelerazione) ──────
+    // Δ² pre-D0 con valore massimo identifica il "punto di inflessione"
+    // in cui il sistema è entrato nella fase di escalation più ripida.
+    // Lead time tra inflessione e ignizione = finestra di pre-allerta teorica.
+    const dynHTML = (() => {
+      const d0_d1 = series[d0Idx]?.delta_hdwc_1 ?? 0;
+      const d0_d2 = series[d0Idx]?.delta_hdwc_2 ?? 0;
+      let d2Max = -Infinity, d2MaxIdx = -1;
+      for (let i = 2; i <= d0Idx; i++) {
+        const v = series[i].delta_hdwc_2 ?? 0;
+        if (v > d2Max) { d2Max = v; d2MaxIdx = i; }
+      }
+      if (d2MaxIdx < 0) return '';
+      const d2MaxDate = dates[d2MaxIdx];
+      const d2MaxLead = d0Idx - d2MaxIdx;
+      const trendColor = d0_d1 > 0 ? '#fb923c' : d0_d1 < 0 ? '#86efac' : '#8890a8';
+      const accelColor = d0_d2 > 0 ? '#f87171' : d0_d2 < 0 ? '#86efac' : '#8890a8';
+      return `
+      <div style="margin-top:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+          HDWc Dynamics · derivate discrete
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border);font-size:11px">
+            <div style="color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Δ¹ al D0 · velocità di accumulo</div>
+            <div style="font-size:14px;font-weight:600;color:${trendColor}">
+              ${d0_d1 >= 0 ? '+' : ''}${d0_d1.toFixed(1)} HDWc/gg
+            </div>
+          </div>
+          <div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border);font-size:11px">
+            <div style="color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Δ² al D0 · accelerazione</div>
+            <div style="font-size:14px;font-weight:600;color:${accelColor}">
+              ${d0_d2 >= 0 ? '+' : ''}${d0_d2.toFixed(1)}
+              <span style="font-size:10px;color:var(--dim);font-weight:400">
+                (${d0_d2 > 0 ? 'curva convessa, in accelerazione' : d0_d2 < 0 ? 'curva concava, in flessione' : 'pendenza stabile'})
+              </span>
+            </div>
+          </div>
+          <div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border);font-size:11px">
+            <div style="color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Pre-D0 inflection point</div>
+            <div style="font-size:12px">
+              <b style="color:#fb923c">${d2MaxDate}</b>
+              <span style="color:var(--dim)"> · Δ²=+${d2Max.toFixed(1)} · </span>
+              <b>${d2MaxLead}gg</b> <span style="color:var(--dim)">before ignition</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    })();
 
     // ── Tabella streak runs ───────────────────────────────────────────────
     const streakTable = streakRuns.length
       ? `<table style="font-size:11px;width:100%;border-collapse:collapse">
-          <thead><tr>${['Inizio run','Fine run','Durata','HDWc inizio','HDWc fine','Delta'].map(h=>
+          <thead><tr>${['Run start','Fine run','Durata','HDWc inizio','HDWc fine','Delta'].map(h=>
             `<th style="padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;color:var(--dim)">${h}</th>`
           ).join('')}</tr></thead>
           <tbody>${streakRuns.map(r=>`<tr style="border-bottom:1px solid #1e2233">
@@ -2064,11 +2511,10 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
             <td style="padding:4px 8px;color:var(--orange)">+${(hdwcArr[r.end]-hdwcArr[r.start]).toFixed(1)}</td>
           </tr>`).join('')}</tbody>
         </table>`
-      : `<div style="color:var(--dim);font-size:11px;padding:8px">Nessun run di aggravamento nel periodo</div>`;
+      : `<div style="color:var(--dim);font-size:11px;padding:8px">No escalation run in the period</div>`;
 
     // ── Pannello unico con ID — permette multi-record aperti ──────────────
-    const panelId = 'dp_' + Date.now();
-    const chartId  = 'ch_' + panelId;
+    // (panelId e chartId già dichiarati più sopra, prima di legendHTML)
 
     loaderEl?.remove();
     panel.insertAdjacentHTML('beforeend', `
@@ -2081,13 +2527,15 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
             title="Espandi a tutto schermo">⛶ max</button>
           <button onclick="exportPanelPDF('${chartId}','${fireId}','${date}')"
             style="padding:3px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--dim);cursor:pointer;font-size:11px"
-            title="Esporta PDF">⬇ PDF</button>
+            title="Export PDF">⬇ PDF</button>
           <button onclick="document.getElementById('${panelId}').remove()"
             style="padding:3px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--dim);cursor:pointer;font-size:11px">✕</button>
         </div>
       </div>
       <div style="margin-bottom:8px">${legendHTML}</div>
       <div id="${chartId}" style="height:400px"></div>
+      ${cdiHTML}
+      ${dynHTML}
       <div style="margin-top:12px">
         <div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
           Run di aggravamento — minimo 1 giorno
@@ -2102,20 +2550,20 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
           <div class="stat-card"><div class="stat-label">FWI picco</div>
             <div class="stat-value" style="color:#3b82f6">${fwiMax.toFixed(1)}</div>
             <div class="stat-sub">${fwiMaxDate}</div></div>
-          <div class="stat-card"><div class="stat-label">FWI medio (finestra)</div>
+          <div class="stat-card"><div class="stat-label">FWI mean (window)</div>
             <div class="stat-value" style="color:#3b82f6">${fwiMean}</div>
-            <div class="stat-sub">prima di D0</div></div>
-          <div class="stat-card"><div class="stat-label">Giorni FWI ≥30 / ≥50</div>
+            <div class="stat-sub">before D0</div></div>
+          <div class="stat-card"><div class="stat-label">FWI ≥30 / ≥50 days</div>
             <div class="stat-value" style="color:#3b82f6">${fwiDays30} / ${fwiDays50}</div>
-            <div class="stat-sub">alto EFFIS / estremo</div></div>
+            <div class="stat-sub">EFFIS high / extreme</div></div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
           <div class="stat-card"><div class="stat-label">Lead time HDWc</div>
             <div class="stat-value" style="color:var(--orange)">${hdwcLead!=null?hdwcLead+'gg':'—'}</div>
-            <div class="stat-sub">sopra soglia arancio prima D0</div></div>
+            <div class="stat-sub">above orange threshold before D0</div></div>
           <div class="stat-card"><div class="stat-label">Lead time FWI</div>
             <div class="stat-value" style="color:#3b82f6">${fwiLead!=null?fwiLead+'gg':'—'}</div>
-            <div class="stat-sub">sopra FWI≥30 prima D0</div></div>
+            <div class="stat-sub">above FWI≥30 before D0</div></div>
           <div class="stat-card"><div class="stat-label">Concordanza picchi</div>
             <div class="stat-value" style="font-size:13px;color:${peakDiff<=3?'var(--green)':'var(--red)'}">${concordanza}</div>
             <div class="stat-sub">Segnale più precoce: <b>${segnalePiuPrecoce}</b></div></div>
@@ -2128,19 +2576,30 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
        modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d'],
        displaylogo:false});
 
+    // ── Registra chart per toggle interattivi dalla legenda superiore ──────
+    // Salva callbacks per ricomporre shapes/annotations al toggle + stato attivo
+    window._chartToggles = window._chartToggles || {};
+    window._chartToggleFns = window._chartToggleFns || {};
+    window._chartToggles[chartId] = {};  // tutti key = true di default
+    window._chartToggleFns[chartId] = {
+      composeShapes: _composeShapes,
+      composeAnnot:  _composeAnnot
+    };
+
 
   } catch(err) {
+    console.error('[showDetail] error:', err, '\ncurrentEngine=', currentEngine, '\nfireId=', fireId, 'date=', date, 'lat=', lat, 'lon=', lon);
     loaderEl?.remove();
-    panel.insertAdjacentHTML('beforeend',`<div class="card" style="margin-bottom:10px"><div style="color:var(--red);font-size:12px;padding:8px">Errore caricamento: ${err.message}</div></div>`);
+    panel.insertAdjacentHTML('beforeend',`<div class="card" style="margin-bottom:10px"><div style="color:var(--red);font-size:12px;padding:8px">Error caricamento: ${err.message}</div></div>`);
   }
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────
 function renderErrors(c) {
-  if(!errors.length){c.innerHTML=`<div class="empty">Nessun errore</div>`;return;}
+  if(!errors.length){c.innerHTML=`<div class="empty">No errors</div>`;return;}
   const rows=errors.map(e=>`<tr><td>${e.id}</td><td style="color:var(--red)">${e.err}</td></tr>`).join('');
   c.innerHTML=`<div class="card"><div class="card-title">${errors.length} errori fetch</div>
-    <table><thead><tr><th>Fire ID</th><th>Errore</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <table><thead><tr><th>Fire ID</th><th>Error</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // ── MONITORAGGIO PUNTI CRITICI ───────────────────────────────────────────
@@ -2181,7 +2640,7 @@ function parseMonitorCSV(text) {
     lon:  findH('lon','longitude','long','lng','x'),
     eng:  findH('engine','region','regione','preset'),
   };
-  if (ci.lat<0||ci.lon<0) { alert('CSV monitoraggio: servono lat e lon'); return []; }
+  if (ci.lat<0||ci.lon<0) { alert('Monitoring CSV: lat and lon required'); return []; }
   const pts = [];
   for (let i=1;i<lines.length;i++) {
     const cols = lines[i].split(sep).map(c=>c.trim().replace(/^["']|["']$/g,''));
@@ -2215,6 +2674,8 @@ function _registerMonEngine(cfg, fallbackName) {
       rain_eff: cl.Rain_effective_mm ?? 2,
       tc2: cl.Tmax_class2 ?? 30,       tc3: cl.Tmax_class3 ?? 35,
       hc2: cl.HDW_eff_class2 ?? 65,    hc3: cl.HDW_eff_class3 ?? 130,
+      mc2: (cl.mode_class2==='AND'||cl.mode_class2==='OR') ? cl.mode_class2 : 'OR',
+      mc3: (cl.mode_class3==='AND'||cl.mode_class3==='OR') ? cl.mode_class3 : 'AND',
       streak: st.streak_activation_days ?? 4,
       dd2: st.delta_alpha_dry_class2 ?? 0.004,
       dd3: st.delta_alpha_dry_class3 ?? 0.009,
@@ -2284,7 +2745,7 @@ function loadMonPointConfig(input) {
         });
 
         if (!ok) {
-          alert(`✗ Nessuna zona valida trovata nel pacchetto.\n${skip} zone saltate (struttura non valida).`);
+          alert(`✗ No valid zone found in the package.\n${skip} skipped zones (invalid structure).`);
           input.value = ''; return;
         }
 
@@ -2307,7 +2768,7 @@ function loadMonPointConfig(input) {
               : '\n\n⚠ Nessun punto auto-assegnato — verifica che le bbox del pacchetto coprano i tuoi punti, oppure aggiungi colonna engine="region_id" nel CSV.')
           : '\n\nCarica un CSV punti: il motore verrà assegnato automaticamente per bbox.';
 
-        alert(`✓ ${ok} zone caricate:\n${summary}${skip ? '\n⚠ ' + skip + ' zone saltate' : ''}${autoMsg}`);
+        alert(`✓ ${ok} zones loaded:\n${summary}${skip ? '\n⚠ ' + skip + ' skipped zones' : ''}${autoMsg}`);
         if (monPoints.length) renderMonitor(document.getElementById('content'));
         input.value = '';
         return;
@@ -2316,7 +2777,7 @@ function loadMonPointConfig(input) {
       // ── SINGOLA ZONA (Mode C) ─────────────────────────────────────────────
       const id = _registerMonEngine(parsed, fname);
       if (!id) {
-        alert('JSON non valido: mancano alpha.alpha_ref o soglie.hdwc.mensile'); return;
+        alert('Invalid JSON: missing alpha.alpha_ref or soglie.hdwc.mensile'); return;
       }
       const name = ENGINES[id].name;
 
@@ -2344,7 +2805,7 @@ function loadMonPointConfig(input) {
             alert(`✓ Config "${name}" assegnato a tutti i ${monPoints.length} punti.`);
           } else {
             const n = parseInt(idx) - 1;
-            if (isNaN(n) || n < 0 || n >= monPoints.length) { alert('Numero non valido.'); return; }
+            if (isNaN(n) || n < 0 || n >= monPoints.length) { alert('Invalid number.'); return; }
             monPoints[n].engine_id = id;
             alert(`✓ Config "${name}" assegnato a "${monPoints[n].name}".`);
           }
@@ -2352,7 +2813,7 @@ function loadMonPointConfig(input) {
         renderMonitor(document.getElementById('content'));
       }
       input.value = '';
-    } catch(err) { alert('Errore parsing JSON: ' + err.message); }
+    } catch(err) { alert('JSON parsing error: ' + err.message); }
   };
   reader.readAsText(file);
 }
@@ -2373,7 +2834,7 @@ async function runMonitor() {
   if (btnStop) btnStop.style.display='';
   if (progBar) progBar.style.display='';
   if (fillEl)  fillEl.style.width='0%';
-  if (statusEl) statusEl.textContent=`Analisi ${monPoints.length} punti · ${today} · ${winDays}gg…`;
+  if (statusEl) statusEl.textContent=`Analysis ${monPoints.length} punti · ${today} · ${winDays}gg…`;
 
   // Pre-popola tbody (deve già esistere nel DOM da renderMonitor precedente)
   const tbody = document.getElementById('monTbody');
@@ -2518,7 +2979,7 @@ function renderMap(c) {
 
   c.innerHTML = `
   <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <div class="card-title" style="margin:0">🗺 Mappa incendi · ${features.length} punti${monPoints.length ? ` &nbsp;·&nbsp; 📍 ${monPoints.length} monitoraggio` : ''}</div>
+    <div class="card-title" style="margin:0">🗺 Fires map · ${features.length} punti${monPoints.length ? ` &nbsp;·&nbsp; 📍 ${monPoints.length} monitoraggio` : ''}</div>
     <span style="font-size:11px;color:var(--dim)">
       ${hasResults ? 'Colore = HDWc D0 (rosso=alto)' : 'Colore = classe dimensione'}
       · Click marker → sequenza giornaliera
@@ -2537,14 +2998,14 @@ function renderMap(c) {
     </div>
     <div style="display:flex;gap:8px;font-size:11px;flex-wrap:wrap">
       ${hasResults
-        ? `<span style="color:#22c55e">■ Basso</span>
-           <span style="color:#facc15">■ Moderato</span>
-           <span style="color:#f97316">■ Alto</span>
-           <span style="color:#ef4444">■ Molto alto/Estremo</span>`
+        ? `<span style="color:#22c55e">■ Low</span>
+           <span style="color:#facc15">■ Moderate</span>
+           <span style="color:#f97316">■ High</span>
+           <span style="color:#ef4444">■ Very high/Extreme</span>`
         : `<span style="color:#4f8ef7">■ Large</span>
            <span style="color:#f97316">■ Very large</span>
            <span style="color:#ef4444">■ Megafire</span>`}
-      ${monPoints.length ? `<span style="color:#6b7280">◆ Monitoraggio</span>` : ''}
+      ${monPoints.length ? `<span style="color:#6b7280">◆ Monitoring</span>` : ''}
     </div>
   </div>
   <div class="card" style="padding:0;overflow:hidden">
@@ -2649,7 +3110,7 @@ function renderMap(c) {
       const hdwcLabel = res ? `HDWc: <b>${res.hdwc_d0}</b> · α: ${res.alpha_d0}` : 'Non analizzato';
       const dateEndLabel = props.date_end ? ` → ${props.date_end}` : '';
       marker.bindTooltip(
-        `<b>${props.fire_id}</b><br>${props.date}${dateEndLabel} · ${Math.round(props.area_ha).toLocaleString()} ha<br>${hdwcLabel}<br><span style="font-size:10px;opacity:.7">Doppio clic → grafico</span>`,
+        `<b>${props.fire_id}</b><br>${props.date}${dateEndLabel} · ${Math.round(props.area_ha).toLocaleString()} ha<br>${hdwcLabel}<br><span style="font-size:10px;opacity:.7">Double click → chart</span>`,
         { direction: 'top', offset: [0, -6] }
       );
 
@@ -2819,7 +3280,7 @@ function renderEngines(c) {
           <div style="font-size:10px;color:var(--dim);font-family:monospace;text-align:right">
             ID: <b style="color:var(--text)">${id}</b>
           </div>
-          <button onclick="deleteEngine('${id}')" title="Elimina engine"
+          <button onclick="deleteEngine('${id}')" title="Delete engine"
             style="background:none;border:1px solid var(--border);border-radius:5px;
               color:var(--dim);cursor:pointer;font-size:11px;padding:3px 8px;
               transition:all .15s" 
@@ -2832,7 +3293,7 @@ function renderEngines(c) {
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
-          <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Parametri motore</div>
+          <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Engine parameters</div>
           ${params}
         </div>
         <div>
@@ -2869,7 +3330,7 @@ function renderMonitor(c) {
         <input type="file" accept=".csv,.txt" id="monFileInput" style="display:none"></label>
       <button class="btn btn-secondary" style="font-size:11px"
         onclick="loadMonExample()">Esempio</button>
-      <label class="file-label" style="font-size:11px" title="Carica un Config JSON per un singolo punto — sostituisce l'engine del punto con il nome corrispondente nel CSV">
+      <label class="file-label" style="font-size:11px" title="Load a single-point JSON config — replaces the point engine with the matching name in the CSV">
         📎 Config JSON punto
         <input type="file" accept=".json" id="monConfigInput" style="display:none"
           onchange="loadMonPointConfig(this)">
@@ -3096,16 +3557,16 @@ async function exportPanelPDF(chartId, fireId, date) {
     <p style="font-size:10px;color:#888;margin-top:8px">HDWc Batch Analysis · generato il ${new Date().toISOString().slice(0,10)}</p>
     </body></html>`);
     w.document.close();
-  } catch(err) { alert('Errore export: '+err.message); }
+  } catch(err) { alert('Export error: '+err.message); }
 }
 
 // ── Export PDF di tutti i grafici aperti nel detailPanel ──────────────────
 async function exportAllChartsPDF() {
   // Trova tutti i grafici Plotly nel detailPanel corrente
   const panel = document.getElementById('detailPanel');
-  if (!panel) { alert('Nessun grafico aperto'); return; }
+  if (!panel) { alert('No chart open'); return; }
   const plotDivs = panel.querySelectorAll('.js-plotly-plot');
-  if (!plotDivs.length) { alert('Nessun grafico da esportare'); return; }
+  if (!plotDivs.length) { alert('No chart to export'); return; }
 
   const btn = document.getElementById('btnExportAllPDF');
   if (btn) { btn.textContent = '⏳ Generando…'; btn.disabled = true; }
@@ -3156,7 +3617,7 @@ async function exportAllChartsPDF() {
     </body></html>`);
     w.document.close();
   } catch(err) {
-    alert('Errore export: ' + err.message);
+    alert('Export error: ' + err.message);
   } finally {
     if (btn) { btn.textContent = '📄 Esporta tutti i grafici PDF'; btn.disabled = false; }
   }
@@ -3167,6 +3628,7 @@ function exportCSV() {
     'fire_id','date','area_ha','size_class','lat','lon',
     'hdwc_d0','hdweff_d0','alpha_d0','streak_d0','ns_d0','dc_d0',
     'hdwc_max','days_from_peak','days_orange','days_red','slope7d','slope14d',
+    'delta1_d0','delta2_d0','delta2_max','delta2_max_date','delta2_max_lead',
     'thr_orange','thr_red',
     'fwi_d0','fwi_max','fwi_d30','fwi_d50',
     'gs_d0','gs_max','gs_total','gs_intensity','gs_episodes','gs_close','gs_to_d0',
@@ -3185,6 +3647,44 @@ document.querySelectorAll('.nav-item').forEach(el=>{
     el.classList.add('active');
   });
 });
+
+// ── Toggle items della legenda superiore del grafico di dettaglio ─────────
+// Gestisce shapes/annotations (tutti tranne nsCircles) via Plotly.relayout,
+// e la trace 'Notte' (nsCircles) via Plotly.restyle. Stato per-chart.
+function _toggleChartElem(el) {
+  const chartId = el.getAttribute('data-chart');
+  const key     = el.getAttribute('data-key');
+  if (!chartId || !key) return;
+  const gd      = document.getElementById(chartId);
+  if (!gd) return;
+  const state   = window._chartToggles?.[chartId] || {};
+  const fns     = window._chartToggleFns?.[chartId];
+
+  // Flip del flag (true se nuovo, true↔false se esistente)
+  const wasOn = state[key] !== false;
+  state[key] = !wasOn;
+  const nowOn = state[key];
+
+  // Feedback visivo sullo span
+  el.style.opacity = nowOn ? '1' : '0.35';
+  el.style.textDecoration = nowOn ? 'none' : 'line-through';
+
+  // Ricompone shapes/annotations solo per key non-trace
+  if (key !== 'nsCircles' && fns) {
+    Plotly.relayout(gd, {
+      shapes: fns.composeShapes(state),
+      annotations: fns.composeAnnot(state)
+    });
+  }
+
+  // Per nsCircles: trova la trace 'Notte' e switch visibilità
+  if (key === 'nsCircles' && gd.data) {
+    const nsIdx = gd.data.findIndex(t => t.name === 'Notte');
+    if (nsIdx >= 0) {
+      Plotly.restyle(gd, {visible: nowOn ? true : 'legendonly'}, [nsIdx]);
+    }
+  }
+}
 </script>
 </body>
 </html>
