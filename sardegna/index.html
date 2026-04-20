@@ -1658,6 +1658,12 @@ function getWarmup(meteo){
 const HDW_V2 = {
   rain_eff:     2,      tmax_class2:  30,     tmax_class3:  35,
   hdw_class2:   60,     hdw_class3:   120,
+  // Classification gate mode (v2.1, 19/4/2026)
+  // class2: default "OR" — basta una condizione sopra soglia per attivare streak.
+  // class3: default "AND" — richiede convergenza Tmax E HDW sopra soglie estreme.
+  // Override via cfg.classification.mode_class2 / mode_class3 ("AND" | "OR").
+  mode_class2:  'OR',
+  mode_class3:  'AND',
   alpha_min:    0.40,   alpha_max:    0.95,
   delta_dry2:   0.005,  delta_dry3:   0.010,
   delta_n1:     0.005,  delta_n2:     0.010,  delta_n3:     0.015,
@@ -1666,6 +1672,8 @@ const HDW_V2 = {
   streak_days:      4,
   T_night_warm:    18,  T_night_tropical: 20,  T_night_severe: 25,
   night_hours_min:  4,
+  night_window_start: "20:00",
+  night_window_end:   "08:00",
   washout_enabled: true,
   beta_thresholds: [2, 10, 20, 30],
   beta_values:     [0.95, 0.85, 0.75, 0.65],
@@ -1769,25 +1777,29 @@ function _rainHoursInDay(date, hourlyTimes, hourlyPrecip, minPrecip=0.1) {
   return count;
 }
 
-// ── Ore notturne (20–08) sopra soglia temperatura ────────────────────────────
+// ── Ore notturne sopra soglia temperatura (finestra da config, default 20–08) ──
 function _nightHoursAbove(date, hourlyTimes, hourlyTemps, threshold) {
   if (!hourlyTimes || !hourlyTemps || !date) return null;
+  const nStart = parseInt((HDW_V2.night_window_start || '20:00').slice(0,2));
+  const nEnd   = parseInt((HDW_V2.night_window_end   || '08:00').slice(0,2));
   const prev = new Date(date + 'T12:00:00Z'); prev.setUTCDate(prev.getUTCDate() - 1);
   const prevStr = prev.toISOString().slice(0,10);
   let count = 0;
   for (let i = 0; i < hourlyTimes.length; i++) {
     const ts = hourlyTimes[i];
     const tsDate = ts.slice(0,10), tsHour = parseInt(ts.slice(11,13));
-    if ((tsDate === prevStr && tsHour >= 20) || (tsDate === date && tsHour < 8)) {
+    if ((tsDate === prevStr && tsHour >= nStart) || (tsDate === date && tsHour < nEnd)) {
       if ((hourlyTemps[i] ?? -99) >= threshold) count++;
     }
   }
   return count;
 }
 
-// ── Ore notturne (20–08) sotto soglia RH ────────────────────────────────────
+// ── Ore notturne sotto soglia RH (finestra da config, default 20–08) ───────────
 function _nightHoursBelow(date, hourlyTimes, hourlyRH, threshold) {
   if (!hourlyTimes || !hourlyRH || !date) return null;
+  const nStart = parseInt((HDW_V2.night_window_start || '20:00').slice(0,2));
+  const nEnd   = parseInt((HDW_V2.night_window_end   || '08:00').slice(0,2));
   const prev = new Date(date + 'T12:00:00Z'); prev.setUTCDate(prev.getUTCDate() - 1);
   const prevStr = prev.toISOString().slice(0,10);
   let count = 0;
@@ -1795,7 +1807,7 @@ function _nightHoursBelow(date, hourlyTimes, hourlyRH, threshold) {
     const ts = hourlyTimes[i];
     if (!ts) continue;
     const tsDate = ts.slice(0,10), tsHour = parseInt(ts.slice(11,13));
-    if ((tsDate === prevStr && tsHour >= 20) || (tsDate === date && tsHour < 8)) {
+    if ((tsDate === prevStr && tsHour >= nStart) || (tsDate === date && tsHour < nEnd)) {
       const rh = hourlyRH[i];
       if (rh != null && rh <= threshold) count++;
     }
@@ -1825,10 +1837,27 @@ function calcNightScore_v2(tmin, nh18=null, nh20=null, nh25=null, rhMean=null, n
 }
 function classifyDay_v2(hdwEff, tmax, rain, ns, rhMean, strict=false) {
   if ((rain || 0) >= HDW_V2.rain_eff) return 0;
+  // Classificazione base — MOTORE "AND_c3only" (v2.1, 19/4/2026)
+  // strict=true  (streak/α):
+  //   class3: AND gate — Tmax E HDW devono superare la soglia alta insieme (rara, severa).
+  //   class2: OR gate — basta UNA condizione (Tmax O HDW O ns>=2) per attivare streak.
+  //   Motivazione: il precedente AND globale rendeva il sistema cieco in regimi boreali
+  //   e marittimi (Canada 79% fire con streak=0, Balcani 58%). Il nuovo gate mantiene
+  //   class3 severa ma lascia che eventi a un solo segnale costruiscano memoria α.
+  //   Config override: classification.mode_class2 e mode_class3 (entrambi "AND" o "OR").
+  // strict=false (display): OR gate — ns da solo non sale a class 3.
   let dc;
+  const mc2 = HDW_V2.mode_class2 || 'OR';   // default nuovo: OR
+  const mc3 = HDW_V2.mode_class3 || 'AND';  // default: AND
   if (strict) {
-    if ((tmax||0) >= HDW_V2.tmax_class3 && hdwEff >= HDW_V2.hdw_class3) dc = 3;
-    else if (((tmax||0) >= HDW_V2.tmax_class2 && hdwEff >= HDW_V2.hdw_class2) || ns >= 2) dc = 2;
+    const c3_and = (tmax||0) >= HDW_V2.tmax_class3 && hdwEff >= HDW_V2.hdw_class3;
+    const c3_or  = (tmax||0) >= HDW_V2.tmax_class3 || hdwEff >= HDW_V2.hdw_class3;
+    const c3_hit = (mc3 === 'AND') ? c3_and : c3_or;
+    const c2_and = (tmax||0) >= HDW_V2.tmax_class2 && hdwEff >= HDW_V2.hdw_class2;
+    const c2_or  = (tmax||0) >= HDW_V2.tmax_class2 || hdwEff >= HDW_V2.hdw_class2;
+    const c2_hit = ((mc2 === 'AND') ? c2_and : c2_or) || ns >= 2;
+    if (c3_hit) dc = 3;
+    else if (c2_hit) dc = 2;
     else dc = 1;
   } else {
     if ((tmax||0) >= HDW_V2.tmax_class3 || hdwEff >= HDW_V2.hdw_class3 ||
@@ -2903,6 +2932,11 @@ function _applyEngineConfig(cfg) {
   if (cl.Tmax_class3       != null) HDW_V2.tmax_class3    = cl.Tmax_class3;
   if (cl.HDW_eff_class2    != null) HDW_V2.hdw_class2     = cl.HDW_eff_class2;
   if (cl.HDW_eff_class3    != null) HDW_V2.hdw_class3     = cl.HDW_eff_class3;
+  // Classification gate mode (v2.1) — valori validi: "AND", "OR"
+  if (typeof cl.mode_class2 === 'string' && (cl.mode_class2 === 'AND' || cl.mode_class2 === 'OR'))
+    HDW_V2.mode_class2 = cl.mode_class2;
+  if (typeof cl.mode_class3 === 'string' && (cl.mode_class3 === 'AND' || cl.mode_class3 === 'OR'))
+    HDW_V2.mode_class3 = cl.mode_class3;
   if (st.streak_activation_days   != null) HDW_V2.streak_days  = st.streak_activation_days;
   if (st.delta_alpha_dry_class2   != null) HDW_V2.delta_dry2   = st.delta_alpha_dry_class2;
   if (st.delta_alpha_dry_class3   != null) HDW_V2.delta_dry3   = st.delta_alpha_dry_class3;
@@ -2917,6 +2951,8 @@ function _applyEngineConfig(cfg) {
   if (ni.T_night_tropical   != null) HDW_V2.T_night_tropical = ni.T_night_tropical;
   if (ni.T_night_severe     != null) HDW_V2.T_night_severe   = ni.T_night_severe;
   if (ni.night_hours_min    != null) HDW_V2.night_hours_min  = ni.night_hours_min;
+  if (ni.night_window_start != null) HDW_V2.night_window_start = ni.night_window_start;
+  if (ni.night_window_end   != null) HDW_V2.night_window_end   = ni.night_window_end;
   if (wt.enabled            != null) HDW_V2.washout_enabled  = wt.enabled;
   if (Array.isArray(wt.thresholds_mm)) HDW_V2.beta_thresholds = wt.thresholds_mm.slice();
   if (Array.isArray(wt.beta_values))   HDW_V2.beta_values     = wt.beta_values.slice();
@@ -3204,7 +3240,7 @@ function _engineConfigBadgeUpdate() {
     <div style="font-size:10px;color:var(--text);font-weight:600;margin-bottom:2px">${m.preset_name||'Custom'}</div>
     <div style="font-size:9px;color:var(--dim);line-height:1.7">
       Rain eff: <b>${HDW_V2.rain_eff}mm</b> · Tmax c2/c3: <b>${HDW_V2.tmax_class2}°/${HDW_V2.tmax_class3}°C</b><br>
-      Streak: <b>${HDW_V2.streak_days}gg</b> · α_max: <b>${HDW_V2.alpha_max}</b>
+      Streak: <b>${HDW_V2.streak_days}gg</b> · Gate: <b>c2:${HDW_V2.mode_class2}/c3:${HDW_V2.mode_class3}</b> · α_max: <b>${HDW_V2.alpha_max}</b>
     </div>`;
 }
 
