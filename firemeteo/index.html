@@ -4960,11 +4960,15 @@ function _buildEngines() {
       bbox:     _ENGINE_BBOX[id] || null,
     };
   }
-  // Carica custom da localStorage
+  // Carica custom da localStorage con validazione anti-fantasmi
   try {
     const saved = JSON.parse(localStorage.getItem(FM_CUSTOM_LS_KEY) || '[]');
+    const validEngines = [];
+    let corruptedCount = 0;
+    
     for (const e of saved) {
-      if (e.id && e.fullConfig) {
+      // Validazione rigorosa: deve avere id, fullConfig completo, e meta valida
+      if (e.id && e.fullConfig && e.fullConfig.meta && e.fullConfig.alpha) {
         // Recupera bbox da fullConfig.meta.bbox se lo stored bbox è null (compat pre-v40)
         let _bbox = e.bbox;
         if (!_bbox) {
@@ -4973,9 +4977,25 @@ function _buildEngines() {
               && _rb[0] < _rb[1] && _rb[2] < _rb[3]) _bbox = _rb;
         }
         eng[e.id] = { ...e, _builtin: false, _custom: true, bbox: _bbox };
+        validEngines.push(e);
+      } else {
+        corruptedCount++;
+        console.warn('🔧 GHOST ENGINE DETECTED:', {id: e.id, hasConfig: !!e.fullConfig, hasAlpha: !!e.fullConfig?.alpha});
       }
     }
-  } catch(e) {}
+    
+    // Auto-recovery: se ci sono engine corrotti, pulisce il localStorage
+    if (corruptedCount > 0) {
+      console.warn(`🔧 AUTO-RECOVERY: Removing ${corruptedCount} ghost engines, keeping ${validEngines.length} valid`);
+      localStorage.setItem(FM_CUSTOM_LS_KEY, JSON.stringify(validEngines));
+      if (validEngines.length === 0) {
+        console.warn('🔧 LOCAL STORAGE CLEARED: No valid custom engines found');
+      }
+    }
+  } catch(e) {
+    console.error('🔧 CUSTOM ENGINE LOAD FAILED, clearing localStorage:', e);
+    localStorage.removeItem(FM_CUSTOM_LS_KEY);
+  }
   return eng;
 }
 
@@ -5095,6 +5115,7 @@ function _geoAutoDetectEngine(lat, lon) {
   if (curId === bestEng.id) return;
 
   // 3. Applica — geo-auto (false = non imposta _engineUserLocked né _activeEngineId default)
+  // IMPORTANTE: Custom engines con bbox vincono SEMPRE sul user lock
   engineApply(bestEng.id, false);
   updateEngineActiveBar();
   showToast(`⬡ Zone: ${bestEng.flag || '📦'} ${bestEng.short}`, 2200);
@@ -7068,15 +7089,23 @@ function drawPrec(meteo,todayIdx){
       });
       if (!allTx.length) return;
 
-      // v45 collana: TUTTI i giorni matchanti (step=1), diamante piccolo size 7
+      // v47 collana: sampling adattivo da sardegna v9 per miglior leggibilità
+      const STEP = Math.max(1, Math.ceil(allTx.length / (allTx.length <= 60 ? allTx.length : 25)));
+      const _dTx = [], _dTy = [], _dHt = [];
+      for (let k = 0; k < allTx.length; k += STEP) {
+        _dTx.push(allTx[k]);
+        _dTy.push(allTy[k]);
+        _dHt.push(allHt[k]);
+      }
+
       traces.push({
-        x: allTx, y: allTy,
+        x: _dTx, y: _dTy,
         name: '★ ' + wLabel,
         type: 'scatter', mode: 'markers',
-        marker: { symbol: 'diamond', size: 7, color: wColor, opacity: 0.92,
-                  line: { color: 'rgba(255,255,255,0.7)', width: 0.6 } },
+        marker: { symbol: 'diamond', size: STEP === 1 ? 9 : 8, color: wColor, opacity: 0.90,
+                  line: { color: 'rgba(255,255,255,0.55)', width: 0.8 } },
         yaxis: 'y3',
-        hovertemplate: allHt,
+        hovertemplate: _dHt,
         showlegend: true,
       });
     });
