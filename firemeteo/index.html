@@ -3395,6 +3395,12 @@ function _archiveZoneShape(meteo) {
 const HDW_V2 = {
   rain_eff:     2,      tmax_class2:  30,     tmax_class3:  35,
   hdw_class2:   60,     hdw_class3:   120,
+  // Classification gate mode (v2.1, 19/4/2026)
+  // class2: default "OR" — basta una condizione sopra soglia per attivare streak.
+  // class3: default "AND" — richiede convergenza Tmax E HDW sopra soglie estreme.
+  // Override via cfg.classification.mode_class2 / mode_class3 ("AND" | "OR").
+  mode_class2:  'OR',
+  mode_class3:  'AND',
   alpha_min:    0.40,   alpha_max:    0.95,
   delta_dry2:   0.005,  delta_dry3:   0.010,
   delta_n1:     0.005,  delta_n2:     0.010,  delta_n3:     0.015,
@@ -3436,7 +3442,7 @@ let _activeEngineConfig = null; // full JSON from config builder when loaded
 // Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
 // detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
 // which is critical for night-window NS calculations outside Europe/Lisbon.
-console.log('%c[FireMeteo v46 + TZ-FIX 19/4/26 21h]%c Timezone fix loaded', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+console.log('%c[FireMeteo v46 + TZ-FIX + AND_c3only 19/4/26 22h]%c gate c2:OR c3:AND', 'color:#4ade80;font-weight:bold', 'color:#aaa');
 function _getTimezone() {
   const tz = _activeEngineConfig?.meta?.timezone;
   if (tz && typeof tz === 'string' && tz.length > 0) return tz;
@@ -3456,6 +3462,11 @@ function _applyEngineConfig(cfg) {
   if (cl.Tmax_class3       != null) HDW_V2.tmax_class3    = cl.Tmax_class3;
   if (cl.HDW_eff_class2    != null) HDW_V2.hdw_class2     = cl.HDW_eff_class2;
   if (cl.HDW_eff_class3    != null) HDW_V2.hdw_class3     = cl.HDW_eff_class3;
+  // Classification gate mode (v2.1) — valori validi: "AND", "OR"
+  if (typeof cl.mode_class2 === 'string' && (cl.mode_class2 === 'AND' || cl.mode_class2 === 'OR'))
+    HDW_V2.mode_class2 = cl.mode_class2;
+  if (typeof cl.mode_class3 === 'string' && (cl.mode_class3 === 'AND' || cl.mode_class3 === 'OR'))
+    HDW_V2.mode_class3 = cl.mode_class3;
   if (st.streak_activation_days   != null) HDW_V2.streak_days  = st.streak_activation_days;
   if (st.delta_alpha_dry_class2   != null) HDW_V2.delta_dry2   = st.delta_alpha_dry_class2;
   if (st.delta_alpha_dry_class3   != null) HDW_V2.delta_dry3   = st.delta_alpha_dry_class3;
@@ -3568,7 +3579,8 @@ function _engineConfigBadgeUpdate() {
       Rain eff: <b>${HDW_V2.rain_eff}mm</b> &nbsp;·&nbsp;
       Tmax c2/c3: <b>${HDW_V2.tmax_class2}°/${HDW_V2.tmax_class3}°C</b><br>
       Streak: <b>${HDW_V2.streak_days}gg</b> &nbsp;·&nbsp;
-      Washout: <b>${HDW_V2.washout_enabled?'ON':'OFF'}</b> &nbsp;·&nbsp;
+      Gate: <b>c2:${HDW_V2.mode_class2}/c3:${HDW_V2.mode_class3}</b> &nbsp;·&nbsp;
+      Washout: <b>${HDW_V2.washout_enabled?'ON':'OFF'}</b><br>
       k: <b>${HDW_V2.k_base}/${HDW_V2.k_mid}/${HDW_V2.k_high}</b> &nbsp;·&nbsp;
       α_max: <b>${HDW_V2.alpha_max}</b>
     </div>
@@ -3581,6 +3593,7 @@ function _clearEngineConfig() {
   // Reset HDW_V2 to defaults
   Object.assign(HDW_V2, {
     rain_eff:2, tmax_class2:30, tmax_class3:35, hdw_class2:60, hdw_class3:120,
+    mode_class2:'OR', mode_class3:'AND',
     alpha_max:0.95, streak_days:4, T_night_warm:18, T_night_tropical:20, T_night_severe:25,
     washout_enabled:true, delta_dry2:0.005, delta_dry3:0.010,
     delta_n1:0.005, delta_n2:0.010, delta_n3:0.015, delta_rel:-0.010,
@@ -3816,19 +3829,31 @@ function calcNightScore_v2(tmin, nh18=null, nh20=null, nh25=null, rhMean=null, n
 }
 function classifyDay_v2(hdwEff, tmax, rain, ns, rhMean, strict=false) {
   if ((rain || 0) >= HDW_V2.rain_eff) return 0;
-  // Classificazione base
-  // strict=true  (streak/α): AND gate — Tmax E HDW devono superare la soglia insieme.
-  //   Il night score NON bypassa la logica AND per class 3 in strict mode:
-  //   ns contribuisce già ad α via dn in calcAlpha_v2 — includerlo in dc_s causerebbe
-  //   doppio conteggio (da_dry3 + dn) su giorni con segnale HDW nullo (es. HDW=47 < class2).
-  //   ns >= 2 può portare al massimo a dc_s=2 (streak sostiene senza aggravare ad α class3).
-  // strict=false (display): OR gate — ma ns da solo non sale a class 3:
+  // Classificazione base — MOTORE "AND_c3only" (v2.1, 19/4/2026)
+  // strict=true  (streak/α):
+  //   class3: AND gate — Tmax E HDW devono superare la soglia alta insieme (rara, severa).
+  //   class2: OR gate — basta UNA condizione (Tmax O HDW O ns>=2) per attivare streak.
+  //   Motivazione: il precedente AND globale rendeva il sistema cieco in regimi boreali
+  //   e marittimi (Canada 79% fire con streak=0, Balcani 58%). Il nuovo gate mantiene
+  //   class3 severa ma lascia che eventi a un solo segnale costruiscano memoria α.
+  //   Config override: classification.mode_class2 e mode_class3 (entrambi "AND" o "OR").
+  // strict=false (display): OR gate — ns da solo non sale a class 3:
   //   richiede almeno un segnale atmosferico parziale (Tmax >= class2 O HDW >= class2)
   //   per evitare barre rosse con HDW_eff minimo (es. California: class2=150, HDW=47).
   let dc;
+  const mc2 = HDW_V2.mode_class2 || 'OR';   // default nuovo: OR
+  const mc3 = HDW_V2.mode_class3 || 'AND';  // default: AND
   if (strict) {
-    if ((tmax||0) >= HDW_V2.tmax_class3 && hdwEff >= HDW_V2.hdw_class3) dc = 3;
-    else if (((tmax||0) >= HDW_V2.tmax_class2 && hdwEff >= HDW_V2.hdw_class2) || ns >= 2) dc = 2;
+    // class3
+    const c3_and = (tmax||0) >= HDW_V2.tmax_class3 && hdwEff >= HDW_V2.hdw_class3;
+    const c3_or  = (tmax||0) >= HDW_V2.tmax_class3 || hdwEff >= HDW_V2.hdw_class3;
+    const c3_hit = (mc3 === 'AND') ? c3_and : c3_or;
+    // class2
+    const c2_and = (tmax||0) >= HDW_V2.tmax_class2 && hdwEff >= HDW_V2.hdw_class2;
+    const c2_or  = (tmax||0) >= HDW_V2.tmax_class2 || hdwEff >= HDW_V2.hdw_class2;
+    const c2_hit = ((mc2 === 'AND') ? c2_and : c2_or) || ns >= 2;
+    if (c3_hit) dc = 3;
+    else if (c2_hit) dc = 2;
     else dc = 1;
   } else {
     if ((tmax||0) >= HDW_V2.tmax_class3 || hdwEff >= HDW_V2.hdw_class3 ||
