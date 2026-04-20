@@ -207,22 +207,27 @@
   .info-badge:hover, .info-badge.active { background: #E05A1E; color: #fff; }
 
   #param-popover {
-    position: fixed; z-index: 9999; width: 300px;
+    position: fixed; z-index: 9999;
+    width: 340px; min-width: 280px; max-width: 90vw;
+    max-height: 85vh;
     background: #fff; border: 1px solid #e0dbd4; border-radius: 8px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.14); display: none;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.14);
     font-family: 'DM Mono', monospace;
+    resize: both; overflow: hidden;
+    display: none; flex-direction: column;
   }
-  #param-popover.visible { display: block; }
+  #param-popover.visible { display: flex; }
   .pop-header {
     background: #1e3a5f; color: #fff; padding: 9px 12px;
     border-radius: 7px 7px 0 0; font-size: 11px; font-weight: 600;
     letter-spacing: 0.09em; text-transform: uppercase;
     display: flex; justify-content: space-between; align-items: center;
+    cursor: move; user-select: none; flex-shrink: 0;
   }
   .pop-close { background: none; border: none; color: rgba(255,255,255,0.55);
     font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1; }
   .pop-close:hover { color: #fff; }
-  .pop-body { padding: 10px 12px; }
+  .pop-body { padding: 10px 12px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
   .pop-short { font-size: 13px; color: #222; line-height: 1.6; margin-bottom: 9px; }
   .pop-block { margin-bottom: 8px; }
   .pop-block-label { font-size: 10px; color: #E05A1E; letter-spacing: 0.12em;
@@ -332,11 +337,11 @@
       ↑ IMPORT
       <input type="file" accept=".json" id="import-file" style="display:none">
     </label>
-    <label class="btn btn-ghost" style="cursor:pointer" title="Carica pacchetto multi-zona">
+    <label class="btn btn-ghost" style="cursor:pointer" title="Load multi-zone package">
       📦 PACCHETTO
       <input type="file" accept=".json" id="zm-pkg-file" style="display:none">
     </label>
-    <label class="btn btn-ghost" style="cursor:pointer" title="Aggiungi zone da uno o più file JSON (selezione multipla)">
+    <label class="btn btn-ghost" style="cursor:pointer" title="Add zones from one or more JSON files (multiple selection)">
       📂 AGGIUNGI ZONE
       <input type="file" accept=".json" multiple id="zm-add-file" style="display:none">
     </label>
@@ -355,16 +360,16 @@
     <button class="nav-item" data-section="importalpha" style="background:#eff6ff;border-left:2px solid #3b82f6;color:#1d4ed8">
       <span class="nav-icon">📡</span>IMPORT α ERA5
     </button>
-    <button class="nav-item" data-section="vegetation"><span class="nav-icon">◈</span>VEGETAZIONE</button>
-    <button class="nav-item" data-section="classification"><span class="nav-icon">◉</span>CLASSIFICAZIONE</button>
+    <button class="nav-item" data-section="vegetation"><span class="nav-icon">◈</span>VEGETATION</button>
+    <button class="nav-item" data-section="classification"><span class="nav-icon">◉</span>CLASSIFICATION</button>
     <button class="nav-item" data-section="night"><span class="nav-icon">◐</span>NOTTI</button>
     <button class="nav-item" data-section="streak"><span class="nav-icon">◆</span>STREAK / α</button>
     <button class="nav-item" data-section="alpha"><span class="nav-icon">◇</span>ALPHA MENSILE</button>
     <button class="nav-item" data-section="washout"><span class="nav-icon">◎</span>WASHOUT</button>
-    <button class="nav-item" data-section="wind"><span class="nav-icon">◁</span>VENTO</button>
+    <button class="nav-item" data-section="wind"><span class="nav-icon">◁</span>WIND</button>
     <button class="nav-item" data-section="hdweff"><span class="nav-icon">⚡</span>HDW_EFF PARAMS</button>
     <button class="nav-item" data-section="foehn"><span class="nav-icon">🌬</span>VENTI DOMINANTI</button>
-    <button class="nav-item" data-section="soglie"><span class="nav-icon">▦</span>SOGLIE MENSILI</button>
+    <button class="nav-item" data-section="soglie"><span class="nav-icon">▦</span>MONTHLY THRESHOLDS</button>
     <button class="nav-item zm-tab" data-section="zonemgr"><span class="nav-icon">📦</span>ZONE MANAGER</button>
   </div>
 
@@ -410,7 +415,8 @@ let config = {
     Rain_effective_mm: 2,
     Tmax_class2: 30, Tmax_class3: 35,
     HDW_eff_class2: 60, HDW_eff_class3: 120,
-    RH_dry: 60, RH_very_dry: 40
+    RH_dry: 60, RH_very_dry: 40,
+    mode_class2: 'OR', mode_class3: 'AND'
   },
   night: {
     T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25,
@@ -588,8 +594,8 @@ function sectionMeta() {
           onchange="config.meta.bbox[3]=this.value!==''?parseFloat(this.value):null;refresh()">
       </div>
     </div>
-    ${bboxSet && bb[0]>=bb[1] ? `<div class="wind-warning">⚠ lonMin deve essere < lonMax</div>` : ''}
-    ${bboxSet && bb[2]>=bb[3] ? `<div class="wind-warning">⚠ latMin deve essere < latMax</div>` : ''}`;
+    ${bboxSet && bb[0]>=bb[1] ? `<div class="wind-warning">⚠ lonMin must be < lonMax</div>` : ''}
+    ${bboxSet && bb[2]>=bb[3] ? `<div class="wind-warning">⚠ latMin must be < latMax</div>` : ''}`;
 }
 
 function sectionVegetation() {
@@ -616,6 +622,37 @@ function sectionClassification() {
     ${divider("Soglie HDW_eff")}
     ${slider("ch1","HDW_eff → Classe 2",20,150,5,"classification","HDW_eff_class2","","Soglia bassa = più giorni in classe 2","classification.HDW_eff_class2")}
     ${slider("ch2","HDW_eff → Classe 3",50,300,5,"classification","HDW_eff_class3","","","classification.HDW_eff_class3")}
+    ${divider("Logica combinatoria classi (gate mode)")}
+    <div class="info-box" style="border-color:#8b5cf6;background:#faf5ff;margin-bottom:12px">
+      <span style="color:#6d28d9;font-weight:600">Gate mode →</span>
+      <span style="color:#5b21b6"> Determina se Tmax e HDW_eff devono superare le soglie
+      <b>entrambe</b> (AND) o <b>una sola</b> (OR) per far scattare la classe nello streak.
+      <br><b>Default v2.1 "AND_c3only"</b>: class 2 = OR (streak parte su un segnale), class 3 = AND (solo con convergenza estrema).
+      <br>Scegli AND/AND per comportamento pre-v2.1 (strict mediterraneo).
+      <br>Scegli OR/OR per massima sensibilità (evento estremo dominato da HDW, es. windstorm).</span>
+    </div>
+    <div class="field-row">
+      <label class="field-label">Gate Classe 2</label>
+      <select id="mc2" onchange="set('classification','mode_class2',this.value)"
+              style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px;width:140px">
+        <option value="OR" ${config.classification.mode_class2==='OR'?'selected':''}>OR (raccomandato)</option>
+        <option value="AND" ${config.classification.mode_class2==='AND'?'selected':''}>AND (strict)</option>
+      </select>
+      <span class="field-help" style="margin-left:12px;color:#64748b;font-size:11px">
+        Attuale: <b>${config.classification.mode_class2||'OR'}</b>
+      </span>
+    </div>
+    <div class="field-row">
+      <label class="field-label">Gate Classe 3</label>
+      <select id="mc3" onchange="set('classification','mode_class3',this.value)"
+              style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px;width:140px">
+        <option value="AND" ${config.classification.mode_class3==='AND'?'selected':''}>AND (raccomandato)</option>
+        <option value="OR" ${config.classification.mode_class3==='OR'?'selected':''}>OR (permissivo)</option>
+      </select>
+      <span class="field-help" style="margin-left:12px;color:#64748b;font-size:11px">
+        Attuale: <b>${config.classification.mode_class3||'AND'}</b>
+      </span>
+    </div>
     ${divider("Umidità relativa")}
     ${slider("crh1","RH secco",30,80,1,"classification","RH_dry","%","Doppio uso: classificazione diurna E modulatore secchezza notturna (night score +1)","classification.RH_dry")}
     ${slider("crh2","RH molto secco",15,60,1,"classification","RH_very_dry","%","Doppio uso: secchezza diurna severa E soglia VPD notturno per ns≥2 (percorso proxy)","classification.RH_very_dry")}`;
@@ -625,11 +662,11 @@ function sectionNight() {
   const sc = config.night;
   return `
     <div class="info-box" style="border-color:#3b82f6;background:#eff6ff;margin-bottom:18px">
-      <span style="color:#1d4ed8;font-weight:600">Soglie RH notturne →</span>
+      <span style="color:#1d4ed8;font-weight:600">Night RH thresholds →</span>
       <span style="color:#1e40af"> Le soglie di umidità relativa notturna (RH_dry e RH_very_dry) sono condivise con la sezione
-      <b>CLASSIFICAZIONE</b>. Lo stesso valore governa sia la classificazione diurna sia il modulatore
+      <b>CLASSIFICATION</b>. Lo stesso valore governa sia la classificazione diurna sia il modulatore
       di secchezza notturna che può elevare il night score di +1.
-      Vai in CLASSIFICAZIONE → "RH secco" e "RH molto secco" per modificarle.</span>
+      Vai in CLASSIFICATION → "RH secco" e "RH molto secco" per modificarle.</span>
     </div>
     ${divider("Soglie termiche notturne")}
     ${slider("nt1","Notte calda (score 1)",14,22,1,"night","T_night_warm","°C","","night.T_night_warm")}
@@ -653,11 +690,11 @@ function sectionStreak() {
   const dn = config.streak.delta_alpha_night;
   return `
     <div class="info-box" style="margin-bottom:18px">
-      <b>Comportamento del reset:</b> la streak si azzera sia con class 0 (pioggia ≥ Rain_effective_mm)
+      <b>Reset behavior:</b> la streak si azzera sia con class 0 (pioggia ≥ Rain_effective_mm)
       sia con class 1 (giorno neutro). Dopo ogni reset riparte da zero: servono di nuovo
       <b>${config.streak.streak_activation_days} giorni</b> prima che Δα_dry si riattivi.
       Se piogge leggere e frequenti resettano la streak prima che si attivi, abbassare
-      <b>Rain_effective_mm</b> in CLASSIFICAZIONE piuttosto che modificare questo parametro.
+      <b>Rain_effective_mm</b> in CLASSIFICATION piuttosto che modificare questo parametro.
     </div>
     ${divider("Attivazione streak")}
     ${slider("ss1","Giorni attivazione streak",2,10,1,"streak","streak_activation_days"," gg","Giorni consecutivi classe 2/3 prima che α inizi a salire","streak.streak_activation_days")}
@@ -745,14 +782,14 @@ function sectionWashout() {
       </button>
       <div>
         <div class="toggle-label">Washout beta abilitato ${_iBadge('washout.enabled')}</div>
-        <div class="toggle-hint">Applica β alla formula HDWC in caso di pioggia</div>
+        <div class="toggle-hint">Apply β to HDWC formula in case of rain</div>
       </div>
     </div>
     ${w.enabled ? `
     ${divider("Tabella soglie → beta")}
     <div class="wash-table">
       <div class="tr">
-        <div class="th">Pioggia (mm)</div><div class="th" style="border-left:1px solid #e8e4de">Beta</div>
+        <div class="th">Rain (mm)</div><div class="th" style="border-left:1px solid #e8e4de">Beta</div>
       </div>
       ${tableRows}
     </div>
@@ -818,7 +855,7 @@ function sectionSoglie() {
 
   const peakSection = (tab === 'hdwc') ? (
     divider('Picco stagionale HDWc (hdwc_peak)') +
-    '<div class="info-box" style="margin-bottom:12px">Valore HDWc di picco per ogni livello di rischio. Usato dal dashboard per normalizzare il rischio cumulativo.</div>' +
+    '<div class="info-box" style="margin-bottom:12px">Peak HDWc value for each risk level. Used by the dashboard to normalize cumulative risk.</div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">' +
     livelli.map((l,i) =>
       '<div style="flex:1;min-width:80px">' +
@@ -848,14 +885,14 @@ function sectionSoglie() {
     '<button class="soglie-tab ' + (tab==='hdwc'?'active':'') + '" onclick="soglieActiveTab=\'hdwc\';refresh()">HDWc cumulativo</button>' +
     '<button class="soglie-tab ' + (tab==='hdw_eff'?'active':'') + '" onclick="soglieActiveTab=\'hdw_eff\';refresh()">HDW_eff giornaliero</button>' +
     '</div>' +
-    '<div class="info-box">Soglie mensili che definiscono i <strong>5 livelli di rischio</strong>. I valori devono essere <span class="hl">strettamente crescenti</span> da sinistra a destra.</div>' +
+    '<div class="info-box">Monthly thresholds defining the <strong>5 livelli di rischio</strong>. Values must be <span class="hl">strettamente crescenti</span> da sinistra a destra.</div>' +
     '<div class="soglie-legend" style="margin-bottom:12px">' + legend + '</div>' +
     peakSection +
     divider('Matrice mensile 12 × 5') +
     '<div style="overflow-x:auto;margin-bottom:12px"><table class="soglie-matrix"><thead>值得<th class="month-col">Mese</th>' + thCols + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>' +
     (errors.length ?
-      '<div class="warn-box"><div class="warn-title">Ordine non valido — i valori devono essere crescenti</div>' + errors.map(e=>'<div class="warn-item">· '+e+'</div>').join('') + '</div>' :
-      '<div class="validate-ok">Tutti i valori sono in ordine crescente</div>'
+      '<div class="warn-box"><div class="warn-title">Invalid order — values must be increasing</div>' + errors.map(e=>'<div class="warn-item">· '+e+'</div>').join('') + '</div>' :
+      '<div class="validate-ok">All values are in ascending order</div>'
     ) +
     divider('Andamento stagionale per livello') +
     '<svg viewBox="0 0 100 32" style="width:100%;height:56px;overflow:visible;margin-bottom:4px">' + sparklines + '</svg>' +
@@ -883,7 +920,7 @@ function _loadAlphaCalibFile(input) {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
       const btn = document.querySelector('.nav-item[data-section="importalpha"]');
       if (btn) { btn.classList.add('active'); activeSection = 'importalpha'; refresh(); }
-    } catch(err) { alert('File non valido: ' + err.message); }
+    } catch(err) { alert('Invalid file: ' + err.message); }
   };
   r.readAsText(f);
   input.value = '';
@@ -930,9 +967,9 @@ function sectionImportAlpha() {
     <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="_applyImportedAlpha()">✓ Applica α ERA5 calibrati</button>`;
   }
 
-  return `<div class="info-box">Importa il JSON <b>alpha_calib_*.json</b> esportato dal dashboard FireMeteo
-    (bottone <b>Export α calibrati</b> nel pannello α Sensitivity dopo aver caricato ERA5 365d).<br>
-    Aggiorna automaticamente <b>alpha_ref</b> con valori calibrati localmente. Ideale per calibrare preset per <b>ecoregioni specifiche</b>.</div>
+  return `<div class="info-box">Import the JSON <b>alpha_calib_*.json</b> esportato dal dashboard FireMeteo
+    (bottone <b>Export α calibrati</b> in the α Sensitivity panel after loading ERA5 365d).<br>
+    Aggiorna automaticamente <b>alpha_ref</b> with locally calibrated values. Ideal for calibrating presets for <b>ecoregioni specifiche</b>.</div>
   ${divider('Carica file calibrazione ERA5')}
   <div style="margin-bottom:14px">
     <input type="file" id="alphaCalibFileInput" accept=".json" style="display:none"
@@ -942,7 +979,7 @@ function sectionImportAlpha() {
       📡 Scegli alpha_calib_*.json
     </button>
   </div>
-  ${hasData?diffHTML:'<div class="info-box" style="color:#777;text-align:center">Nessun file caricato.</div>'}`;
+  ${hasData?diffHTML:'<div class="info-box" style="color:#777;text-align:center">No file loaded.</div>'}`;
 }
 
 function _applyImportedAlpha() {
@@ -963,9 +1000,9 @@ function sectionHdwEff() {
   return `
     <div class="fclass-box">
       <b>HDW_eff = HDW_raw + k · F_class</b><br>
-      Dove <code>F_class ∈ [0,1]</code> è la posizione di HDW_raw tra le soglie class2/class3.<br>
-      <code>k</code> dipende dalla Tmax del giorno (base / mid / high).<br>
-      Se ΔHDWrel > threshold, F_class viene amplificato proporzionalmente.
+      Dove <code>F_class ∈ [0,1]</code> is the HDW_raw position between class2/class3 thresholds.<br>
+      <code>k</code> depends on day's Tmax (base / mid / high).<br>
+      Se Δrel = (HDW_raw_oggi − HDW_eff_ieri)/HDW_eff_ieri &gt; threshold, F_class viene amplificato di (1 + Δrel).
     </div>
     ${divider('Costanti k per intensità')}
 ` +
@@ -977,11 +1014,11 @@ function sectionHdwEff() {
       'Amplificatore a temperatura elevata','hdw_eff_params.k_high') +
     divider('Soglia variazione relativa') +
     slider('ke4','Δrel threshold',0,0.50,0.01,'hdw_eff_params','delta_rel_threshold','',
-      'Se (HDW_raw - HDW_raw_prev)/HDW_raw_prev supera questa soglia, F_class viene amplificato','hdw_eff_params.delta_rel_threshold') + `
+      'Se (HDW_raw_oggi − HDW_eff_ieri)/HDW_eff_ieri supera questa soglia, F_class viene amplificato. Attenzione: numeratore è il grezzo di oggi (pre-bonus), denominatore è il valore amplificato di ieri.','hdw_eff_params.delta_rel_threshold') + `
     <div class="info-box" style="margin-top:12px">
       Comportamento chiave: sotto <span class="hl">HDW_eff_class2</span> il bonus è zero —
       i giorni normali non vengono toccati.<br>
-      Scegli k <b>moderati</b> per climi umidi, <b>alti</b> per climi secchi con picchi esplosivi.
+      Scegli k <b>moderati</b> for humid climates, <b>alti</b> per climi secchi con picchi esplosivi.
     </div>`;
 }
 
@@ -997,7 +1034,7 @@ function _windCardHTML(w, idx) {
   <div class="wind-card" id="wcard-${idx}">
     <div class="wind-card-hdr">
       <span class="wind-card-title">Vento ${idx+1}${w.label ? ' · ' + w.label : ''}</span>
-      <button class="wind-card-remove" onclick="_removeWind(${idx})">✕ rimuovi</button>
+      <button class="wind-card-remove" onclick="_removeWind(${idx})">✕ remove</button>
     </div>
     <div class="wind-grid">
       <div class="wind-field" style="grid-column:1/-1">
@@ -1062,13 +1099,13 @@ function sectionFoehn() {
       </button>
       <div>
         <div class="toggle-label">Venti dominanti pericolosi abilitati</div>
-        <div class="toggle-hint">Aggiunge Δα quando il vento dominante corrisponde a un pattern configurato</div>
+        <div class="toggle-hint">Adds Δα when dominant wind matches a configured pattern</div>
       </div>
     </div>
     ${enabled ? `
     <div class="info-box" style="margin-bottom:16px">
-      In caso di <b>match multiplo</b> vince il vento con score più alto.<br>
-      La velocità vento in Open-Meteo/ERA5 è in <b>m/s</b> → convertita in km/h (×3.6) prima del confronto.<br>
+      In caso di <b>match multiplo</b> the wind with the highest score wins.<br>
+      La velocità vento in Open-Meteo/ERA5 è in <b>m/s</b> → converted to km/h (×3.6) before comparison.<br>
       Il match direzionale gestisce il wrap-around a 360°.<br>
       Se <code>foehn_winds</code> è assente nel JSON, il motore lo ignora silenziosamente.
     </div>
@@ -1123,7 +1160,7 @@ function refresh() {
       <span class="banner-label">Editing zona</span>
       <span class="banner-name" title="${zoneName}">${zoneName}</span>
       <span class="banner-slot">${zmSelIdx+1} / ${zmPkg.length}</span>
-      <button class="banner-save-btn" id="zm-banner-save" onclick="zmSaveSlot()">💾 Salva nel pacchetto</button>
+      <button class="banner-save-btn" id="zm-banner-save" onclick="zmSaveSlot()">💾 Save to package</button>
       <button class="banner-back-btn" onclick="zmSaveAndBack()">← Zone Manager</button>`;
     if (!bannerEl) {
       bannerEl = document.createElement('div');
@@ -1246,6 +1283,14 @@ document.getElementById('import-file').addEventListener('change', e => {
       config.night.night_window_start = config.night.night_window_start || '20:00';
       config.night.night_window_end   = config.night.night_window_end   || '08:00';
 
+      // ── 3a. Classification gate mode (v2.1, 19/4/2026) ───────────────────
+      // JSON pre-v2.1 senza mode_class2/mode_class3: normalizza al nuovo default
+      // (OR per class2, AND per class3 = AND_c3only)
+      if (config.classification.mode_class2 !== 'AND' && config.classification.mode_class2 !== 'OR')
+        config.classification.mode_class2 = 'OR';
+      if (config.classification.mode_class3 !== 'AND' && config.classification.mode_class3 !== 'OR')
+        config.classification.mode_class3 = 'AND';
+
       // ── 3b. Normalizza hdw_eff_params (nuovo v15) ─────────────────────────
       const _defHp = { k_base:10, k_mid:20, k_high:30, delta_rel_threshold:0.20 };
       config.hdw_eff_params = { ..._defHp, ...(parsed.hdw_eff_params || {}) };
@@ -1270,13 +1315,13 @@ document.getElementById('import-file').addEventListener('change', e => {
             // ── 4. Notifica e render ───────────────────────────────────────────────
       zmSelIdx = -1; // import diretto: nessuna zona del pacchetto attiva
       refresh();
-      // Salta automaticamente alla sezione SOGLIE MENSILI dopo l'import
+      // Salta automaticamente alla sezione MONTHLY THRESHOLDS dopo l'import
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
       const soglieBtn = document.querySelector('.nav-item[data-section="soglie"]');
       if (soglieBtn) { soglieBtn.classList.add('active'); activeSection = 'soglie'; refresh(); }
 
     } catch(err) {
-      alert('JSON non valido o struttura non compatibile:\n' + err.message);
+      alert('Invalid JSON or incompatible structure:\n' + err.message);
     }
   };
   reader.readAsText(file);
@@ -1295,7 +1340,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'California Coast Range', region_id: 'california_coast', version: '1.0.0',
       author: 'Template', notes: 'Northern California coast ranges. Cool/wet winters, dry summers. Distinct from Diablo wind zone.',
       bbox: [-124, -120, 37, 42] },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 32, Tmax_class3: 38, HDW_eff_class2: 80, HDW_eff_class3: 160, RH_dry: 55, RH_very_dry: 35 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 32, Tmax_class3: 38, HDW_eff_class2: 80, HDW_eff_class3: 160, RH_dry: 55, RH_very_dry: 35 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 16, T_night_tropical: 20, T_night_severe: 24, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.40,0.42,0.45,0.50,0.58,0.68,0.80,0.85,0.82,0.72,0.58,0.44] },
@@ -1312,7 +1357,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'California Southern', region_id: 'california_south', version: '1.0.0',
       author: 'Template', notes: 'Southern California. Very arid. Santa Ana wind regime critical in autumn.',
       bbox: [-120, -114, 32, 37] },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 40, HDW_eff_class2: 100, HDW_eff_class3: 200, RH_dry: 45, RH_very_dry: 25 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 40, HDW_eff_class2: 100, HDW_eff_class3: 200, RH_dry: 45, RH_very_dry: 25 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 18, T_night_tropical: 22, T_night_severe: 26, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 3, delta_alpha_dry_class2: 0.007, delta_alpha_dry_class3: 0.012, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.43,0.45,0.49,0.55,0.63,0.73,0.85,0.88,0.84,0.76,0.62,0.47] },
@@ -1329,7 +1374,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'Australia SE Mediterranean', region_id: 'australia_se_med', version: '1.0.0',
       author: 'Template', notes: 'Victoria / NSW. Southern Hemisphere fire season Dec–Mar. Hot, dry northerly winds precede fronts.',
       bbox: [140, 150, -38, -34] },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 40, HDW_eff_class2: 90, HDW_eff_class3: 180, RH_dry: 50, RH_very_dry: 30 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 40, HDW_eff_class2: 90, HDW_eff_class3: 180, RH_dry: 50, RH_very_dry: 30 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 20, T_night_tropical: 24, T_night_severe: 28, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.006, delta_alpha_dry_class3: 0.011, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.85,0.88,0.80,0.65,0.50,0.38,0.32,0.35,0.45,0.58,0.72,0.82] },
@@ -1345,7 +1390,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'Australia SW Perth', region_id: 'australia_sw_perth', version: '1.0.0',
       author: 'Template', notes: 'SW Western Australia. Mediterranean climate. Fire season Jan–Mar. Fremantle Doctor sea breeze.',
       bbox: [115, 125, -35, -30] },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 42, HDW_eff_class2: 85, HDW_eff_class3: 170, RH_dry: 45, RH_very_dry: 28 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 35, Tmax_class3: 42, HDW_eff_class2: 85, HDW_eff_class3: 170, RH_dry: 45, RH_very_dry: 28 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 20, T_night_tropical: 24, T_night_severe: 27, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.006, delta_alpha_dry_class3: 0.011, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.82,0.85,0.78,0.65,0.50,0.38,0.30,0.32,0.42,0.55,0.68,0.78] },
@@ -1361,7 +1406,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'Canada BC Interior', region_id: 'canada_bc_interior', version: '1.0.0',
       author: 'Template', notes: 'British Columbia interior. Continental climate. Fire season Jun–Sep. Short but intense dry periods.',
       bbox: [-122, -114, 49, 56] },
-    classification: { Rain_effective_mm: 3, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 55, RH_very_dry: 35 },
+    classification: { Rain_effective_mm: 3, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 55, RH_very_dry: 35 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 15, T_night_tropical: 18, T_night_severe: 22, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 5, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.012 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.30,0.32,0.38,0.46,0.58,0.72,0.85,0.82,0.68,0.55,0.40,0.30] },
@@ -1377,7 +1422,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'South Africa Cape', region_id: 'south_africa_cape', version: '1.0.0',
       author: 'Template', notes: 'Cape Fynbos biome. Southern Hemisphere Mediterranean. Fire season Jan–Mar, Oct–Nov. Berg wind (foehn-type).',
       bbox: [18, 26, -35, -30] },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 33, Tmax_class3: 38, HDW_eff_class2: 75, HDW_eff_class3: 150, RH_dry: 50, RH_very_dry: 30 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 33, Tmax_class3: 38, HDW_eff_class2: 75, HDW_eff_class3: 150, RH_dry: 50, RH_very_dry: 30 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 18, T_night_tropical: 22, T_night_severe: 26, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.78,0.80,0.72,0.58,0.44,0.34,0.30,0.34,0.44,0.58,0.72,0.76] },
@@ -1393,7 +1438,7 @@ const ZM_TEMPLATES = {
     meta: { preset_name: 'East Africa Highland', region_id: 'east_africa_highland', version: '1.0.0',
       author: 'Template', notes: 'Kenya / Tanzania highlands. Savanna biome. Two fire seasons: Jul–Sep and Jan–Feb. Low alpha baseline.',
       bbox: [33, 42, -5, 5] },
-    classification: { Rain_effective_mm: 3, Tmax_class2: 33, Tmax_class3: 38, HDW_eff_class2: 65, HDW_eff_class3: 130, RH_dry: 55, RH_very_dry: 35 },
+    classification: { Rain_effective_mm: 3, Tmax_class2: 33, Tmax_class3: 38, HDW_eff_class2: 65, HDW_eff_class3: 130, RH_dry: 55, RH_very_dry: 35 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 20, T_night_tropical: 23, T_night_severe: 26, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 5, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.70,0.68,0.60,0.50,0.45,0.55,0.70,0.75,0.68,0.58,0.50,0.62] },
@@ -1416,7 +1461,7 @@ function _zmDefaultConfig() {
     meta: { preset_name: 'Nuova Zona', region_id: 'new_zone', version: '1.0.0',
       created: new Date().toISOString().slice(0,10), author: '', notes: '', bbox: [null,null,null,null] },
     vegetation: { days_to_severe_stress: 8, RH_wilt: 38, VPD_stress: 2.0 },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 60, RH_very_dry: 40 },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 60, RH_very_dry: 40 , mode_class2: "OR", mode_class3: "AND" },
     night: { T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.45,0.45,0.50,0.55,0.65,0.75,0.85,0.88,0.80,0.65,0.52,0.45] },
@@ -1447,6 +1492,12 @@ function _zmNormalize(raw) {
   out.night = { ...def.night, ...(raw.night||{}) };
   out.night.night_window_start = out.night.night_window_start || '20:00';
   out.night.night_window_end = out.night.night_window_end || '08:00';
+  // Classification gate mode (v2.1, 19/4/2026) — normalizza JSON pre-v2.1
+  out.classification = { ...def.classification, ...(raw.classification||{}) };
+  if (out.classification.mode_class2 !== 'AND' && out.classification.mode_class2 !== 'OR')
+    out.classification.mode_class2 = 'OR';
+  if (out.classification.mode_class3 !== 'AND' && out.classification.mode_class3 !== 'OR')
+    out.classification.mode_class3 = 'AND';
   out.hdw_eff_params = { ...def.hdw_eff_params, ...(raw.hdw_eff_params||{}) };
   if (raw.foehn_winds) {
     out.foehn_winds = {
@@ -1553,7 +1604,7 @@ function zmCloneZone(idx) {
 }
 
 function zmDeleteZone(idx) {
-  if (!confirm('Eliminare la zona "' + (zmPkg[idx]?.meta?.preset_name||'?') + '"?')) return;
+  if (!confirm('Delete zone "' + (zmPkg[idx]?.meta?.preset_name||'?') + '"?')) return;
   zmPkg.splice(idx, 1);
   zmValidationCache = {};
   zmPkg.forEach((z,i) => { zmValidationCache[i] = zmValidate(z); });
@@ -1634,7 +1685,7 @@ function _refreshZmSection() {
 }
 
 function sectionZoneMgr() {
-  const tplOpts = ['<option value="">+ da template geografico…</option>',
+  const tplOpts = ['<option value="">+ from geographic template…</option>',
     ...Object.keys(ZM_TEMPLATES).map(k => `<option value="${k.replace(/"/g,'&quot;')}">${k}</option>`)
   ].join('');
 
@@ -1643,16 +1694,16 @@ function sectionZoneMgr() {
   const selName = zmSelIdx >= 0 ? (zmPkg[zmSelIdx]?.meta?.preset_name || 'zona selezionata') : null;
   const hasBbox = zmSelIdx >= 0 && zmPkg[zmSelIdx]?.meta?.bbox?.every(v => v != null && !isNaN(v));
   const drawPanel = zmSelIdx < 0
-    ? `<div class="zm-draw-hint warn">Carica una zona nell'editor per abilitare il disegno della bbox.</div>`
+    ? `<div class="zm-draw-hint warn">Load a zone in the editor to enable bbox drawing.</div>`
     : `<div id="zm-draw-hint" class="zm-draw-hint${hasBbox ? '' : ' warn'}">
         ${hasBbox
           ? `Zona selezionata: <b>${selName}</b> — bbox esistente. Ridisegna per sovrascriverla.`
-          : `Zona selezionata: <b>${selName}</b> — <b>nessuna bbox definita</b>. Usa il pulsante per disegnarla.`
+          : `Zona selezionata: <b>${selName}</b> — <b>no bbox defined</b>. Usa il pulsante per disegnarla.`
         }
        </div>
        <div style="margin-bottom:8px">
          <button id="zm-draw-btn" class="zm-draw-btn" onclick="zmEnableDraw()">✏ Disegna bbox</button>
-         <span style="font-size:12px;color:#777;margin-left:10px">Click e trascina sulla mappa per definire il rettangolo</span>
+         <span style="font-size:12px;color:#777;margin-left:10px">Click and drag on the map to draw the rectangle</span>
        </div>`;
 
   const mapHTML = `
@@ -1676,10 +1727,10 @@ function sectionZoneMgr() {
     </div>
     ${zmSubTab==='list' ? listHTML : mapHTML}
     <div class="zm-export-row">
-      <button class="btn btn-ghost" onclick="zmAddEmpty()">+ Aggiungi vuota</button>
-      <button class="btn btn-ghost" onclick="document.getElementById('zm-add-file').click()" title="Selezione multipla supportata">📂 Aggiungi da file…</button>
-      <button class="btn btn-ghost" onclick="document.getElementById('zm-pkg-file').click()">📦 Carica pacchetto</button>
-      <button class="btn btn-primary" onclick="zmExportPkg()" ${zmPkg.length===0?'disabled':''}>💾 Esporta pacchetto</button>
+      <button class="btn btn-ghost" onclick="zmAddEmpty()">+ Add empty</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('zm-add-file').click()" title="Selezione multipla supportata">📂 Add from file…</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('zm-pkg-file').click()">📦 Load package</button>
+      <button class="btn btn-primary" onclick="zmExportPkg()" ${zmPkg.length===0?'disabled':''}>💾 Export package</button>
     </div>`;
 }
 
@@ -1692,7 +1743,7 @@ function _zmRenderList() {
   if (zmPkg.length === 0) {
     return `<div class="zm-empty">
       Nessuna zona caricata.<br>
-      Carica un pacchetto con <b>📦 Carica pacchetto</b> oppure aggiungi zone vuote o da template.
+      Carica un pacchetto con <b>📦 Load package</b> oppure aggiungi zone vuote o da template.
     </div>`;
   }
 
@@ -1701,14 +1752,14 @@ function _zmRenderList() {
     const isValid = errs.length === 0;
     const isSel = i === zmSelIdx;
     const validBadge = isValid
-      ? `<span class="zm-valid-ok" title="Valido">✓</span>`
+      ? `<span class="zm-valid-ok" title="Valid">✓</span>`
       : `<span class="zm-valid-warn" title="${errs.join('&#10;')}"title="⚠ ${errs.length} err">⚠${errs.length}</span>`;
     const name = z.meta?.preset_name || '—';
     const rid = z.meta?.region_id || '—';
     const bb = _zmBboxStr(z.meta?.bbox);
     return `<div class="zm-zone-row${isSel?' selected':''}" id="zmrow-${i}">
       <div class="zm-zone-cell">
-        <input class="zm-inline-edit" value="${name.replace(/"/g,'&quot;')}" title="Rinomina preset_name"
+        <input class="zm-inline-edit" value="${name.replace(/"/g,'&quot;')}" title="Rename preset_name"
           oninput="zmRenameField(${i},'preset_name',this.value)"
           onclick="event.stopPropagation()">
       </div>
@@ -1720,12 +1771,12 @@ function _zmRenderList() {
       <div class="zm-zone-cell zm-zone-bbox" title="${bb}">${bb}</div>
       <div class="zm-zone-cell" style="text-align:center">${validBadge}</div>
       <div class="zm-ops">
-        <button class="zm-op-btn" title="Carica nell'editor" onclick="zmLoadZone(${i})">✎</button>
+        <button class="zm-op-btn" title="Load in editor" onclick="zmLoadZone(${i})">✎</button>
         <button class="zm-op-btn" title="Clona" onclick="zmCloneZone(${i})">⎘</button>
-        <button class="zm-op-btn" title="Esporta zona" onclick="zmExportZone(${i})">↓</button>
+        <button class="zm-op-btn" title="Export zone" onclick="zmExportZone(${i})">↓</button>
         <button class="zm-op-btn" title="Su" onclick="zmMoveZone(${i},-1)" ${i===0?'disabled':''}>↑</button>
         <button class="zm-op-btn" title="Giù" onclick="zmMoveZone(${i},1)" ${i===zmPkg.length-1?'disabled':''}>↓</button>
-        <button class="zm-op-btn danger" title="Elimina" onclick="zmDeleteZone(${i})">✕</button>
+        <button class="zm-op-btn danger" title="Delete" onclick="zmDeleteZone(${i})">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -1756,7 +1807,7 @@ const ZM_COLORS = ['#E05A1E','#3b82f6','#16a34a','#7c3aed','#dc2626','#0891b2','
 function zmInitMap() {
   const el = document.getElementById('zm-map');
   if (!el) return;
-  if (!window.L) { el.innerHTML = '<div style="padding:20px;color:#999">Leaflet non disponibile.</div>'; return; }
+  if (!window.L) { el.innerHTML = '<div style="padding:20px;color:#999">Leaflet not available.</div>'; return; }
 
   if (zmLeafletMap) { zmLeafletMap.remove(); zmLeafletMap = null; }
   zmLeafletLayers = { rects: [], corners: [] };
@@ -1846,7 +1897,7 @@ function zmSaveSlot() {
     btn.textContent = '✓ Salvata';
     btn.classList.add('saved');
     setTimeout(() => {
-      btn.textContent = '💾 Salva nel pacchetto';
+      btn.textContent = '💾 Save to package';
       btn.classList.remove('saved');
     }, 1800);
   }
@@ -1961,7 +2012,7 @@ document.getElementById('zm-pkg-file').addEventListener('change', e => {
     try {
       const parsed = JSON.parse(ev.target.result);
       const zones = zmParsePkg(parsed);
-      if (zones.length === 0) { alert('Nessuna zona riconosciuta nel file.\nFormati supportati: array [...], oggetto {"1":{...},...}, config singolo.'); return; }
+      if (zones.length === 0) { alert('No zone recognized in the file.\nSupported formats: array [...], object {"1":{...},...}, config singolo.'); return; }
       zmPkg = zones;
       zmSelIdx = -1;
       zmValidationCache = {};
@@ -1973,7 +2024,7 @@ document.getElementById('zm-pkg-file').addEventListener('change', e => {
       document.getElementById('content-inner').classList.add('zm-wide');
       document.getElementById('content-inner').innerHTML = `<div class="section-label">📦 ZONE MANAGER</div>${sectionZoneMgr()}`;
     } catch(err) {
-      alert('JSON non valido:\n' + err.message);
+      alert('Invalid JSON:\n' + err.message);
     }
   };
   reader.readAsText(file);
@@ -1994,7 +2045,7 @@ const PARAM_DOC = {
     affects: 'batch tool — engine detection automatica per coordinate'
   },
 
-  // ── CLASSIFICAZIONE ──────────────────────────────────────────────────────────
+  // ── CLASSIFICATION ──────────────────────────────────────────────────────────
   'classification.Rain_effective_mm': {
     title: 'Pioggia Efficace',
     short: 'Soglia minima giornaliera per classificare il giorno come class 0 (disagravamento). Sotto questa soglia la pioggia viene ignorata.',
@@ -2005,19 +2056,35 @@ const PARAM_DOC = {
   },
   'classification.Tmax_class2': {
     title: 'Tmax → Class 2',
-    short: 'Soglia termica per classificare un giorno come aggravante (class 2). In strict mode (streak): AND con HDW_eff_class2.',
-    formula: 'strict:  class2 = (Tmax ≥ Tmax_c2 AND HDW ≥ HDW_c2)\ndisplay: class2 = (Tmax ≥ Tmax_c2) OR (HDW ≥ HDW_c2) OR ns≥1',
-    example: 'T=31°C, soglia=30 → contribuisce a class 2\nT=29°C, soglia=30 → fattore T non attivo',
+    short: 'Soglia termica per class 2. La logica AND/OR è governata da "mode_class2" (default: OR — basta una condizione tra Tmax e HDW_eff).',
+    formula: 'strict:\n  class2 = (mode_class2==="AND")\n    ? (Tmax ≥ Tmax_c2 AND HDW ≥ HDW_c2)\n    : (Tmax ≥ Tmax_c2 OR  HDW ≥ HDW_c2) OR ns≥2\ndisplay: class2 = (Tmax ≥ Tmax_c2) OR (HDW ≥ HDW_c2) OR ns≥1',
+    example: 'T=31°C, soglia=30, HDW=40, HDW_c2=60\nmode=OR → class 2 (Tmax sopra soglia)\nmode=AND → class 1 (HDW manca)',
     range: '25–38°C  |  PT: 30°C · GR: 32°C · CA: 35°C',
     affects: 'classifyDay_v2 · _fclassBonus'
   },
   'classification.Tmax_class3': {
     title: 'Tmax → Class 3',
-    short: 'Soglia termica per class 3 (aggravamento forte). In strict mode: AND con HDW_eff_class3.',
-    formula: 'strict:  class3 = (Tmax ≥ Tmax_c3 AND HDW ≥ HDW_c3)\ndisplay: class3 = (Tmax ≥ Tmax_c3) OR (HDW ≥ HDW_c3)\n         OR (ns≥2 AND (Tmax≥Tmax_c2 OR HDW≥HDW_c2))',
-    example: 'T=36°C, soglia=35 → contribuisce a class 3\nT=33°C, soglia=35 → solo fattore T non attiva class 3',
+    short: 'Soglia termica per class 3. La logica AND/OR è governata da "mode_class3" (default: AND — servono Tmax E HDW entrambi estremi).',
+    formula: 'strict:\n  class3 = (mode_class3==="AND")\n    ? (Tmax ≥ Tmax_c3 AND HDW ≥ HDW_c3)\n    : (Tmax ≥ Tmax_c3 OR  HDW ≥ HDW_c3)\ndisplay: class3 = (Tmax ≥ Tmax_c3) OR (HDW ≥ HDW_c3)\n         OR (ns≥2 AND (Tmax≥Tmax_c2 OR HDW≥HDW_c2))',
+    example: 'T=36°C, soglia=35, HDW=80, HDW_c3=120\nmode=AND → class 2 (HDW manca)\nmode=OR → class 3 (Tmax estrema sufficiente)',
     range: '30–45°C  |  PT: 35°C · CA: 40°C',
     affects: 'classifyDay_v2 · _fclassBonus (k_high attivo)'
+  },
+  'classification.mode_class2': {
+    title: 'Gate mode Class 2',
+    short: 'Regola di combinazione per class 2 in strict mode (streak/α). Default: OR — basta una condizione sopra soglia.',
+    formula: 'mode="OR":  class2 = (Tmax ≥ Tmax_c2) OR (HDW ≥ HDW_c2) OR ns≥2\nmode="AND": class2 = (Tmax ≥ Tmax_c2 AND HDW ≥ HDW_c2) OR ns≥2',
+    example: 'Regime boreale (Canada): OR raccomandato. Fuel si secca rapidamente con un solo segnale.\nRegime mediterraneo esplosivo (Sardegna): AND se vuoi streak solo su convergenza.',
+    range: 'Valori: "OR" | "AND"  |  Default: "OR" (v2.1, 19/4/2026)',
+    affects: 'classifyDay_v2 strict · streak counter · calcAlpha_v2'
+  },
+  'classification.mode_class3': {
+    title: 'Gate mode Class 3',
+    short: 'Regola di combinazione per class 3 in strict mode. Default: AND — richiede convergenza di Tmax e HDW estremi.',
+    formula: 'mode="AND": class3 = (Tmax ≥ Tmax_c3 AND HDW ≥ HDW_c3)\nmode="OR":  class3 = (Tmax ≥ Tmax_c3) OR (HDW ≥ HDW_c3)',
+    example: 'AND (default): class 3 rara, segnale operativo forte.\nOR: più giorni rossi, utile in regimi wind-driven dove una raffica estrema basta.',
+    range: 'Valori: "OR" | "AND"  |  Default: "AND"',
+    affects: 'classifyDay_v2 strict · streak counter · calcAlpha_v2'
   },
   'classification.HDW_eff_class2': {
     title: 'HDW_eff → Class 2',
@@ -2172,7 +2239,7 @@ const PARAM_DOC = {
     affects: 'calcBeta_v2 · calcHDWCum_v2'
   },
 
-  // ── VENTO ─────────────────────────────────────────────────────────────────────
+  // ── WIND ─────────────────────────────────────────────────────────────────────
   'wind.w_mean_weight': {
     title: 'Peso Vento Medio',
     short: 'Peso del vento medio orario nella composizione di W_eff. La somma con w_gust_weight deve essere 1.0.',
@@ -2210,21 +2277,21 @@ const PARAM_DOC = {
   'hdw_eff_params.k_high': {
     title: 'k High (Tmax ≥ class3)',
     short: 'Coefficiente massimo per i giorni con Tmax ≥ soglia class3. Governa i picchi estremi del modello.',
-    formula: 'HDW_out = HDW_eff + k_high × Fc\n(se Tmax ≥ Tmax_c3)\nFc = 1.0 se HDW ≥ HDW_c3\n\nSe Δrel > delta_rel_threshold:\n  Fc = Fc × (1 + Δrel)  [boost accelerazione]',
+    formula: 'HDW_out = HDW_eff + k_high × Fc\n(se Tmax ≥ Tmax_c3)\nFc = 1.0 se HDW ≥ HDW_c3\n\nSe Δrel > delta_rel_threshold:\n  Fc = Fc × (1 + Δrel)\n  [Δrel = (raw_oggi − amp_ieri)/amp_ieri]',
     example: 'HDW=130, c2=60, c3=120, Tmax=38°C, k_high=36\nFc=1.0 → HDW_out = 130+36 = 166\n\nClima secco (CA): k_high=36 · climi umidi: 15-20',
     range: '10–60  |  PT: 30 · CA: 36',
     affects: '_fclassBonus (effetto massimo)'
   },
   'hdw_eff_params.delta_rel_threshold': {
     title: 'Soglia Variazione Relativa',
-    short: 'Soglia di variazione relativa di HDW_eff tra il giorno corrente e il precedente. Se superata, Fc viene amplificato proporzionalmente (effetto accelerazione).',
-    formula: 'Δrel = (HDW_eff_today - HDW_eff_prev) / HDW_eff_prev\nSe Δrel > delta_rel_threshold:\n  Fc = Fc × (1 + Δrel)',
-    example: 'HDW_prev=60, HDW_today=90 → Δrel=0.50\nThreshold=0.20 → attivo\nFc = Fc_base × 1.50  [boost +50%]',
-    range: '0.10–0.50  |  default: 0.20',
-    affects: '_fclassBonus (boost accelerazione)'
+    short: 'Soglia di attivazione del boost di accelerazione. Confronta il HDW grezzo di oggi (pre-bonus) con il HDW amplificato di ieri. Asimmetrico per design.',
+    formula: 'Δrel = (HDW_raw_oggi − HDW_eff_ieri) / HDW_eff_ieri\n\nSe Δrel > delta_rel_threshold:\n  Fc = Fc × (1 + Δrel)\n\nNOTE:\n• numeratore = grezzo di oggi (input a _fclassBonus)\n• denominatore = amplificato di ieri (output salvato\n  in prevHe al termine del ciclo precedente)\n• l\'amplificato di oggi non entra nella formula\n  — è il risultato del calcolo, non un input',
+    example: 'Scenario A (nessun boost ieri):\nHDW_eff_ieri = 50 = HDW_raw_ieri\nHDW_raw_oggi = 58\nΔrel = (58−50)/50 = 0.16\nPT (thr=0.20): NON attivo\nSAR (thr=0.03): attivo, Fc × 1.16\n\nScenario B (boost attivo ieri):\nHDW_raw_ieri = 50, bonus+30 → HDW_eff_ieri = 80\nHDW_raw_oggi = 58  (crescita +16% sul grezzo)\nΔrel = (58−80)/80 = −0.275\nBoost NON attivo in nessuna regione\n(il bonus di ieri ha "mangiato" la crescita apparente)',
+    range: '0.03–0.25  |  PT: 0.20 · SAR: 0.03',
+    affects: '_fclassBonus (boost accelerazione, asimmetrico)'
   },
 
-  // ── VEGETAZIONE ───────────────────────────────────────────────────────────────
+  // ── VEGETATION ───────────────────────────────────────────────────────────────
   'vegetation.days_to_severe_stress': {
     title: 'Giorni a Stress Grave — boost logaritmico α',
     short: 'Soglia streak oltre la quale si attiva il long-streak boost logaritmico di α. Ogni giorno consecutivo in più produce un incremento non lineare di α che cresce ma si stabilizza (saturazione).',
@@ -2289,25 +2356,54 @@ function showParamDoc(key, el) {
 
   const pop = document.getElementById('param-popover');
   pop.innerHTML = `
-    <div class="pop-header">
+    <div class="pop-header" id="pop-header-drag">
       <span>${doc.title}</span>
       <button class="pop-close" onclick="hideParamDoc()">✕</button>
     </div>
     <div class="pop-body">${body}</div>`;
 
+  // Reset any leftover size from previous resize, così torna alla dimensione di default
+  pop.style.width = '';
+  pop.style.height = '';
+
   pop.classList.add('visible');
 
-  // Position: near badge but keep within viewport
+  // Position: vicino al badge ma clampato nella viewport.
+  // max-height:85vh sul popover + overflow-y su .pop-body garantiscono
+  // che contenuti lunghi non sforino mai — scrollano internamente.
   const rect = el.getBoundingClientRect();
   const vw = window.innerWidth, vh = window.innerHeight;
-  const pw = 300, ph = 320;
+  const pw = pop.offsetWidth  || 340;
+  const ph = pop.offsetHeight || 320;
   let left = rect.left + rect.width + 8;
   let top  = rect.top - 8;
-  if (left + pw > vw - 8) left = rect.left - pw - 8;
-  if (top + ph > vh - 8)  top  = vh - ph - 8;
+  if (left + pw > vw - 8) left = Math.max(8, rect.left - pw - 8);
+  if (left < 8) left = 8;
+  if (top + ph > vh - 8)  top  = Math.max(8, vh - ph - 8);
   if (top < 8)            top  = 8;
   pop.style.left = left + 'px';
   pop.style.top  = top  + 'px';
+
+  // Abilita drag-by-header per spostare il popover se copre contenuti
+  _attachPopoverDrag(pop);
+}
+
+// ── Drag state condiviso tra tutte le aperture del popover ─────────────────
+// (listener document-level registrati una sola volta, vedi in fondo)
+let _popDrag = { active: false, offsetX: 0, offsetY: 0, pop: null };
+
+function _attachPopoverDrag(pop) {
+  const header = pop.querySelector('#pop-header-drag');
+  if (!header) return;
+  header.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.pop-close')) return;
+    const rect = pop.getBoundingClientRect();
+    _popDrag.active = true;
+    _popDrag.offsetX = e.clientX - rect.left;
+    _popDrag.offsetY = e.clientY - rect.top;
+    _popDrag.pop = pop;
+    e.preventDefault();
+  });
 }
 
 function hideParamDoc() {
@@ -2321,6 +2417,24 @@ document.addEventListener('click', e => {
     hideParamDoc();
   }
 });
+
+// Drag globale del popover: listener document-level registrati una sola volta.
+// Lo stato _popDrag viene settato da _attachPopoverDrag sul mousedown dell'header.
+document.addEventListener('mousemove', (e) => {
+  if (!_popDrag.active || !_popDrag.pop) return;
+  const pop = _popDrag.pop;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let nx = e.clientX - _popDrag.offsetX;
+  let ny = e.clientY - _popDrag.offsetY;
+  // Clamp con margine di sicurezza: almeno 60px dell'header restano
+  // visibili su lato sinistro/destro, e l'header non va sotto la viewport
+  nx = Math.max(-pw + 60, Math.min(vw - 60, nx));
+  ny = Math.max(0, Math.min(vh - 40, ny));
+  pop.style.left = nx + 'px';
+  pop.style.top  = ny + 'px';
+});
+document.addEventListener('mouseup', () => { _popDrag.active = false; });
 </script>
 
 <!-- Popover DOM (unico, riposizionato via JS) -->
