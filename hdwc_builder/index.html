@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HDWC Engine Config Builder v8.0</title>
+<title>HDWC Engine Config Builder v8.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -405,7 +405,11 @@ let config = {
   meta: {
     preset_name: "", region_id: "", version: "1.0.0",
     created: new Date().toISOString().slice(0,10), author: "", notes: "",
-    bbox: [null, null, null, null]
+    bbox: [null, null, null, null],
+    // v82 M-7: timezone esplicita per override Open-Meteo 'auto'.
+    // Stringa vuota = Open-Meteo autodetecta da lat/lon (comportamento default).
+    // Esempio valori: "Europe/Lisbon", "America/Edmonton", "Europe/Istanbul".
+    timezone: ""
   },
   vegetation: {
     days_to_severe_stress: 8,
@@ -416,11 +420,16 @@ let config = {
     Tmax_class2: 30, Tmax_class3: 35,
     HDW_eff_class2: 60, HDW_eff_class3: 120,
     RH_dry: 60, RH_very_dry: 40,
-    mode_class2: 'OR', mode_class3: 'AND'
+    mode_class2: 'OR', mode_class3: 'AND',
+    // v82: n. minimo ore notturne con RH<=RH_dry per attivare rinforzo night score (Path A).
+    night_rh_hours_min: 4
   },
   night: {
     T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25,
-    night_hours_min: 4, night_window_start: "20:00", night_window_end: "08:00"
+    night_hours_min: 4, night_window_start: "20:00", night_window_end: "08:00",
+    // v82 M-6: finestra termica diurna per max HDW_eff orario.
+    // Ore locali 10-17 default (mediterraneo). Regimi boreali/tropicali possono variare.
+    thermal_window_start: 10, thermal_window_end: 17
   },
   streak: {
     streak_activation_days: 4,
@@ -1193,7 +1202,7 @@ function refresh() {
   // Brand
   let brandSuffix = config.meta.preset_name || '—';
   if (zmSelIdx >= 0 && zmPkg.length > 0) brandSuffix += ` [zona ${zmSelIdx+1}/${zmPkg.length}]`;
-  document.getElementById('brand-sub').textContent = `REGIONAL PRESET BUILDER v8.0 · ${brandSuffix}`;
+  document.getElementById('brand-sub').textContent = `REGIONAL PRESET BUILDER v8.2 · ${brandSuffix}`;
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -1459,10 +1468,13 @@ function _zmDefaultSoglie() {
 function _zmDefaultConfig() {
   return JSON.parse(JSON.stringify({
     meta: { preset_name: 'Nuova Zona', region_id: 'new_zone', version: '1.0.0',
-      created: new Date().toISOString().slice(0,10), author: '', notes: '', bbox: [null,null,null,null] },
+      created: new Date().toISOString().slice(0,10), author: '', notes: '', bbox: [null,null,null,null],
+      timezone: "" /* v82 M-7: vuoto = Open-Meteo auto. Es: "Europe/Lisbon", "America/Edmonton". */ },
     vegetation: { days_to_severe_stress: 8, RH_wilt: 38, VPD_stress: 2.0 },
-    classification: { Rain_effective_mm: 2, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 60, RH_very_dry: 40 , mode_class2: "OR", mode_class3: "AND" },
-    night: { T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
+    classification: { Rain_effective_mm: 2, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 60, RH_very_dry: 40 , mode_class2: "OR", mode_class3: "AND",
+      night_rh_hours_min: 4 /* v82 */ },
+    night: { T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00',
+      thermal_window_start: 10, thermal_window_end: 17 /* v82 M-6: ore locali max solare */ },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.45,0.45,0.50,0.55,0.65,0.75,0.85,0.88,0.80,0.65,0.52,0.45] },
     washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
