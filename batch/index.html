@@ -564,10 +564,39 @@ function runEngine(days) {
                      ? P_.dd3*Math.log(1+sk-(P_.days_to_severe_stress??7))/10 : 0;
     const da_night = P_.dn[n] || 0;
     const da_relief= d_s===0 ? P_.drel : 0;
+    // ── Componenti Δ_fclass per tooltip (v34.4) ─────────────────────────────
+    // Replico la logica di _fclassBonus per esporre k, Fc_base, drel_bonus, risultato.
+    // Non modifico la funzione core: scomposizione solo a scopo diagnostico.
+    // Se he_raw < hc2 → Δ_fclass = 0 (funzione ritorna he_raw senza boost).
+    let fc_k = 0, fc_base = 0, fc_drel = 0, fc_drel_active = false, fc_bonus = 0;
+    if (he_raw >= P_.hc2) {
+      fc_base = (he_raw >= P_.hc3) ? 1 : (he_raw - P_.hc2) / (P_.hc3 - P_.hc2);
+      fc_k = (d.tmax >= P_.tc3) ? P_.kh
+           : (d.tmax >= P_.tc2) ? P_.km
+           : P_.kb;
+      // Drel amplifier: se prevHe > 0 e drel > threshold, Fc viene moltiplicato per (1+drel).
+      let fc_final = fc_base;
+      if (prevHe > 0) {
+        fc_drel = (he_raw - prevHe) / prevHe;
+        if (fc_drel > P_.drt) {
+          fc_final = fc_base * (1 + fc_drel);
+          fc_drel_active = true;
+        }
+      }
+      fc_bonus = fc_k * fc_final;
+    }
     out.push({date:d.date,hdwc:c,he,he_raw,alpha:a,aRef,delta_alpha:da,
               delta_hdwc_1:d1, delta_hdwc_2:d2,
               da_dry,da_long,da_night,da_relief,
-              dc:d_,ns:n,sk,
+              da_foehn: parseFloat(foehDelta.toFixed(4)),
+              alpha_max_global: P_.alpha_max ?? 0.95,
+              // v34.4: componenti F_class per tooltip diagnostico
+              fc_k, fc_base: parseFloat(fc_base.toFixed(3)),
+              fc_drel: parseFloat(fc_drel.toFixed(3)),
+              fc_drel_active, fc_bonus: parseFloat(fc_bonus.toFixed(2)),
+              dc:d_, dc_strict:d_s, ns:n, sk,
+              // v34.5: espongo soglie gate per diagnostica "strict class differente da display"
+              tc2_cfg: P_.tc2, tc3_cfg: P_.tc3,
               wind:d.wind??null, gust:d.gust??null, tmin:d.tmin??null, tmax:d.tmax??null,
               rain:d.rain??0, rh:d.rh??null, dir:d.dir??null});
     prev=c; prevHe=he; prevA=a; prevD1=d1;
@@ -1983,6 +2012,9 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
       ?(hdwcLead>fwiLead?`HDWc (+${hdwcLead-fwiLead}gg)`:fwiLead>hdwcLead?`FWI (+${fwiLead-hdwcLead}gg)`:'stesso giorno'):'—';
 
     const dcArr    = series.map(s=>s.dc);
+    const dcStrictArr = series.map(s=>s.dc_strict);
+    const tc2Arr   = series.map(s=>s.tc2_cfg ?? 30);
+    const tc3Arr   = series.map(s=>s.tc3_cfg ?? 35);
     const nsArr    = series.map(s=>s.ns);
     const alphaArr = series.map(s=>parseFloat(s.alpha.toFixed(3)));
     const aRefArr  = series.map(s=>parseFloat((s.aRef??s.alpha).toFixed(3)));
@@ -1990,6 +2022,14 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     const daDryArr  = series.map(s=>parseFloat(((s.da_dry??0)+(s.da_long??0)).toFixed(4)));
     const daNightArr= series.map(s=>parseFloat((s.da_night??0).toFixed(4)));
     const daRelArr  = series.map(s=>parseFloat((s.da_relief??0).toFixed(4)));
+    const daFoehnArr= series.map(s=>parseFloat((s.da_foehn??0).toFixed(4)));
+    // v34.4: componenti F_class per scomposizione tooltip
+    const fcKArr    = series.map(s=>s.fc_k ?? 0);
+    const fcBaseArr = series.map(s=>s.fc_base ?? 0);
+    const fcDrelArr = series.map(s=>s.fc_drel ?? 0);
+    const fcDrelActiveArr = series.map(s=>s.fc_drel_active === true);
+    const fcBonusArr= series.map(s=>s.fc_bonus ?? 0);
+    const alphaMax  = series.length ? (series[0].alpha_max_global ?? 0.95) : 0.95;
     const windArr  = series.map(s=>s.wind);
     const gustArr  = series.map(s=>s.gust);
     const tminArr  = series.map(s=>s.tmin);
@@ -2181,28 +2221,80 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     // ── Traces ───────────────────────────────────────────────────────────
     const barColors = dcArr.map(dc=>DC_COLOR[dc]||'#4b5563');
     const barText   = dcArr.map((dc,i)=> {
-      const daDry   = daDryArr[i], daNight = daNightArr[i], daRel = daRelArr[i];
+      const daDry   = daDryArr[i], daNight = daNightArr[i], daRel = daRelArr[i], daFoehn = daFoehnArr[i];
       const da      = deltaAlphaArr[i];
       const s       = v => (v >= 0 ? '+' : '') + v;
 
-      // Componenti α odierni (non-zero)
+      // v34.5: classe display vs strict. Se divergono, lo segnalo nell'header
+      // per chiarire all'utente che la UI usa gate display (più permissivo, OR su tmax|he|ns)
+      // mentre streak/α usano gate AND_c3only strict (AND per class3).
+      // Il gap tipico: display=3 con he≥hc3 ma Tmax<tc3 → strict=2 (gate AND fallisce).
+      const dcStrict = dcStrictArr[i];
+      const dcMismatch = (dc !== dcStrict);
+      let dcMismatchNote = '';
+      if (dcMismatch) {
+        // Provo a diagnosticare la causa del gap. Per display=3 strict=2: manca tmax≥tc3.
+        // Per display=2 strict=1: manca ENTRAMBI tmax≥tc2 AND he≥hc2 (solo ns>=1 ha triggered display).
+        const tmax = tmaxArr[i];
+        let reason = '';
+        if (dc === 3 && dcStrict === 2 && tmax != null && tmax < tc3Arr[i]) {
+          reason = ` — Tmax ${tmax.toFixed(1)}°C < tc3=${tc3Arr[i]}°C (tmax sotto soglia class3)`;
+        } else if (dc === 2 && dcStrict === 1) {
+          reason = ` — probabile trigger solo da NS o RH/VPD`;
+        }
+        dcMismatchNote = ` <i>(strict: ${dcStrict}${reason})</i>`;
+      }
+
+      // Componenti α odierni (non-zero). streak è driver di α (non delta) → va qui.
+      // Se streak > 0 lo mostro sempre, anche quando daDry=0 (sotto streak_activation_days):
+      // l'utente capisce che il contatore sta salendo ma non ha ancora attivato il bonus.
+      // v34.5: label [dd2]/[dd3] chiarisce quale coefficiente di severità è stato applicato.
       const parts = [`base ${aRefArr[i]}`];
-      if (daDry   !== 0) parts.push(`dry ${s(daDry)}`);
+      const sk = streakArr[i] || 0;
+      if (sk > 0) {
+        const ddLabel = dcStrict === 3 ? 'dd3' : dcStrict === 2 ? 'dd2' : 'dd0';
+        parts.push(`streak ${sk}gg ${s(daDry)} [${ddLabel}]`);
+      } else if (daDry !== 0) {
+        parts.push(`dry ${s(daDry)}`);  // fallback difensivo
+      }
       if (daNight !== 0) parts.push(`night ${s(daNight)}`);
+      if (daFoehn !== 0) parts.push(`foehn ${s(daFoehn)}`);
       if (daRel   !== 0) parts.push(`relief ${s(daRel)}`);
 
       // Su giorni di pioggia (class 0): Δα può essere più negativo di solo relief
       // perché i contributi dry/night del giorno precedente spariscono.
       // "perso" = parte di Δα non spiegata dai componenti odierni.
-      const todayContribs = parseFloat((daDry + daNight + daRel).toFixed(4));
+      const todayContribs = parseFloat((daDry + daNight + daFoehn + daRel).toFixed(4));
       const perso = parseFloat((da - todayContribs).toFixed(4));
       if (dc === 0 && Math.abs(perso) > 0.0009)
         parts.push(`perso ${s(perso)}`);
 
+      // v1.2 diagnostic: flag saturazione α. Se α raggiunge α_max_global (default 0.95),
+      // aggiunte ulteriori NS/foehn/dry non producono Δα visibile (clamp). Utile per
+      // capire perché notti tropicali o foehn "non appaiono" nelle barre viola Δα.
+      const alphaToday = alphaArr[i];
+      const alphaRaw   = aRefArr[i] + daDry + daNight + daFoehn + daRel;
+      const saturated  = alphaToday >= alphaMax - 0.001 && alphaRaw > alphaMax + 0.001;
+      const satNote    = saturated ? ` · <i>α saturato a ${alphaMax} (raw=${alphaRaw.toFixed(3)}, contributi eccedenti persi nel clamp)</i>` : '';
+
+      // v34.4: riga F_class solo se c'è boost attivo (he_raw ≥ hc2 → fc_bonus > 0).
+      // Espone k (fascia termica), Fc_base (rampa class2→class3), eventuale drel amplifier.
+      // Coerente con barra ambra nel chart: tooltip spiega COSA c'è in quella barra.
+      const fcK = fcKArr[i], fcBase = fcBaseArr[i];
+      const fcBonus = fcBonusArr[i];
+      const fcDrel = fcDrelArr[i], fcDrelActive = fcDrelActiveArr[i];
+      let fclassLine = '';
+      if (fcBonus > 0) {
+        const kLabel = fcK >= 30 ? 'k_high' : fcK >= 20 ? 'k_mid' : 'k_base';
+        const drelTxt = fcDrelActive ? ` · drel ×${(1+fcDrel).toFixed(2)}` : '';
+        fclassLine = `F_class: +${fcBonus} (${kLabel}=${fcK} · Fc=${fcBase.toFixed(2)}${drelTxt})<br>`;
+      }
+
       return (
-        `${dates[i]}<br>Classe ${dc} · ${DC_NAME[dc]}<br>HDWc: ${hdwcArr[i]}<br>` +
-        `α: ${alphaArr[i]} (${parts.join(' · ')})<br>` +
-        `Δα giorno: ${s(da)} · streak: ${streakArr[i]}gg<br>` +
+        `${dates[i]}<br>Classe ${dc} · ${DC_NAME[dc]}${dcMismatchNote}<br>HDWc: ${hdwcArr[i]}<br>` +
+        `α: ${alphaArr[i]} (${parts.join(' · ')})${satNote}<br>` +
+        `Δα giorno: ${s(da)}<br>` +
+        fclassLine +
         `Tmax: ${tmaxArr[i]!=null?tmaxArr[i].toFixed(1)+'°C':'—'} · Tmin: ${tminArr[i]!=null?tminArr[i].toFixed(1)+'°C':'—'} · NS: ${nsArr[i]} (${NS_NAME[nsArr[i]]})<br>` +
         `Wind: ${windArr[i]!=null?windArr[i].toFixed(0):'—'} km/h · Gust: ${gustArr[i]!=null?gustArr[i].toFixed(0):'—'} km/h · ` +
         `Dir: ${dirArr[i]!=null?dirSymbol(dirArr[i]):'—'} · Rain: ${rainArr[i]!=null?rainArr[i].toFixed(1):'0'}mm`
