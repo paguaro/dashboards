@@ -863,10 +863,15 @@ async function analyzeFire(fire) {
   const thr=currentEngine.hdwc_m[m];
   let do_=null,dr=null;
   // Cerco days_orange/days_red solo nei giorni ANTECEDENTI all'ignizione (lead time pre-evento)
+  // v34.1 fix: do_/dr restano `null` se NESSUN giorno della serie supera la soglia,
+  // e questo si traduce in NaN nel CSV. Semanticamente però "0 giorni sopra soglia" è un
+  // valore misurato (anche se nullo), non un dato mancante. Forzo 0 nel post-loop.
   for(let i=0;i<=n;i++){
     if(series[i].hdwc>=thr[2]&&do_===null) do_=n-i;
     if(series[i].hdwc>=thr[3]&&dr===null)  dr=n-i;
   }
+  if (do_ === null) do_ = 0;
+  if (dr  === null) dr  = 0;
   // Picco HDWc sull'intera serie (anche giorni post-ignizione, se presenti)
   let mx=0,mi=0;
   for(let i=0;i<series.length;i++) if(series[i].hdwc>mx){mx=series[i].hdwc;mi=i;}
