@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HDWC Engine Config Builder v8.2</title>
+<title>HDWC Engine Config Builder v8.3.5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -426,10 +426,10 @@ let config = {
   },
   night: {
     T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25,
-    night_hours_min: 4, night_window_start: "20:00", night_window_end: "08:00",
-    // v82 M-6: finestra termica diurna per max HDW_eff orario.
-    // Ore locali 10-17 default (mediterraneo). Regimi boreali/tropicali possono variare.
-    thermal_window_start: 10, thermal_window_end: 17
+    night_hours_min: 4, night_window_start: "20:00", night_window_end: "08:00"
+    // NOTA v8.3.4: thermal_window_start/end spostati in hdw_eff_params dove appartengono
+    // semanticamente (governano il max HDW_eff giornaliero, non il night score).
+    // I vecchi preset continuano a essere letti dal motore (backward-compat).
   },
   streak: {
     streak_activation_days: 4,
@@ -449,7 +449,12 @@ let config = {
   wind: { w_mean_weight: 0.7, w_gust_weight: 0.3 },
   hdw_eff_params: {
     k_base: 10, k_mid: 20, k_high: 30,
-    delta_rel_threshold: 0.20
+    delta_rel_threshold: 0.20,
+    // v8.3.4: finestra termica diurna per max HDW_eff orario.
+    // Ore locali 10-17 default (mediterraneo). Regimi boreali/tropicali possono variare.
+    // Prima era in night{} — spostato qui perché semanticamente governa HDW_eff,
+    // non il night score. Backward-compat dal motore FireMeteo v50.5.
+    thermal_window_start: 10, thermal_window_end: 17
   },
   foehn_winds: {
     enabled: false,
@@ -1023,7 +1028,12 @@ function sectionHdwEff() {
       'Amplificatore a temperatura elevata','hdw_eff_params.k_high') +
     divider('Soglia variazione relativa') +
     slider('ke4','Δrel threshold',0,0.50,0.01,'hdw_eff_params','delta_rel_threshold','',
-      'Se (HDW_raw_oggi − HDW_eff_ieri)/HDW_eff_ieri supera questa soglia, F_class viene amplificato. Attenzione: numeratore è il grezzo di oggi (pre-bonus), denominatore è il valore amplificato di ieri.','hdw_eff_params.delta_rel_threshold') + `
+      'Se (HDW_raw_oggi − HDW_eff_ieri)/HDW_eff_ieri supera questa soglia, F_class viene amplificato. Attenzione: numeratore è il grezzo di oggi (pre-bonus), denominatore è il valore amplificato di ieri.','hdw_eff_params.delta_rel_threshold') +
+    divider('Finestra termica diurna (max HDW_eff giornaliero)') +
+    slider('ke5','Ora inizio finestra',6,14,1,'hdw_eff_params','thermal_window_start',' h',
+      'Ora locale di inizio finestra termica per calcolo max HDW_eff giornaliero. Default 10 (mediterraneo). Regimi boreali: 8-9. Regimi tropicali continentali: 11-12.','hdw_eff_params.thermal_window_start') +
+    slider('ke6','Ora fine finestra',14,22,1,'hdw_eff_params','thermal_window_end',' h',
+      'Ora locale di fine finestra termica. Default 17 (mediterraneo). Aggiustare per longitudine/latitudine regionale.','hdw_eff_params.thermal_window_end') + `
     <div class="info-box" style="margin-top:12px">
       Comportamento chiave: sotto <span class="hl">HDW_eff_class2</span> il bonus è zero —
       i giorni normali non vengono toccati.<br>
@@ -1033,6 +1043,105 @@ function sectionHdwEff() {
 
 // ─── SECTION: VENTI DOMINANTI (foehn_winds) ───────────────────────────────────
 const COMPASS_16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+// ─── Helpers rosa dei venti ────────────────────────────────────────────────
+// Converte sigla compass 16-punte (N, NNE, ..., NNW) in gradi [0, 360).
+// Ritorna null se la sigla non è valida.
+function _compassToDeg(sigla) {
+  const i = COMPASS_16.indexOf(sigla);
+  return i < 0 ? null : i * 22.5;
+}
+
+// Calcola il punto MEDIO (gradi) dell'arco da `from` a `to`.
+// Usa la convenzione "arco minimo" (pattern identico a _foehnMatchScore di FireMeteo v50):
+// se cwArc > 180°, l'utente intendeva il senso antiorario più corto.
+// Es: from='NNW'(337.5), to='NNE'(22.5) → cwArc=45° (corto) → mid=0° (N) ✓
+// Es: from='SSE'(157.5), to='SE'(135)   → cwArc=337.5° → antiorario 22.5° → mid=146.25° ✓
+// Es: from='WNW'(292.5), to='NNW'(337.5)→ cwArc=45° (corto) → mid=315° (NW) ✓
+function _arcMidDeg(from, to) {
+  const fd = _compassToDeg(from), td = _compassToDeg(to);
+  if (fd == null || td == null) return null;
+  const cwArc = ((td - fd) + 360) % 360;
+  if (cwArc === 0) return fd;       // degenere: from == to
+  if (cwArc <= 180) {
+    return (fd + cwArc / 2) % 360;  // arco orario: medio = fd + metà
+  } else {
+    // Arco minimo è antiorario: medio = td + (arco antiorario / 2)
+    const ccwArc = 360 - cwArc;
+    return (td + ccwArc / 2) % 360;
+  }
+}
+
+// Colore funzione della direzione (gradi). Identico a _foehnDirColor di FireMeteo v50,
+// per coerenza visiva cross-tool: lo stesso Maestrale (~315°) ha lo stesso colore
+// sia nella rosa del builder sia nel chart wind-rose di FireMeteo.
+// Interpolazione HSL tra 4 poli cardinali.
+function _foehnDirColor(deg) {
+  if (deg == null || isNaN(deg)) return '#d97706';
+  const d = ((deg % 360) + 360) % 360;
+  const poles = [
+    [  0, 220, 85, 55],   // N  – blu
+    [ 90, 142, 72, 40],   // E  – verde
+    [180,   0, 72, 50],   // S  – rosso
+    [270, 262, 72, 52],   // O  – viola
+    [360, 220, 85, 55],   // N  (wrap)
+  ];
+  for (let i = 0; i < poles.length - 1; i++) {
+    const [a, ha, sa, la] = poles[i];
+    const [b, hb, sb, lb] = poles[i + 1];
+    if (d >= a && d <= b) {
+      const t = (d - a) / (b - a);
+      let dh = hb - ha;
+      if (dh > 180) dh -= 360;
+      if (dh < -180) dh += 360;
+      const H = ((ha + t * dh) % 360 + 360) % 360;
+      const S = sa + t * (sb - sa);
+      const L = la + t * (lb - la);
+      return `hsl(${H.toFixed(0)},${S.toFixed(0)}%,${L.toFixed(0)}%)`;
+    }
+  }
+  return '#d97706';
+}
+
+// ─── Catalogo venti regionali ─────────────────────────────────────────────
+// Struttura estensibile: ogni catalogo è un oggetto {label, description, winds:[...]}
+// I venti del Mediterraneo classico seguono la rosa a 8 punte (arco 45° per vento).
+// Score e min_speed_kmh sono DEFAULT di letteratura per climatologia mediterranea —
+// vanno ricalibrati per regione specifica dopo l'applicazione.
+// In futuro: aggiungere ALPINE_FOEHN (Chinook/Santa Ana), BOREAL (Papagayo/Sarma), ecc.
+const WIND_CATALOGS = {
+  'mediterranean_classic': {
+    label: 'Mediterraneo classico (rosa 8 punte)',
+    description: 'Rosa dei venti mediterranea classica — 8 direzioni, arco 45° per vento. Score e velocità di riferimento letteratura.',
+    winds: [
+      // Punto esatto N (0°) — arco 337.5°-22.5°
+      { label:'Tramontana', from:'NNW', to:'NNE', score:2, min_speed_kmh:30,
+        note:'Freddo secco appenninico, foehn moderato' },
+      // Punto esatto NE (45°) — arco 22.5°-67.5°
+      { label:'Grecale',    from:'NNE', to:'ENE', score:2, min_speed_kmh:30,
+        note:'Freddo secco balcanico, poco foehn' },
+      // Punto esatto E (90°) — arco 67.5°-112.5°
+      { label:'Levante',    from:'ENE', to:'ESE', score:1, min_speed_kmh:25,
+        note:'Umido mediterraneo, impatto foehn basso' },
+      // Punto esatto SE (135°) — arco 112.5°-157.5°
+      { label:'Scirocco',   from:'ESE', to:'SSE', score:5, min_speed_kmh:25,
+        note:'Caldo sahariano, massimo impatto foehn' },
+      // Punto esatto S (180°) — arco 157.5°-202.5°
+      { label:'Ostro',      from:'SSE', to:'SSW', score:1, min_speed_kmh:25,
+        note:'Neutro, poco discriminante' },
+      // Punto esatto SO (225°) — arco 202.5°-247.5°
+      { label:'Libeccio',   from:'SSW', to:'WSW', score:3, min_speed_kmh:30,
+        note:'Mite, spesso umido da Atlantico' },
+      // Punto esatto O (270°) — arco 247.5°-292.5°
+      { label:'Ponente',    from:'WSW', to:'WNW', score:1, min_speed_kmh:25,
+        note:'Temperato atlantico, foehn modesto' },
+      // Punto esatto NO (315°) — arco 292.5°-337.5°
+      { label:'Maestrale',  from:'WNW', to:'NNW', score:4, min_speed_kmh:35,
+        note:'Foehn tirrenico classico, molto secco' }
+    ]
+  }
+  // Aggiungere qui futuri cataloghi: alpine_foehn, boreal, chinook_santa_ana, ecc.
+};
 
 function compassOpts(selected) {
   return COMPASS_16.map(d => `<option value="${d}"${d===selected?' selected':''}>${d}</option>`).join('');
@@ -1073,6 +1182,15 @@ function _windCardHTML(w, idx) {
         <input type="number" min="0" max="200" step="5" value="${w.min_speed_kmh||30}"
           onchange="config.foehn_winds.winds[${idx}].min_speed_kmh=parseFloat(this.value)||0;refresh()">
       </div>
+      <div class="wind-field" style="grid-column:1/-1">
+        <label>Simbolo nel chart FireMeteo</label>
+        <select onchange="config.foehn_winds.winds[${idx}].symbol=this.value;refresh()">
+          <option value="diamond" ${(w.symbol||'diamond')==='diamond'?'selected':''}>◆ Diamond (default)</option>
+          <option value="circle"  ${w.symbol==='circle'?'selected':''}>● Circle</option>
+          <option value="square"  ${w.symbol==='square'?'selected':''}>■ Square</option>
+          <option value="star"    ${w.symbol==='star'?'selected':''}>★ Star</option>
+        </select>
+      </div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:#555">
       Δα per evento =
@@ -1083,8 +1201,44 @@ function _windCardHTML(w, idx) {
 }
 
 function _addWind() {
-  if (config.foehn_winds.winds.length >= 4) return;
+  if (config.foehn_winds.winds.length >= 8) return;
   config.foehn_winds.winds.push({ label:'', from:'NW', to:'NNW', score:2, min_speed_kmh:30 });
+  refresh();
+}
+
+// Aggiunge un singolo vento preselezionato dal catalogo (key = index nell'array catalogo)
+function _addWindFromCatalog(catalogId, windIdx) {
+  // v83.1 bugfix: difesa completa su struttura foehn_winds.winds (potrebbe essere undefined
+  // in alcuni stati del config, es. appena caricato preset esterno).
+  if (!config.foehn_winds) config.foehn_winds = { enabled: true, winds: [], delta_alpha_per_score_unit: 0.005 };
+  if (!Array.isArray(config.foehn_winds.winds)) config.foehn_winds.winds = [];
+
+  if (config.foehn_winds.winds.length >= 8) {
+    alert('Massimo 8 venti. Rimuovi un vento esistente prima di aggiungerne altri.');
+    return;
+  }
+  const cat = WIND_CATALOGS[catalogId];
+  if (!cat || !cat.winds[windIdx]) {
+    console.warn('[_addWindFromCatalog] catalogo o vento non trovato:', catalogId, windIdx);
+    return;
+  }
+  const src = cat.winds[windIdx];
+  // Check duplicato: se il label esiste già, avvisa ma non blocca
+  const existing = config.foehn_winds.winds.find(w => w.label === src.label);
+  if (existing) {
+    if (!confirm(`"${src.label}" già presente. Aggiungere comunque una seconda istanza?`)) return;
+  }
+  // Copia solo i campi attesi dal motore (label, from, to, score, min_speed_kmh, symbol).
+  // Il campo `note` del catalogo NON viene incluso: documentazione solo nel builder.
+  // Il campo `symbol` se non presente nel catalogo → default 'diamond' tramite selettore UI.
+  config.foehn_winds.winds.push({
+    label: src.label,
+    from: src.from,
+    to: src.to,
+    score: src.score,
+    min_speed_kmh: src.min_speed_kmh,
+    symbol: src.symbol || 'diamond'
+  });
   refresh();
 }
 
@@ -1093,11 +1247,216 @@ function _removeWind(idx) {
   refresh();
 }
 
+// ─── Rosa dei venti grafica ───────────────────────────────────────────────
+// Genera SVG della rosa con:
+//   - Cerchio base + 16 tick di direzione cardinale (4 etichettati: N/E/S/W)
+//   - Settori colorati per ogni vento configurato (arco da `from` a `to`)
+//   - Frecce radiali che escono dal centro verso la direzione media del vento
+//   - Lunghezza freccia ∝ min_speed_kmh (normalizzata sul max del config)
+//   - Spessore freccia ∝ score
+//   - Label score in coda alla freccia
+//   - Tooltip con dettagli del vento su hover settore/freccia
+function _windRoseSVG() {
+  const winds = (config.foehn_winds && Array.isArray(config.foehn_winds.winds))
+    ? config.foehn_winds.winds : [];
+
+  const W = 240, H = 240, cx = W/2, cy = H/2;
+  const R_OUTER = 90;      // bordo cerchio principale
+  const R_INNER = 25;      // raggio di partenza settori/frecce
+  const R_LABEL = 108;     // posizionamento etichette cardinali
+  const R_MAX_ARROW = R_OUTER - 8;  // lunghezza max freccia
+
+  // Converte angolo (gradi, N=0°) in coordinate SVG
+  // N=0° → in alto (y<cy), E=90° → destra (x>cx). Asse Y SVG invertito.
+  const polar = (deg, r) => {
+    const rad = deg * Math.PI / 180;
+    return { x: cx + r * Math.sin(rad), y: cy - r * Math.cos(rad) };
+  };
+
+  // Genera arco SVG path da angolo `degA` a `degB`.
+  // Usa arco MINIMO (coerente con _arcMidDeg e con il motore FM50 _foehnMatchScore).
+  // Se cwArc > 180°, disegna in senso antiorario (sweep flag 0).
+  const arcPath = (degA, degB, rOut, rIn) => {
+    const cwArc = ((degB - degA) + 360) % 360;
+    const isShortCw = cwArc <= 180;
+    // sweep flag: 1 = orario, 0 = antiorario
+    const sweep = isShortCw ? 1 : 0;
+    const sweepInner = isShortCw ? 0 : 1;  // arco interno va al contrario
+    // Arco minimo: large-arc = 0 (< 180°)
+    const large = 0;
+    const p1 = polar(degA, rOut);
+    const p2 = polar(degB, rOut);
+    const p3 = polar(degB, rIn);
+    const p4 = polar(degA, rIn);
+    return `M ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}
+            A ${rOut} ${rOut} 0 ${large} ${sweep} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}
+            L ${p3.x.toFixed(1)} ${p3.y.toFixed(1)}
+            A ${rIn} ${rIn} 0 ${large} ${sweepInner} ${p4.x.toFixed(1)} ${p4.y.toFixed(1)}
+            Z`.replace(/\s+/g, ' ');
+  };
+
+  // ── Sfondo cerchio + tick 16 punte ───────────────────────────────────────
+  let svg = `<circle cx="${cx}" cy="${cy}" r="${R_OUTER}"
+               fill="#fafafa" stroke="#ccc" stroke-width="1"/>`;
+  // Tick radiali per ogni punto cardinale 16-punte
+  for (let i = 0; i < 16; i++) {
+    const deg = i * 22.5;
+    const isMajor = (i % 4 === 0);  // N/E/S/W più marcati
+    const pIn = polar(deg, R_OUTER - (isMajor ? 7 : 4));
+    const pOut = polar(deg, R_OUTER);
+    svg += `<line x1="${pIn.x.toFixed(1)}" y1="${pIn.y.toFixed(1)}"
+                  x2="${pOut.x.toFixed(1)}" y2="${pOut.y.toFixed(1)}"
+                  stroke="${isMajor?'#999':'#ccc'}" stroke-width="${isMajor?1.5:1}"/>`;
+  }
+  // Labels cardinali principali: N/E/S/O
+  const majorLabels = [
+    {deg:0, txt:'N', color:'#2463d0'},     // blu (come polo N di _foehnDirColor)
+    {deg:90, txt:'E', color:'#1c7041'},    // verde (polo E)
+    {deg:180, txt:'S', color:'#c41a1a'},   // rosso (polo S)
+    {deg:270, txt:'O', color:'#6d28d9'}    // viola (polo O)
+  ];
+  majorLabels.forEach(({deg, txt, color}) => {
+    const p = polar(deg, R_LABEL);
+    svg += `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}"
+              text-anchor="middle" dominant-baseline="middle"
+              font-size="13" font-weight="700" fill="${color}"
+              font-family="system-ui,sans-serif">${txt}</text>`;
+  });
+  // Labels cardinali secondari 8-punte (NE/SE/SW/NW) più discreti
+  const minorLabels = [
+    {deg:45, txt:'NE'}, {deg:135, txt:'SE'}, {deg:225, txt:'SO'}, {deg:315, txt:'NO'}
+  ];
+  minorLabels.forEach(({deg, txt}) => {
+    const p = polar(deg, R_LABEL);
+    svg += `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}"
+              text-anchor="middle" dominant-baseline="middle"
+              font-size="9" font-weight="500" fill="#666"
+              font-family="system-ui,sans-serif">${txt}</text>`;
+  });
+
+  // ── Se non ci sono venti, placeholder didattico ──────────────────────────
+  if (winds.length === 0) {
+    svg += `<text x="${cx}" y="${cy - 8}" text-anchor="middle"
+              font-size="11" fill="#999" font-family="system-ui,sans-serif"
+              font-style="italic">Nessun vento</text>
+            <text x="${cx}" y="${cy + 8}" text-anchor="middle"
+              font-size="11" fill="#999" font-family="system-ui,sans-serif"
+              font-style="italic">configurato</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
+              xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
+  }
+
+  // ── Normalizzazione velocità per scaling frecce ─────────────────────────
+  // Uso il MAX tra i venti del config. Così il vento più veloce ha freccia piena
+  // e gli altri sono scalati proporzionalmente (comparazione visiva immediata).
+  // min_speed bassa = freccia corta, min_speed alta = freccia lunga.
+  const maxSpeed = winds.reduce((m, w) => Math.max(m, w.min_speed_kmh || 0), 1);
+  const MIN_ARROW_FRAC = 0.35;  // freccia più corta = 35% del max (non spariscono)
+
+  // ── Disegna settori colorati + frecce ──────────────────────────────────
+  winds.forEach((w, i) => {
+    const fd = _compassToDeg(w.from), td = _compassToDeg(w.to);
+    const mid = _arcMidDeg(w.from, w.to);
+    if (fd == null || td == null || mid == null) return;
+
+    const color = _foehnDirColor(mid);
+    const score = Math.max(1, Math.min(5, w.score || 2));
+    const speed = w.min_speed_kmh || 0;
+    // Scaling lunghezza freccia su min_speed, con clamp
+    const speedFrac = MIN_ARROW_FRAC + (1 - MIN_ARROW_FRAC) * (speed / maxSpeed);
+    const arrowLen = R_INNER + (R_MAX_ARROW - R_INNER) * speedFrac;
+    // Spessore freccia ∝ score
+    const strokeW = 1.5 + score * 0.7;   // score=1 → 2.2, score=5 → 5.0
+
+    // Tooltip con info complete
+    const tooltip = `${w.label || 'Vento '+(i+1)}\n${w.from} → ${w.to}\nScore ${score} · ≥${speed} km/h\nΔα = ${(score * (config.foehn_winds.delta_alpha_per_score_unit || 0)).toFixed(3)}`;
+
+    // Settore colorato (trasparente) — riempimento arco
+    svg += `<path d="${arcPath(fd, td, R_OUTER - 2, R_INNER + 2)}"
+              fill="${color}" fill-opacity="0.18"
+              stroke="${color}" stroke-width="0.8" stroke-opacity="0.5">
+            <title>${tooltip}</title></path>`;
+
+    // Freccia radiale dal centro verso la direzione media
+    const tail = polar(mid, R_INNER);
+    const head = polar(mid, arrowLen);
+    // Frecce con arrowhead triangolare (groot dimension proporzionale a score)
+    const ahSize = 4 + score * 0.8;
+    const rad = mid * Math.PI / 180;
+    const perpX = Math.cos(rad) * ahSize;   // perpendicolare alla direzione
+    const perpY = Math.sin(rad) * ahSize;
+    const backX = head.x - Math.sin(rad) * ahSize * 1.6;
+    const backY = head.y + Math.cos(rad) * ahSize * 1.6;
+
+    // Linea principale
+    svg += `<line x1="${tail.x.toFixed(1)}" y1="${tail.y.toFixed(1)}"
+                  x2="${head.x.toFixed(1)}" y2="${head.y.toFixed(1)}"
+                  stroke="${color}" stroke-width="${strokeW.toFixed(1)}"
+                  stroke-linecap="round">
+            <title>${tooltip}</title></line>`;
+    // Arrowhead triangolare
+    svg += `<polygon points="${head.x.toFixed(1)},${head.y.toFixed(1)}
+                             ${(backX - perpX).toFixed(1)},${(backY - perpY).toFixed(1)}
+                             ${(backX + perpX).toFixed(1)},${(backY + perpY).toFixed(1)}"
+              fill="${color}">
+            <title>${tooltip}</title></polygon>`;
+
+    // Label score alla base della freccia (posizione leggermente fuori da R_INNER)
+    const labelPos = polar(mid, R_INNER - 8);
+    svg += `<circle cx="${labelPos.x.toFixed(1)}" cy="${labelPos.y.toFixed(1)}"
+              r="${6 + score * 0.6}" fill="${color}" opacity="0.95"/>
+            <text x="${labelPos.x.toFixed(1)}" y="${labelPos.y.toFixed(1)}"
+              text-anchor="middle" dominant-baseline="central"
+              font-size="${9 + score * 0.4}" font-weight="700" fill="white"
+              font-family="system-ui,sans-serif"
+              style="pointer-events:none">${score}</text>`;
+  });
+
+  // ── Piccolo centro decorativo ────────────────────────────────────────────
+  svg += `<circle cx="${cx}" cy="${cy}" r="3" fill="#333"/>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
+            xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto">${svg}</svg>`;
+}
+
+// HTML dropdown: seleziona vento dal catalogo regionale, auto-submit al cambio.
+// canAdd=false → pulsante/select disabilitato visivamente.
+function _catalogPickerHTML(canAdd) {
+  // Costruisci <optgroup> per ogni catalogo. Oggi c'è solo 'mediterranean_classic'.
+  // Futuri cataloghi regionali si aggiungono a WIND_CATALOGS, l'UI li include automaticamente.
+  const optgroups = Object.entries(WIND_CATALOGS).map(([catId, cat]) => {
+    const opts = cat.winds.map((w, i) =>
+      `<option value="${catId}|${i}" title="${(w.note||'').replace(/"/g,'&quot;')}">
+        ${w.label} (${w.from}→${w.to}) · score ${w.score} · ≥${w.min_speed_kmh} km/h
+      </option>`
+    ).join('');
+    return `<optgroup label="${cat.label}">${opts}</optgroup>`;
+  }).join('');
+  const placeholder = canAdd
+    ? '— aggiungi da catalogo… —'
+    : '— limite 8 venti raggiunto —';
+  return `
+    <div class="wind-catalog-picker" style="margin-top:12px;padding:10px;background:#fff5ec;border:1px dashed #E05A1E;border-radius:6px">
+      <label style="display:block;font-size:12px;color:#666;margin-bottom:6px">
+        📚 Catalogo venti regionali
+        <span style="color:#999;font-weight:400">(score e velocità di letteratura — ricalibrabili)</span>
+      </label>
+      <select ${!canAdd?'disabled':''}
+              style="width:100%;padding:6px;font-size:13px;border:1px solid #ccc;border-radius:4px"
+              onchange="if(this.value){const [cid,wi]=this.value.split('|');_addWindFromCatalog(cid,parseInt(wi));this.value='';}">
+        <option value="">${placeholder}</option>
+        ${optgroups}
+      </select>
+    </div>`;
+}
+
+// HTML dropdown catalogo — fine
+
 function sectionFoehn() {
   const fw = config.foehn_winds;
   const enabled = fw.enabled;
   const windCards = fw.winds.map((w,i) => _windCardHTML(w,i)).join('');
-  const canAdd = fw.winds.length < 4;
+  const canAdd = fw.winds.length < 8;
 
   return `
     ${divider('Attivazione')}
@@ -1121,11 +1480,33 @@ function sectionFoehn() {
     ${divider('Δα per unità di score')}` +
     slider('fw1','Δα / score unit',0,0.020,0.001,'foehn_winds','delta_alpha_per_score_unit','',
       'Es. score=3 → Δα = 3 × questo valore','foehn_winds.delta_alpha_per_score_unit') +
-    `${divider('Lista venti (max 4)')}
+    `${divider('Rosa dei venti · anteprima live')}
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div>${_windRoseSVG()}</div>
+        <div style="flex:1;font-size:11px;color:#555;line-height:1.5">
+          <b style="color:#333">Come leggere la rosa</b><br>
+          • <b>Lunghezza freccia</b> ∝ velocità min configurata<br>
+          • <b>Spessore freccia</b> ∝ score del vento<br>
+          • <b>Cerchio score</b> al centro: dimensione ∝ score<br>
+          • <b>Colore</b> basato sulla direzione (N=blu, E=verde, S=rosso, O=viola)<br>
+          • <b>Hover</b> settore o freccia per dettagli<br>
+          <span style="color:#999;font-style:italic">Stessa palette del chart wind-rose FireMeteo</span>
+        </div>
+      </div>
+    </div>
+    ${divider('Lista venti (max 8)')}
+    <div class="info-box" style="background:#fffbeb;border-color:#f59e0b;color:#78350f;font-size:11px;margin-bottom:10px;padding:8px 12px">
+      ⚠ Nota: per coerenza discriminante α_foehn, evita di avere più di <b>4–5 venti attivi</b>
+      contemporaneamente nello stesso settore climatico. Gli 8 slot servono a coprire la rosa
+      completa dei venti regionali (es. mediterraneo classico), non ad aumentare il segnale.
+      Overlap direzionali producono score quasi sempre attivo → perde valore predittivo.
+    </div>
     ${windCards}
     <button class="add-wind-btn" onclick="_addWind()" ${!canAdd?'disabled':''}>
-      + aggiungi vento ${!canAdd?'(max 4 raggiunto)':''}
+      + aggiungi vento ${!canAdd?'(max 8 raggiunto)':''}
     </button>
+    ${_catalogPickerHTML(canAdd)}
     ` : `
     <div class="info-box" style="color:#777;margin-top:12px">
       Abilitare il toggle per configurare i venti dominanti pericolosi (Maestrale, Scirocco, Föhn, ecc.).<br>
@@ -1300,9 +1681,32 @@ document.getElementById('import-file').addEventListener('change', e => {
       if (config.classification.mode_class3 !== 'AND' && config.classification.mode_class3 !== 'OR')
         config.classification.mode_class3 = 'AND';
 
-      // ── 3b. Normalizza hdw_eff_params (nuovo v15) ─────────────────────────
-      const _defHp = { k_base:10, k_mid:20, k_high:30, delta_rel_threshold:0.20 };
+      // ── 3b. Normalizza hdw_eff_params (nuovo v15, esteso v8.3.4) ──────────
+      const _defHp = {
+        k_base:10, k_mid:20, k_high:30, delta_rel_threshold:0.20,
+        thermal_window_start:10, thermal_window_end:17
+      };
       config.hdw_eff_params = { ..._defHp, ...(parsed.hdw_eff_params || {}) };
+
+      // ── 3b'. Migration v8.3.4: thermal_window da night{} a hdw_eff_params{}.
+      // Se il preset legacy aveva thermal_window_* dentro night{} e NON in
+      // hdw_eff_params{}, sposta i valori e rimuovi da night. Builder e motore
+      // v50.5 li usano entrambi via backward-compat, ma l'UI Builder nuova
+      // mostra slider solo in HDW_EFF PARAMS quindi il preset deve essere
+      // normalizzato per non perdere la visualizzazione.
+      const legacyNightStart = parsed.night?.thermal_window_start;
+      const legacyNightEnd   = parsed.night?.thermal_window_end;
+      if (legacyNightStart != null && parsed.hdw_eff_params?.thermal_window_start == null) {
+        config.hdw_eff_params.thermal_window_start = legacyNightStart;
+      }
+      if (legacyNightEnd != null && parsed.hdw_eff_params?.thermal_window_end == null) {
+        config.hdw_eff_params.thermal_window_end = legacyNightEnd;
+      }
+      // Cleanup di night{}: rimuovi i campi legacy una volta migrati
+      if (config.night) {
+        delete config.night.thermal_window_start;
+        delete config.night.thermal_window_end;
+      }
 
       // ── 3c. Normalizza foehn_winds (nuovo v15) ────────────────────────────
       if (parsed.foehn_winds) {
@@ -1473,13 +1877,13 @@ function _zmDefaultConfig() {
     vegetation: { days_to_severe_stress: 8, RH_wilt: 38, VPD_stress: 2.0 },
     classification: { Rain_effective_mm: 2, Tmax_class2: 30, Tmax_class3: 35, HDW_eff_class2: 60, HDW_eff_class3: 120, RH_dry: 60, RH_very_dry: 40 , mode_class2: "OR", mode_class3: "AND",
       night_rh_hours_min: 4 /* v82 */ },
-    night: { T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00',
-      thermal_window_start: 10, thermal_window_end: 17 /* v82 M-6: ore locali max solare */ },
+    night: { T_night_warm: 18, T_night_tropical: 20, T_night_severe: 25, night_hours_min: 4, night_window_start: '20:00', night_window_end: '08:00' },
     streak: { streak_activation_days: 4, delta_alpha_dry_class2: 0.005, delta_alpha_dry_class3: 0.010, delta_alpha_night: [0,0.005,0.010,0.015], delta_alpha_relief: -0.010 },
     alpha: { alpha_max_global: 0.95, alpha_ref: [0.45,0.45,0.50,0.55,0.65,0.75,0.85,0.88,0.80,0.65,0.52,0.45] },
     washout: { enabled: true, thresholds_mm: [2,10,20,30], beta_values: [0.95,0.85,0.75,0.65] },
     wind: { w_mean_weight: 0.7, w_gust_weight: 0.3 },
-    hdw_eff_params: { k_base: 10, k_mid: 20, k_high: 30, delta_rel_threshold: 0.20 },
+    hdw_eff_params: { k_base: 10, k_mid: 20, k_high: 30, delta_rel_threshold: 0.20,
+      thermal_window_start: 10, thermal_window_end: 17 /* v8.3.4: spostato da night{} */ },
     foehn_winds: { enabled: false, delta_alpha_per_score_unit: 0.005, winds: [] },
     soglie: _zmDefaultSoglie()
   }));
@@ -1511,6 +1915,15 @@ function _zmNormalize(raw) {
   if (out.classification.mode_class3 !== 'AND' && out.classification.mode_class3 !== 'OR')
     out.classification.mode_class3 = 'AND';
   out.hdw_eff_params = { ...def.hdw_eff_params, ...(raw.hdw_eff_params||{}) };
+  // v8.3.4 migration: thermal_window da night{} a hdw_eff_params{} se preset legacy
+  if (raw.night?.thermal_window_start != null && raw.hdw_eff_params?.thermal_window_start == null) {
+    out.hdw_eff_params.thermal_window_start = raw.night.thermal_window_start;
+  }
+  if (raw.night?.thermal_window_end != null && raw.hdw_eff_params?.thermal_window_end == null) {
+    out.hdw_eff_params.thermal_window_end = raw.night.thermal_window_end;
+  }
+  delete out.night.thermal_window_start;
+  delete out.night.thermal_window_end;
   if (raw.foehn_winds) {
     out.foehn_winds = {
       enabled: raw.foehn_winds.enabled ?? false,
