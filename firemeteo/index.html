@@ -1128,6 +1128,7 @@ tr:hover{background:#f9fafb}
           <div class="chart-header">
             <div class="chart-title" onclick="toggleChart('chart-72hdw-content')">🔥 HDW_eff &amp; Wind · <span id="chart-72hdw-title-range">72h</span></div>
             <div class="chart-controls">
+              <button class="chart-control-btn" id="toggle-72foehn" title="Toggle foehn wind markers" onclick="toggle72FoehnMarkers()" style="font-size:11px">★</button>
               <button class="chart-control-btn hover-unified btn-hover-toggle" id="hover-72hdw" title="Hover: unificado" onclick="toggleHoverMode('chart-72hdw')">◈</button>
               <button class="chart-control-btn" title="Add annotation" onclick="toggleAnnotationMode('chart-72hdw')">✏</button>
               <button class="chart-control-btn" title="Expandir" onclick="toggleFullscreen('card-72hdw','chart-72hdw','chart-72hdw-content')">⤢</button>
@@ -1240,10 +1241,11 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-meteo',7)">Precip. mm</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',8)">HDW inst.</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',9)">HDWc</th>
-                <th class="sortable" onclick="sortTable('tbl-meteo',10)" title="Haines Mid Index (stability + moisture 850/700 hPa, range 2-6)">Haines</th>
-                <th class="sortable" onclick="sortTable('tbl-meteo',11)" title="Component A (stability)">A</th>
-                <th class="sortable" onclick="sortTable('tbl-meteo',12)" title="Component B (moisture)">B</th>
-                <th class="sortable" onclick="sortTable('tbl-meteo',13)" title="Ventilation Index = Wind × PBL, m²/s">VI m²/s</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',10)" title="Fire Weather Index canonico [Van Wagner 1987], calcolato al mezzogiorno locale standard">FWI</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',11)" title="Haines Mid Index (stability + moisture 850/700 hPa, range 2-6)">Haines</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',12)" title="Component A (stability)">A</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',13)" title="Component B (moisture)">B</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',14)" title="Ventilation Index = Wind × PBL, m²/s">VI m²/s</th>
               </tr>
             </thead>
             <tbody id="tbl-meteo-body"></tbody>
@@ -3596,11 +3598,11 @@ function toggleArchiveForecast(show) {
     const todayIdx = Math.max(0, d.time.indexOf(today));
     const hdwArr = d.time.map((_,i) => calcHDW(d.temperature_2m_max[i],d.relative_humidity_2m_mean[i],d.windspeed_10m_max[i],d.windgusts_10m_max?.[i]));
     const {hdw:wu_hdw,dates:wu_dates,rain:wu_rain,tmin:wu_tmin} = getWarmup(meta);
-    const {cum:hdwCum,hdwEffArr:_hdwEffMain,hdwInstArr:_hdwInstMain,dayClasses:_dcA,nightScores:_nsA} = calcHDWCum_v2(hdwArr,d.time,d.temperature_2m_max,d.temperature_2m_min,d.precipitation_sum,wu_hdw,wu_dates,wu_rain,wu_tmin,meta?.hourly?.time||null,meta?.hourly?.temperature_2m||null,d.winddirection_10m_dominant||null,d.windspeed_10m_max||null,d.windgusts_10m_max||null,meta?.hourly?.precipitation||null,d.relative_humidity_2m_mean||null,meta?.hourly?.relativehumidity_2m||null,meta?.hourly?.windspeed_10m||null,meta?.hourly?.windgusts_10m||null);
+    const {cum:hdwCum,hdwEffArr:_hdwEffMain,hdwInstArr:_hdwInstMain,dayClasses:_dcA,nightScores:_nsA,dryStreaks:_drA} = calcHDWCum_v2(hdwArr,d.time,d.temperature_2m_max,d.temperature_2m_min,d.precipitation_sum,wu_hdw,wu_dates,wu_rain,wu_tmin,meta?.hourly?.time||null,meta?.hourly?.temperature_2m||null,d.winddirection_10m_dominant||null,d.windspeed_10m_max||null,d.windgusts_10m_max||null,meta?.hourly?.precipitation||null,d.relative_humidity_2m_mean||null,meta?.hourly?.relativehumidity_2m||null,meta?.hourly?.windspeed_10m||null,meta?.hourly?.windgusts_10m||null);
     drawTemp(meta,todayIdx,hdwArr,hdwCum,_dcA,_nsA);
     drawHDW(meta,todayIdx,_hdwInstMain,_hdwEffMain,hdwCum,_dcA,_nsA);
     try { drawFWI(meta,todayIdx,hdwCum); } catch(e) { console.warn('drawFWI failed:', e); }   // v50 Fase 3: card FWI canonical
-    try { drawGS(meta,hdwCum); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3: card Green Streak
+    try { drawGS(meta,hdwCum,_drA); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3.1: card Green Streak + dry streak curve
     drawPrec(meta,todayIdx);
     // ── Sync slider max to new forecast visibility ──────────────────────────
     if (_archiveRefDate && d.time) {
@@ -3641,7 +3643,11 @@ const HDW_V2 = {
   // Override via cfg.classification.mode_class2 / mode_class3 ("AND" | "OR").
   mode_class2:  'OR',
   mode_class3:  'AND',
-  alpha_min:    0.40,   alpha_max:    0.95,
+  alpha_max:    0.95,
+  // Nota: in precedenza HDW_V2.alpha_min = 0.40 era definito qui come presunto
+  // hard floor di α. In realtà calcAlpha_v2 (§10.7) usa un floor DINAMICO:
+  // floor = 0 se dc=0 (reset pioggia), altrimenti = alphaRef(mese). Il campo
+  // alpha_min era codice morto mai letto dal clamp operativo. Rimosso in v50.5.
   delta_dry2:   0.005,  delta_dry3:   0.010,
   delta_n1:     0.005,  delta_n2:     0.010,  delta_n3:     0.015,
   delta_rel:   -0.010,
@@ -3691,7 +3697,7 @@ let _activeEngineConfig = null; // full JSON from config builder when loaded
 // Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
 // detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
 // which is critical for night-window NS calculations outside Europe/Lisbon.
-console.log('%c[FireMeteo v50 — FWI canonical + H-1/2/3 + M-4/5/6/7/8 + L-10/11 — 21/4/26]%c gate c2:OR c3:AND, warmup continuity, vegetation strict-clean, FWI orario [VW1987]', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+console.log('%c[FireMeteo v50.5 — FWI canonical + Phase 4 foehn markers + alpha_min cleanup + thermal_window migration — 22/4/26]%c gate c2:OR c3:AND, warmup continuity, thermal_window→hdw_eff_params (backward-compat)', 'color:#4ade80;font-weight:bold', 'color:#aaa');
 function _getTimezone() {
   const tz = _activeEngineConfig?.meta?.timezone;
   if (tz && typeof tz === 'string' && tz.length > 0) return tz;
@@ -3743,9 +3749,14 @@ function _applyEngineConfig(cfg) {
   if (ni.night_hours_min != null) HDW_V2.night_hours_min = ni.night_hours_min;
   if (ni.night_window_start != null) HDW_V2.night_window_start = ni.night_window_start;
   if (ni.night_window_end   != null) HDW_V2.night_window_end   = ni.night_window_end;
-  // Thermal window (v49 M-6) — ore locali di massimo solare per HDW_eff
-  if (ni.thermal_window_start != null) HDW_V2.thermal_window_start = ni.thermal_window_start;
-  if (ni.thermal_window_end   != null) HDW_V2.thermal_window_end   = ni.thermal_window_end;
+  // Thermal window (v50.5 migration): ore locali di massimo solare per HDW_eff.
+  // Sezione corretta: hdw_eff_params (è usato in _hdwEffFromHourly). Backward-compat:
+  // vecchi preset con thermal_window_* dentro night{} continuano a funzionare
+  // (priorità: hdw_eff_params > night).
+  if (hp.thermal_window_start != null)      HDW_V2.thermal_window_start = hp.thermal_window_start;
+  else if (ni.thermal_window_start != null) HDW_V2.thermal_window_start = ni.thermal_window_start;
+  if (hp.thermal_window_end   != null)      HDW_V2.thermal_window_end   = hp.thermal_window_end;
+  else if (ni.thermal_window_end   != null) HDW_V2.thermal_window_end   = ni.thermal_window_end;
   // Wind weighting (v48) — cfg.wind.{w_mean_weight, w_gust_weight} controllano la formula
   // V_eff = w_mean·wind + w_gust·gust in calcHDW e _hdwEffFromHourly.
   const wd = cfg.wind || {};
@@ -3793,6 +3804,7 @@ function _applyEngineConfig(cfg) {
         score: w.score ?? 1,
         min_speed_kmh: w.min_speed_kmh ?? 0,
         label: w.label || w.name || null,
+        symbol: w.symbol || 'diamond',  // v50 Fase 4: preserva simbolo scelto nel builder
       })) : [],
     };
   } else {
@@ -6263,7 +6275,24 @@ function draw72Temp(times, temps, rhs, ws, wg, wd) {
 }
 
 // ── HDW + Rajadas ─────────────────────────────────────────────────────────
+// Stato UI: foehn markers 72h attivi di default
+if (typeof window._72foehnMarkersOn === 'undefined') window._72foehnMarkersOn = true;
+
+function toggle72FoehnMarkers() {
+  window._72foehnMarkersOn = !window._72foehnMarkersOn;
+  const btn = document.getElementById('toggle-72foehn');
+  if (btn) btn.style.opacity = window._72foehnMarkersOn ? '1' : '0.4';
+  // Ridisegna chart usando i dati correnti memorizzati
+  if (window._last72Data) {
+    const d = window._last72Data;
+    draw72HDW(d.times, d.hdws, d.ws, d.wg, d.wd);
+  }
+}
+
 function draw72HDW(times, hdws, ws, wg, wd) {
+  // Memorizza ultimi dati per il toggle
+  window._last72Data = { times, hdws, ws, wg, wd };
+
   const barColors = hdws.map(h =>
     h>=150?'#7f1d1d':h>=80?'#b91c1c':h>=40?'#e85d2f':h>=15?'#d97706':'#86efac');
   const thLines = [40,80,150].map((v,i)=>({
@@ -6287,6 +6316,80 @@ function draw72HDW(times, hdws, ws, wg, wd) {
       hovertemplate:'Wind: %{y:.1f} km/h<extra></extra>'
     }
   ];
+
+  // v50 Fase 4 Phase B: marker foehn orari sul chart 72h.
+  // Pattern identico a main wind chart ma con:
+  //   - threshold inclusione: 40% del min_speed_kmh (non 15%, troppo rumoroso su base oraria)
+  //   - size modulata dal gust orario con stesso mapping [4, 14] px
+  //   - colore/simbolo/no outline uguali al main chart
+  //   - toggle via window._72foehnMarkersOn (default on)
+  if (window._72foehnMarkersOn && HDW_V2.foehn_winds?.enabled && HDW_V2.foehn_winds?.winds?.length && wd && wd.length) {
+    const ALLOWED_SYMBOLS = new Set(['diamond','circle','square','star']);
+    const symbolFor = (w) => {
+      const s = (w.symbol || '').toLowerCase().trim();
+      return ALLOWED_SYMBOLS.has(s) ? s : 'diamond';
+    };
+
+    HDW_V2.foehn_winds.winds.forEach((w, wi) => {
+      const wLabel = w.label || ('Wind ' + (wi + 1));
+      const fd = _compassDeg(w.from), td = _compassDeg(w.to);
+      if (fd == null || td == null) return;
+      const cwArc = ((td - fd) + 360) % 360;
+      const midAngle = cwArc === 0 ? fd
+        : cwArc <= 180 ? (fd + cwArc/2) % 360
+        : (td + (360-cwArc)/2) % 360;
+      const wColor = _foehnDirColor(midAngle);
+      const wSymbol = symbolFor(w);
+      const wMinSpd = w.min_speed_kmh || 0;
+      // Threshold 40% (più selettivo del 15% del main) per evitare clutter orario
+      const minSpdForInclude = wMinSpd * 0.40;
+
+      const allTx = [], allTy = [], allSizes = [], allHt = [];
+      for (let i = 0; i < times.length; i++) {
+        const deg = wd[i];
+        const spd = ws[i] || 0;
+        const gustV = wg[i] != null ? wg[i] : spd;
+        if (deg == null) continue;
+        const inArc = cwArc <= 180
+          ? ((deg - fd + 360) % 360) <= cwArc
+          : ((deg - td + 360) % 360) <= (360 - cwArc);
+        if (!inArc || spd < minSpdForInclude) continue;
+
+        // Stessa mapping del main: [4, 14] su [soglia, 2×soglia]
+        let mkSize;
+        if (wMinSpd > 0) {
+          const frac = (gustV - wMinSpd) / wMinSpd;
+          mkSize = Math.max(4, Math.min(14, 4 + 10 * frac));
+        } else {
+          mkSize = 8;
+        }
+
+        const da = (w.score * (HDW_V2.foehn_winds.delta_alpha_per_score_unit || 0)).toFixed(3);
+        allTx.push(times[i]);
+        allTy.push(gustV);
+        allSizes.push(mkSize);
+        allHt.push('★ ' + wLabel + '<br>' + w.from + '→' + w.to + ' · ' + spd.toFixed(0) + ' km/h (gust ' + gustV.toFixed(0) + ')<br>Score ' + w.score + ' · Δα = +' + da + '<extra></extra>');
+      }
+      if (!allTx.length) return;
+
+      traces.push({
+        x: allTx, y: allTy,
+        name: '★ ' + wLabel,
+        type: 'scatter', mode: 'markers',
+        marker: {
+          symbol: wSymbol,
+          size: allSizes,
+          color: wColor,
+          opacity: 0.88,
+          line: { width: 0 }
+        },
+        yaxis: 'y2',
+        hovertemplate: allHt,
+        showlegend: true
+      });
+    });
+  }
+
   const layout = {
     ...baseLayout72(times, thLines),
     height: 220, barmode:'overlay',
@@ -6772,7 +6875,7 @@ function renderAll(meteo){
 
   setTimeout(()=>{
     drawAlphaSensitivity(meteo);
-    const {dayClasses:_dc_draw, nightScores:_ns_draw, hdwEffArr:_hdwEff_draw, hdwInstArr:_hdwInst_draw} = (()=>{
+    const {dayClasses:_dc_draw, nightScores:_ns_draw, hdwEffArr:_hdwEff_draw, hdwInstArr:_hdwInst_draw, dryStreaks:_dr_draw} = (()=>{
       try {
         const _d=meteo.daily;
         const {hdw:_wu,dates:_wd,rain:_wr,tmin:_wt}=getWarmup(meteo);
@@ -6784,12 +6887,12 @@ function renderAll(meteo){
           meteo?.hourly?.precipitation||null,_d.relative_humidity_2m_mean||null,
           meteo?.hourly?.relativehumidity_2m||null,meteo?.hourly?.windspeed_10m||null,meteo?.hourly?.windgusts_10m||null
         );
-      } catch(e) { return {dayClasses:null,nightScores:null,hdwEffArr:hdwArr,hdwInstArr:hdwArr}; }
+      } catch(e) { return {dayClasses:null,nightScores:null,hdwEffArr:hdwArr,hdwInstArr:hdwArr,dryStreaks:null}; }
     })();
     drawTemp(meteo,todayIdx,hdwArr,hdwCum,_dc_draw,_ns_draw);
     drawHDW(meteo,todayIdx,_hdwInst_draw,_hdwEff_draw,hdwCum,_dc_draw,_ns_draw);
     try { drawFWI(meteo,todayIdx,hdwCum); } catch(e) { console.warn('drawFWI failed:', e); }   // v50 Fase 3: card FWI canonical
-    try { drawGS(meteo,hdwCum); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3: card Green Streak
+    try { drawGS(meteo,hdwCum,_dr_draw); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3.1: card Green Streak + dry streak curve
     drawPrec(meteo,todayIdx);
     drawWindRose(meteo.hourly,'freq');
     renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx);
@@ -7458,12 +7561,15 @@ function drawFWI(meteo, todayIdx, hdwCum) {
 // Gap close: primo giorno in cui FWI >= soglia con HDWc ancora carico
 //
 // Soglie configurabili da _activeEngineConfig.p / fwi (allineato a BATCH M-BATCH-3)
-function drawGS(meteo, hdwCum) {
+function drawGS(meteo, hdwCum, dryStreaks) {
   if (!meteo || !meteo.daily) return;
   const d = meteo.daily;
   const dates = d.time;
   const fwiSeries = meteo._fwiSeries;
   const rainSeries = d.precipitation_sum || [];
+  // v50 Fase 3.1: dryStreaks è opzionale per retrocompatibilità.
+  // Se non passato, la curva streak non viene mostrata (chart funziona come prima).
+  const streakArr = (Array.isArray(dryStreaks) && dryStreaks.length === dates.length) ? dryStreaks : null;
 
   const statBar = document.getElementById('gs-stat-bar');
   const chartEl = document.getElementById('chart-gs');
@@ -7598,6 +7704,23 @@ function drawGS(meteo, hdwCum) {
     }
   ];
 
+  // v50 Fase 3.1: aggiungi curva dry_streak su asse y3 se disponibile.
+  // Streak = giorni consecutivi di classe 2-3 (vegetazione in stress secco persistente).
+  // Verde scuro per simboleggiare "vegetazione disidratata", coerente con la metafora
+  // del card Green Streak (= il "verde" dell'erba secca che diventa fuel pronto).
+  if (streakArr) {
+    traces.push({
+      x: dates, y: streakArr,
+      name: 'Dry streak',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#15803d', width: 1.5, dash: 'dot' },  // verde scuro, sottile
+      yaxis: 'y3',
+      hovertemplate: '<b>Dry streak</b> %{y} days<extra></extra>',
+      fill: 'tozeroy',
+      fillcolor: 'rgba(21,128,61,0.08)'  // riempimento verde molto trasparente
+    });
+  }
+
   const today = dates[todayIdx];
 
   // ── Shading episodi GS (area verde chiara) ────────────────────────────────
@@ -7643,7 +7766,7 @@ function drawGS(meteo, hdwCum) {
   const yMaxHdwc = Math.max(...hdwCum.filter(v => v != null)) * 1.1 || 1000;
   const layout = {
     height: 280,
-    margin: { t: 32, r: 55, b: 55, l: 55 },
+    margin: { t: 32, r: streakArr ? 90 : 55, b: 55, l: 55 },  // v50 Fase 3.1: più spazio se y3 attiva
     paper_bgcolor: 'white',
     plot_bgcolor: 'white',
     showlegend: true,
@@ -7684,6 +7807,22 @@ function drawGS(meteo, hdwCum) {
     shapes,
     annotations
   };
+
+  // v50 Fase 3.1: yaxis3 per dry streak (verde scuro, far-right)
+  // Range dinamico: [0, max(15, max_observed * 1.1)] per gestire sia regimi corti che lunghi.
+  if (streakArr) {
+    const maxStreak = Math.max(15, ...streakArr.filter(v => v != null)) * 1.1;
+    layout.yaxis3 = {
+      title: { text: 'Streak (d)', font: { size: 10, weight: 'bold', color: '#15803d' } },
+      side: 'right',
+      overlaying: 'y',
+      position: 1.0,           // far right
+      anchor: 'free',
+      range: [0, maxStreak],
+      showgrid: false,
+      tickfont: { size: 9, color: '#15803d' }
+    };
+  }
 
   applyAnnotations('chart-gs', layout);
   Plotly.react('chart-gs', traces, layout, plotlyBaseConfig('gs'));
@@ -7873,70 +8012,82 @@ function drawPrec(meteo,todayIdx){
     const _fDirs = _kp
       ? (d.winddirection_10m_dominant||[]).filter((_,i)=>_kp[i])
       : (d.winddirection_10m_dominant||[]).slice(0, pd.length);
-    // v45: palette freddi per venti nord (N, NE, NW, NNE, NNW) | caldi per venti sud (S, SE, SW, E, W, ecc)
-    const FOEHN_COLD = ['#0284c7','#0891b2','#0e7490','#6366f1','#7c3aed','#1e40af']; // blu, ciano, teal, indaco, viola, navy
-    const FOEHN_WARM = ['#dc2626','#ea580c','#d97706','#e11d48','#db2777','#b91c1c']; // rosso, arancione, ambra, rosa, magenta, rosso scuro
-    let _coldIdx = 0, _warmIdx = 0;
 
-    // v45 CONCEPT COLLANA: diamante per OGNI giorno, colorato dalla direzione dominante.
-    // Curva gust = collana, diamanti = perline colorate. Density alta (ogni giorno visibile).
-    // Pre-assegno colori per ogni vento del config
-    const windColors = HDW_V2.foehn_winds.winds.map(w => {
-      const fd = _compassDeg(w.from), td = _compassDeg(w.to);
-      let midAngle = 0;
-      if (fd != null && td != null) {
-        const cwArc = ((td - fd) + 360) % 360;
-        midAngle = cwArc <= 180 ? (fd + cwArc/2) % 360 : (td + (360-cwArc)/2) % 360;
-      }
-      const isNord = midAngle >= 270 || midAngle < 90;
-      return isNord 
-        ? FOEHN_COLD[_coldIdx++ % FOEHN_COLD.length]
-        : FOEHN_WARM[_warmIdx++ % FOEHN_WARM.length];
-    });
+    // v50 Fase 4: riscrittura marker foehn.
+    // - Colore: _foehnDirColor(midAngle) — palette semantica direzione (coerente con builder rosa).
+    // - Size: proporzionale al gust ORARIO di ogni giorno (non più fisso).
+    //   Formula: size = clamp(4, 14, 4 + 10 × (gustV - soglia) / (2×soglia - soglia)).
+    //   Gust = soglia_min → size 4; gust = 2×soglia → size 14. Lineare, clamp fuori range.
+    // - Symbol: da campo w.symbol del preset (diamond/circle/square/star), default diamond.
+    //   Valori non validi → fallback silenzioso a diamond.
+    // - Niente outline (line.width: 0).
+    // - Sampling off: mostra TUTTI i giorni che matchano direzione (size modulation
+    //   rende i giorni deboli visivamente piccoli, niente clutter).
+    const ALLOWED_SYMBOLS = new Set(['diamond','circle','square','star']);
+    const symbolFor = (w) => {
+      const s = (w.symbol || '').toLowerCase().trim();
+      return ALLOWED_SYMBOLS.has(s) ? s : 'diamond';
+    };
 
     HDW_V2.foehn_winds.winds.forEach((w, wi) => {
-      const wColor = windColors[wi];
       const wLabel = w.label || ('Wind ' + (wi + 1));
       const fd = _compassDeg(w.from), td = _compassDeg(w.to);
+      if (fd == null || td == null) return;
+      // Calcolo midAngle per colore (stessa logica del builder rosa)
+      const cwArc = ((td - fd) + 360) % 360;
+      const midAngle = cwArc === 0 ? fd
+        : cwArc <= 180 ? (fd + cwArc/2) % 360
+        : (td + (360-cwArc)/2) % 360;
+      const wColor = _foehnDirColor(midAngle);
+      const wSymbol = symbolFor(w);
+      const wMinSpd = w.min_speed_kmh || 0;
 
-      // Raccolgo ogni giorno che matcha direzione (ignore min_speed per density collana)
-      const allTx = [], allTy = [], allHt = [];
+      // Soglia threshold 15% come prima (inclusione massima giorni matching direzione).
+      // La distinzione di intensità avviene via SIZE del marker, non via filtro.
+      const minSpdForInclude = wMinSpd * 0.15;
+
+      const allTx = [], allTy = [], allSizes = [], allHt = [];
       pd.forEach((date, i) => {
         const deg = _compassDeg(_fDirs[i]);
         const spd = wnd[i] || 0;
         const gustV = gst[i] != null ? gst[i] : spd;
-        if (fd == null || td == null || deg == null) return;
-        const cwArc = ((td - fd) + 360) % 360;
+        if (deg == null) return;
         const inArc = cwArc <= 180
           ? ((deg - fd + 360) % 360) <= cwArc
           : ((deg - td + 360) % 360) <= (360 - cwArc);
-        // v45 collana: filtro direzione, soglia velocità ridotta (15% del config) per density massima
-        const minSpd = (w.min_speed_kmh || 0) * 0.15;
-        if (!inArc || spd < minSpd) return;
+        if (!inArc || spd < minSpdForInclude) return;
+
+        // Size modulation: mapping gustV → [4, 14] rispetto a wMinSpd.
+        // Se preset non ha min_speed_kmh (wMinSpd=0), uso scaling fisso 8 (mid-range).
+        let mkSize;
+        if (wMinSpd > 0) {
+          const frac = (gustV - wMinSpd) / wMinSpd;   // 0=esattamente soglia, 1=doppio soglia
+          mkSize = Math.max(4, Math.min(14, 4 + 10 * frac));
+        } else {
+          mkSize = 8;
+        }
+
         const da = (w.score * (HDW_V2.foehn_winds.delta_alpha_per_score_unit || 0)).toFixed(3);
         allTx.push(date);
         allTy.push(gustV);
-        allHt.push('★ ' + wLabel + '<br>' + w.from + '→' + w.to + ' · ' + spd.toFixed(0) + ' km/h<br>Score ' + w.score + ' · Δα = +' + da + '<extra></extra>');
+        allSizes.push(mkSize);
+        allHt.push('★ ' + wLabel + '<br>' + w.from + '→' + w.to + ' · ' + spd.toFixed(0) + ' km/h (gust ' + gustV.toFixed(0) + ')<br>Score ' + w.score + ' · Δα = +' + da + '<extra></extra>');
       });
       if (!allTx.length) return;
 
-      // v47 collana: sampling adattivo da sardegna v9 per miglior leggibilità
-      const STEP = Math.max(1, Math.ceil(allTx.length / (allTx.length <= 60 ? allTx.length : 25)));
-      const _dTx = [], _dTy = [], _dHt = [];
-      for (let k = 0; k < allTx.length; k += STEP) {
-        _dTx.push(allTx[k]);
-        _dTy.push(allTy[k]);
-        _dHt.push(allHt[k]);
-      }
-
       traces.push({
-        x: _dTx, y: _dTy,
+        x: allTx, y: allTy,
         name: '★ ' + wLabel,
         type: 'scatter', mode: 'markers',
-        marker: { symbol: 'diamond', size: STEP === 1 ? 9 : 8, color: wColor, opacity: 0.90,
-                  line: { color: 'rgba(255,255,255,0.55)', width: 0.8 } },
+        marker: {
+          symbol: wSymbol,
+          size: allSizes,
+          color: wColor,
+          opacity: 0.88,
+          line: { width: 0 }   // niente outline (direttiva 1)
+        },
         yaxis: 'y3',
-        hovertemplate: _dHt,
+        hovertemplate: allHt,
         showlegend: true,
       });
     });
@@ -8715,6 +8866,8 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
   document.getElementById('tbl-meteo-sub').textContent=`${archLabel} · click column to sort`;
   const tbody=document.getElementById('tbl-meteo-body');
   const atmoSrc = (chartData.meteo && chartData.meteo._atmoSeries) || null;
+  // v50 Fase 3.2: FWI giornaliero canonico [VW1987] da meteo._fwiSeries
+  const fwiSrc = meteo._fwiSeries || null;
   tbody.innerHTML=dates.map((dt,i)=>{
     const srcTag = d._sourceTag?.[i] || 'forecast';
     const isArchive = srcTag === 'csv';
@@ -8733,6 +8886,12 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
     const hainesCellColor = atH
       ? { 2:'#16a34a', 3:'#65a30d', 4:'#ca8a04', 5:'#ea580c', 6:'#dc2626' }[atH.haines] || '#374151'
       : '#9ca3af';
+    // v50 Fase 3.2: FWI cell
+    const fwiRec = fwiSrc ? fwiSrc[i] : null;
+    const fwiVal = (fwiRec && !fwiRec._skipped && fwiRec.fwi != null) ? fwiRec.fwi : null;
+    const fwiCell = fwiVal != null
+      ? `<td style="color:#f97316;font-weight:600">${Math.round(fwiVal)}</td>`
+      : '<td style="color:#9ca3af">—</td>';
     return`<tr style="${rowStyle}" data-date="${dt}">
       <td class="td-date" data-iso="${dt}">${dateLabel}${srcBadge}${isToday?' ●':''}</td>
       <td style="color:#e85d2f;font-weight:600">${d.temperature_2m_max[i]!=null?d.temperature_2m_max[i].toFixed(1):'—'}</td>
@@ -8744,6 +8903,7 @@ function renderMeteoTable(meteo,hdwArr,hdwCum,todayIdx){
       <td style="color:#3b82f6">${d.precipitation_sum[i]!=null?d.precipitation_sum[i].toFixed(1):'—'}</td>
       <td class="${hcl.td}">${hdw!=null?hdw.toFixed(1):'—'}</td>
       <td class="${hdwCumClass(hc||0).label==='VERY LOW'?'td-hdw-mbx':hdwCumClass(hc||0).label==='LOW'?'td-hdw-bx':'td-hdw-alt'}">${hc!=null?hc.toFixed(1):'—'}</td>
+      ${fwiCell}
       <td style="color:${hainesCellColor};font-weight:700">${atH?atH.haines:'—'}</td>
       <td style="color:#6b7280">${atH?atH.A:'—'}</td>
       <td style="color:#6b7280">${atH?atH.B:'—'}</td>
@@ -10567,7 +10727,7 @@ function setForecastHorizon(days) {
 
   const hdwArr = d.time.map((_,i) => calcHDW(d.temperature_2m_max[i], d.relative_humidity_2m_mean[i], d.windspeed_10m_max[i], d.windgusts_10m_max?.[i]));
   const {hdw:wu_hdw, dates:wu_dates, rain:wu_rain, tmin:wu_tmin} = getWarmup(meteo);
-  const {cum:hdwCum,hdwEffArr:_hdwEffCsv,hdwInstArr:_hdwInstCsv,dayClasses:_dcCsv,nightScores:_nsCsv} = calcHDWCum_v2(hdwArr, d.time, d.temperature_2m_max, d.temperature_2m_min, d.precipitation_sum, wu_hdw, wu_dates, wu_rain, wu_tmin, null, null, d.winddirection_10m_dominant||null, d.windspeed_10m_max||null);
+  const {cum:hdwCum,hdwEffArr:_hdwEffCsv,hdwInstArr:_hdwInstCsv,dayClasses:_dcCsv,nightScores:_nsCsv,dryStreaks:_drCsv} = calcHDWCum_v2(hdwArr, d.time, d.temperature_2m_max, d.temperature_2m_min, d.precipitation_sum, wu_hdw, wu_dates, wu_rain, wu_tmin, null, null, d.winddirection_10m_dominant||null, d.windspeed_10m_max||null);
   drawHDW(meteo, todayIdx, _hdwInstCsv, _hdwEffCsv, hdwCum, _dcCsv, _nsCsv);
   try { drawFWI(meteo, todayIdx, hdwCum); } catch(e) { console.warn('drawFWI failed:', e); }   // v50 Fase 3: card FWI canonical
   try { drawGS(meteo, hdwCum); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3: card Green Streak
