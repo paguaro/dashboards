@@ -558,7 +558,7 @@ tr:hover{background:#f9fafb}
           <label id="csvForecastToggleRow" style="display:none;align-items:center;gap:6px;
                         cursor:pointer;font-size:10px;color:var(--dim);margin-bottom:6px;
                         user-select:none">
-            <input type="checkbox" id="csvShowForecastToggle" checked
+            <input type="checkbox" id="csvShowForecastToggle"
               onchange="toggleArchiveForecast(this.checked)"
               style="cursor:pointer;accent-color:#1e3a5f">
             <span>Show forecast after archive</span>
@@ -673,7 +673,7 @@ tr:hover{background:#f9fafb}
           <!-- Forecast visibility toggle -->
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;
                         font-size:10px;color:var(--dim);margin-bottom:6px;user-select:none">
-            <input type="checkbox" id="archiveShowForecastToggle" checked
+            <input type="checkbox" id="archiveShowForecastToggle"
               onchange="toggleArchiveForecast(this.checked)"
               style="cursor:pointer;accent-color:#0891b2">
             <span>Show forecast after archive</span>
@@ -1657,7 +1657,7 @@ let sortStates = {};
 // ── Archive / CSV mode state ──────────────────────────────────────────────
 let _csvArchive = null;       // parsed CSV data object (null = not active)
 let _archiveMode = false;     // true when a CSV is loaded and merged
-let _archiveShowForecast = true; // toggle: show forecast segment in archive mode
+let _archiveShowForecast = false; // v50.6.1: default OFF — utente attiva esplicitamente se vuole vedere la previsione dopo l'archivio
 let _archiveRefMonth = -1;       // -1 = use current month; 0-11 = archive peak month for soglie
 let _archiveRefDate = null;      // in archive mode: last date of archive (replaces 'today' for soglie/month)
 // α lock: true when user explicitly sets a preset → geo-auto-detect won't override it
@@ -1773,19 +1773,48 @@ document.addEventListener('DOMContentLoaded', ()=>{ const p=alphaPresetLoad(); _
 });
 
 function initFromURLorLS() {
-  // Priority 1: URL parameters ?lat=...&lon=...&nome=...&zoom=...
+  // Priority 1: URL parameters ?lat=...&lon=...&nome=...&zoom=...&data=...&dataFine=...
   const params = new URLSearchParams(window.location.search);
   const urlLat  = parseFloat(params.get('lat'));
   const urlLon  = parseFloat(params.get('lon') || params.get('lng'));
   const urlNome = params.get('nome') || params.get('name') || '';
   const urlZoom = parseInt(params.get('zoom')) || null;
 
+  // v50.6: date params con alias tolleranti + normalizzazione formato permissiva.
+  // Accetta: "2021-07-24", "2021-07-24 00:00:00", "2021-07-24T00:00:00",
+  //          "2021-07-24T12:34:56.000Z", "2021/07/24", "24/07/2021"
+  // La sanitizzazione (.trim() + slice) è poi gestita da _populateFireEvent._norm.
+  const _urlDate = (...aliases) => {
+    for (const a of aliases) {
+      const v = params.get(a);
+      if (v && v.trim()) return v.trim();
+    }
+    return null;
+  };
+  const urlDataStart = _urlDate('data','date','dt0','data_inizio','start','startdate','startDate','ignition','fire_date');
+  const urlDataEnd   = _urlDate('dataFine','data_fine','datafine','dateEnd','dateend','end','enddate','endDate','extinguished','containment');
+
   if (!isNaN(urlLat) && !isNaN(urlLon)) {
     document.getElementById('iLat').value = urlLat;
     document.getElementById('iLon').value = urlLon;
     if (urlNome) document.getElementById('iNome').value = urlNome;
     map.setView([urlLat, urlLon], urlZoom || Math.max(map.getZoom(), 10));
-    setTimeout(() => selectPoint(urlLat, urlLon), 400);
+    // v50.6: se è presente una data evento, costruisco un oggetto props sintetico
+    // e delego a _populateFireEvent (riusa tutta la logica event-driven: setta
+    // start/end archivio all'anno dell'evento da 01/01 a 31/12, popola markers
+    // ignition/containment, lancia applyArchiveDateRange automaticamente).
+    if (urlDataStart) {
+      const syntheticProps = {
+        name: urlNome || undefined,
+        date_start: urlDataStart,
+        date_end: urlDataEnd || undefined
+      };
+      // Piccolo delay per permettere a map/DOM di stabilizzarsi prima di fetchare ERA5
+      setTimeout(() => _populateFireEvent(urlLat, urlLon, syntheticProps), 400);
+    } else {
+      // Nessuna data → comportamento pre-v50.6: solo selezione punto, niente archivio auto
+      setTimeout(() => selectPoint(urlLat, urlLon), 400);
+    }
     return;
   }
 
