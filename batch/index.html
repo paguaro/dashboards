@@ -57,6 +57,39 @@
   @media (max-width: 1100px) {
     #detailPanel.monitor-grid { grid-template-columns: 1fr; }
   }
+  /* v34.7e: sticky colonne identitarie tabella Point monitoring.
+     Checkbox (col 1) + Punto (col 2) restano visibili durante scroll orizzontale.
+     Background esplicito per sovrascrivere celle scrollate sotto. */
+  #monTable { background: var(--bg2, #181a24); }
+  #monTable thead th.mon-sticky-1,
+  #monTable tbody td.mon-sticky-1 {
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 3 !important;
+    width: 34px !important;
+    min-width: 34px !important;
+  }
+  #monTable thead th.mon-sticky-2,
+  #monTable tbody td.mon-sticky-2 {
+    position: sticky !important;
+    left: 34px !important;
+    z-index: 3 !important;
+    border-right: 2px solid var(--border) !important;
+    box-shadow: 2px 0 4px rgba(0,0,0,.3);
+  }
+  /* Background espliciti — header/body diversi, e hover distinct */
+  #monTable thead th.mon-sticky-1,
+  #monTable thead th.mon-sticky-2 {
+    background: var(--bg3, #1e2233) !important;
+  }
+  #monTable tbody td.mon-sticky-1,
+  #monTable tbody td.mon-sticky-2 {
+    background: var(--bg2, #181a24) !important;
+  }
+  #monTable tbody tr:hover td.mon-sticky-1,
+  #monTable tbody tr:hover td.mon-sticky-2 {
+    background: var(--bg3, #1e2233) !important;
+  }
   .card-title { font-size: 12px; font-weight: 600; color: var(--dim);
     text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -2074,7 +2107,7 @@ function calcFWI(series) {
   return out;
 }
 
-async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcstLen=0, dateEnd=null) {
+async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcstLen=0, dateEnd=null, dt0Marker=null) {
   // Container multi-record — cerca il detailPanel nel contesto corrente
   let panel = document.getElementById('detailPanel');
   if (!panel) return;
@@ -2316,6 +2349,13 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
         {type:'line',xref:'x',yref:'paper',x0:date,x1:date,y0:0,y1:1,
          line:{color:'#ffffff',width:2,dash:'dash'},layer:'above'}
       ],
+      // v34.8: marker Data evento opzionale (dt0 da CSV Point monitoring).
+      // Barra arancione tratteggiata — distinta dal D0 bianco.
+      dt0Event: dt0Marker ? [{
+        type:'line', xref:'x', yref:'paper',
+        x0:dt0Marker, x1:dt0Marker, y0:0, y1:1,
+        line:{color:'#fb923c',width:2,dash:'dot'}, layer:'above'
+      }] : [],
       dateEnd: dateEnd ? [{
         type:'line', xref:'x', yref:'paper',
         x0:dateEnd, x1:dateEnd, y0:0, y1:1,
@@ -2603,6 +2643,11 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     const _annotByKey = {
       d0: [{xref:'x',yref:'paper',x:date,y:1.04,showarrow:false,
             text:hasFcst?'Oggi':'D0',font:{size:10,color:'#ffffff'},bgcolor:'#374151',borderpad:2}],
+      // v34.8: label "Evento" accanto alla barra dt0Marker opzionale
+      dt0Event: dt0Marker ? [{
+        xref:'x', yref:'paper', x:dt0Marker, y:1.04, showarrow:false,
+        text:'Evento', font:{size:10,color:'#ffffff'}, bgcolor:'#fb923c', borderpad:2
+      }] : [],
       dateEnd: dateEnd ? [{
         xref:'x', yref:'paper', x:dateEnd, y:1.04, showarrow:false,
         text:'Extinguished', font:{size:10,color:'#ffffff'}, bgcolor:'#2563eb', borderpad:2
@@ -3094,13 +3139,13 @@ function monSortIcon(col) {
   return monSortDir < 0 ? '↓' : '↑';
 }
 
-const MON_EXAMPLE = `name,lat,lon,engine
-Oakland Hills,37.85,-122.18,california
-Napa Valley,38.50,-122.28,california
-Lisbon WUI,38.72,-9.14,portugal
-Serra Estrela,40.35,-7.60,portugal
-Attica,38.05,23.85,greece
-Nuoro Sardinia,40.32,9.33,sardinia`;
+const MON_EXAMPLE = `name,lat,lon,engine,dt0
+Oakland Hills,37.85,-122.18,california,
+Napa Valley,38.50,-122.28,california,
+Lisbon WUI,38.72,-9.14,portugal,
+Serra Estrela,40.35,-7.60,portugal,2022-08-07
+Attica,38.05,23.85,greece,2023-08-21
+Nuoro Sardinia,40.32,9.33,sardinia,`;
 
 function parseMonitorCSV(text) {
   text = text.replace(/^\uFEFF/,'');
@@ -3113,6 +3158,9 @@ function parseMonitorCSV(text) {
     lat:  findH('lat','latitude','y'),
     lon:  findH('lon','longitude','long','lng','x'),
     eng:  findH('engine','region','regione','preset'),
+    // v34.8: dt0 opzionale — data evento osservato/sospetto/previsto.
+    // Alias multipli per convenienza utente. Formato atteso ISO YYYY-MM-DD.
+    dt0:  findH('dt0','date','event_date','data','data_evento','data_occorrenza','occurrence_date'),
   };
   if (ci.lat<0||ci.lon<0) { alert('Monitoring CSV: lat and lon required'); return []; }
   const pts = [];
@@ -3123,7 +3171,25 @@ function parseMonitorCSV(text) {
     if (isNaN(lat)||isNaN(lon)) continue;
     const name = ci.name>=0 ? cols[ci.name] : `P${i}`;
     const eng_id = ci.eng>=0 ? cols[ci.eng].toLowerCase() : detectRegion(lon,lat);
-    pts.push({name, lat, lon, engine_id: eng_id||'all'});
+    // v34.8: parse dt0 difensivo — valida ISO format, ignora silenziosamente se invalid
+    let dt0 = null;
+    if (ci.dt0 >= 0 && cols[ci.dt0]) {
+      const raw = cols[ci.dt0];
+      // Accetta YYYY-MM-DD, YYYY/MM/DD, DD/MM/YYYY (normalizza in ISO)
+      let iso = null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) iso = raw;
+      else if (/^\d{4}\/\d{2}\/\d{2}$/.test(raw)) iso = raw.replace(/\//g,'-');
+      else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+        const [d,m,y] = raw.split('/');
+        iso = `${y}-${m}-${d}`;
+      }
+      // Sanity check: anno ragionevole (1990-2050)
+      if (iso) {
+        const yy = parseInt(iso.slice(0,4));
+        if (yy >= 1990 && yy <= 2050) dt0 = iso;
+      }
+    }
+    pts.push({name, lat, lon, engine_id: eng_id||'all', dt0});
   }
   return pts;
 }
@@ -3314,8 +3380,9 @@ async function runMonitor() {
   const tbody = document.getElementById('monTbody');
   if (tbody) tbody.innerHTML = monPoints.map((pt,i)=>
     `<tr id="monrow_${i}" style="border-bottom:1px solid #1e2233">
-       <td style="padding:7px 6px;text-align:center;width:24px"></td>
-       <td style="padding:7px 10px;font-weight:600">${pt.name}</td>
+       <td class="mon-sticky-1" style="padding:7px 6px;text-align:center"></td>
+       <td class="mon-sticky-2" style="padding:7px 10px;font-weight:600">${pt.name}</td>
+       <td style="padding:7px 10px;color:${pt.dt0?'var(--orange)':'var(--dim)'};font-size:11px">${pt.dt0 || '—'}</td>
        <td colspan="13" style="padding:7px 10px;color:var(--dim);font-size:11px">⏳ in attesa…</td>
      </tr>`).join('');
 
@@ -3371,6 +3438,7 @@ async function runMonitor() {
       const fl_ns=1+0.1*(d0.ns||0);
       const fire_load=Math.round(gs_intensity*fl_ns*fl_f);
       const r={name:pt.name,lat:pt.lat,lon:pt.lon,engine_id:pt.engine_id,engine:eng.name,
+        dt0: pt.dt0 || null,  // v34.8: propaga data evento da CSV
         hdwc:Math.round(d0.hdwc),hdweff:Math.round(d0.he*10)/10,
         alpha:Math.round(d0.alpha*1000)/1000,streak:d0.sk,maxStreak,dc:d0.dc,ns:d0.ns,
         slope7d:s7!=null?Math.round(s7*10)/10:null,
@@ -3384,16 +3452,21 @@ async function runMonitor() {
       if (row) row.outerHTML = monRowHTML(r,i);
     } catch(err) {
       monResults.push({name:pt.name,lat:pt.lat,lon:pt.lon,
-        engine_id:pt.engine_id,engine:'',error:err.message});
+        engine_id:pt.engine_id,engine:'',dt0:pt.dt0||null,error:err.message});
       if (row) row.outerHTML=`<tr id="monrow_${i}" style="border-bottom:1px solid #1e2233">
-        <td style="padding:7px 6px;text-align:center;width:24px"></td>
-        <td style="padding:7px 10px;font-weight:600">${pt.name}</td>
+        <td class="mon-sticky-1" style="padding:7px 6px;text-align:center"></td>
+        <td class="mon-sticky-2" style="padding:7px 10px;font-weight:600">${pt.name}</td>
+        <td style="padding:7px 10px;color:${pt.dt0?'var(--orange)':'var(--dim)'};font-size:11px">${pt.dt0 || '—'}</td>
         <td colspan="13" style="padding:7px 10px;color:var(--red);font-size:11px">⚠ ${err.message}</td>
         </tr>`;
     } finally {
       currentEngine = savedEngine;
     }
     if (fillEl) fillEl.style.width=((i+1)/monPoints.length*100)+'%';
+    // v34.7c: ri-sync larghezza scrollbar top (tabella cresce con righe popolate)
+    const _tbl = document.getElementById('monTable');
+    const _topInner = document.getElementById('monTblTopInner');
+    if (_tbl && _topInner) _topInner.style.width = _tbl.offsetWidth + 'px';
     if (i<monPoints.length-1) await new Promise(res=>setTimeout(res,600));
   }
 
@@ -3418,12 +3491,13 @@ function monRowHTML(r, i) {
   const safeName = r.name.replace(/'/g,"\\'");
   return `<tr id="monrow_${i}" style="border-bottom:1px solid #1e2233;cursor:pointer"
     onclick="showMonDetail('${safeName}')">
-    <td style="padding:7px 6px;text-align:center;width:24px" onclick="event.stopPropagation()">
+    <td class="mon-sticky-1" style="padding:7px 6px;text-align:center" onclick="event.stopPropagation()">
       <input type="checkbox" class="mon-pt-chk" data-pt-name="${r.name}" ${chkChecked}
              onclick="event.stopPropagation();_monPtToggleOne('${safeName}', this.checked)"
              style="cursor:pointer">
     </td>
-    <td style="padding:7px 10px;font-weight:600">${r.name}</td>
+    <td class="mon-sticky-2" style="padding:7px 10px;font-weight:600">${r.name}</td>
+    <td style="padding:7px 10px;color:${r.dt0?'var(--orange)':'var(--dim)'};font-size:11px;font-variant-numeric:tabular-nums">${r.dt0 || '—'}</td>
     <td style="padding:7px 10px;color:var(--dim);font-size:11px">${r.engine.split(' ')[0]}</td>
     <td style="padding:7px 10px;text-align:center">
       <span style="padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;
@@ -3885,8 +3959,8 @@ function renderMonitor(c) {
     <div class="card-title">Formato CSV</div>
     <pre style="font-size:11px;color:var(--dim);line-height:1.8;margin:0">${MON_EXAMPLE}</pre>
     <div style="font-size:11px;color:var(--dim);margin-top:8px">
-      Colonne: <b style="color:var(--text)">name, lat, lon</b> (obbligatorie) · <b style="color:var(--text)">engine</b> (facoltativo: portugal, sardinia, spain, greece, turkey, california, all)<br>
-      Se engine è assente viene auto-rilevato dalle coordinate. Il campo <b style="color:var(--text)">engine</b> accetta anche ID di config JSON caricati via ⚙.
+      Colonne: <b style="color:var(--text)">name, lat, lon</b> (obbligatorie) · <b style="color:var(--text)">engine</b> (facoltativo: portugal, sardinia, spain, greece, turkey, california, all) · <b style="color:var(--text)">dt0</b> (facoltativo: data evento osservato/annunciato, formato <code>YYYY-MM-DD</code>)<br>
+      Se engine è assente viene auto-rilevato dalle coordinate. Il campo <b style="color:var(--text)">engine</b> accetta anche ID di config JSON caricati via ⚙. La colonna <b style="color:var(--text)">dt0</b> mostra la data nella tabella e una barra verticale arancione nel chart di dettaglio.
     </div>
   </div>` : ''}
 
@@ -3906,22 +3980,27 @@ function renderMonitor(c) {
         </button>
       </div>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <!-- v34.7c: Scrollbar speculare sopra la tabella (pattern identico a Detail table) -->
+    <div id="monTblTopScroll" style="overflow-x:auto;overflow-y:hidden;height:10px;margin-bottom:2px;border-radius:4px">
+      <div id="monTblTopInner" style="height:1px"></div>
+    </div>
+    <div id="monTblMain" style="overflow-x:auto;border:1px solid var(--border);border-radius:4px">
+    <table id="monTable" style="width:max-content;min-width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="background:var(--bg3)">
-        <th style="padding:7px 6px;text-align:center;border-bottom:1px solid var(--border);width:24px" title="Selezione punti per rendering multiplo in grid">
+        <th class="mon-sticky-1" style="padding:7px 6px;text-align:center;border-bottom:1px solid var(--border)" title="Selezione punti per rendering multiplo in grid">
           <input type="checkbox" id="monPtSelAll" onclick="event.stopPropagation();_monPtToggleAll(this.checked)"
                  title="Seleziona/deseleziona tutti i visibili"
                  style="cursor:pointer">
         </th>
-        ${[['name','Punto','left'],['engine','Engine','left'],['stato','Stato','center'],
+        ${[['name','Punto','left'],['dt0','Data evento','left'],['engine','Engine','left'],['stato','Stato','center'],
            ['hdwc','HDWc','right'],['hdweff','HDW_eff','right'],['alpha','α','right'],
            ['streak','Streak','right'],['maxStreak','Max streak','right'],
            ['dc','Classe','center'],['ns','NS','center'],
            ['slope7d','Δ7gg','right'],['slope14d','Δ14gg','right'],
            ['fwi_d0','FWI','right'],['gs_intensity','GS_int','right'],['fire_load','🔥 FL','right'],
            ['hdwc16d','HDWc+16gg','right'],['trend','Tendenza','center']
-          ].map(([col,lbl,align])=>`<th onclick="setMonSort('${col}')" title="${
-            col==='fwi_d0'?'Canadian FWI oggi':col==='gs_intensity'?'Green Streak intensity — accumulo combustibile':col==='fire_load'?'FireLoad v2 — indice composito triade':''
+          ].map(([col,lbl,align])=>`<th onclick="setMonSort('${col}')" class="${col==='name'?'mon-sticky-2':''}" title="${
+            col==='fwi_d0'?'Canadian FWI oggi':col==='gs_intensity'?'Green Streak intensity — accumulo combustibile':col==='fire_load'?'FireLoad v2 — indice composito triade':col==='dt0'?'Data evento osservato/annunciato (da colonna CSV dt0). Marca barra verticale nel chart.':''
           }" style="padding:7px 10px;text-align:${align};border-bottom:1px solid var(--border);font-size:10px;color:${monSortCol===col?'var(--blue)':col==='fire_load'?'var(--orange)':col==='gs_intensity'?'#86efac':col==='fwi_d0'?'#3b82f6':'var(--dim)'};cursor:pointer;user-select:none;white-space:nowrap">${lbl} ${monSortIcon(col)}</th>`).join('')}
       </tr></thead>
       <tbody id="monTbody">
@@ -3932,18 +4011,20 @@ function renderMonitor(c) {
             return monSortDir * (typeof av==='number' ? bv-av : String(bv).localeCompare(String(av)));
           }).map((r,i)=>r.error
             ? `<tr style="border-bottom:1px solid #1e2233">
-               <td style="padding:7px 6px;text-align:center;width:24px"></td>
-               <td style="padding:7px 10px;font-weight:500">${r.name}</td>
+               <td class="mon-sticky-1" style="padding:7px 6px;text-align:center"></td>
+               <td class="mon-sticky-2" style="padding:7px 10px;font-weight:500">${r.name}</td>
+               <td style="padding:7px 10px;color:${r.dt0?'var(--orange)':'var(--dim)'};font-size:11px">${r.dt0 || '—'}</td>
                <td colspan="13" style="padding:7px 10px;color:var(--red);font-size:11px">⚠ ${r.error}</td></tr>`
             : `<tr style="border-bottom:1px solid #1e2233;cursor:pointer"
                 onclick="showMonDetail('${r.name}')">
-                <td style="padding:7px 6px;text-align:center;width:24px" onclick="event.stopPropagation()">
+                <td class="mon-sticky-1" style="padding:7px 6px;text-align:center" onclick="event.stopPropagation()">
                   <input type="checkbox" class="mon-pt-chk" data-pt-name="${r.name}"
                          ${_monPtSelected.has(r.name) ? 'checked' : ''}
                          onclick="event.stopPropagation();_monPtToggleOne('${r.name}', this.checked)"
                          style="cursor:pointer">
                 </td>
-                <td style="padding:7px 10px;font-weight:600">${r.name}</td>
+                <td class="mon-sticky-2" style="padding:7px 10px;font-weight:600">${r.name}</td>
+                <td style="padding:7px 10px;color:${r.dt0?'var(--orange)':'var(--dim)'};font-size:11px;font-variant-numeric:tabular-nums">${r.dt0 || '—'}</td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:11px">${r.engine.split(' ')[0]}</td>
                 <td style="padding:7px 10px;text-align:center">
                   <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;
@@ -3966,6 +4047,7 @@ function renderMonitor(c) {
               </tr>`).join('')}
       </tbody>
     </table>
+    </div><!-- /monTblMain -->
     <div style="font-size:10px;color:var(--dim);margin-top:8px">Click riga → sequenza giornaliera · Click intestazione → ordina</div>
   </div>
   <div id="monDetailPanel" style="margin-top:12px"></div>
@@ -3983,6 +4065,29 @@ function renderMonitor(c) {
   // (sort, reload, nuova analisi). Le checkbox individuali vengono già
   // renderizzate con stato checked corretto via _monPtSelected.has(r.name).
   if (typeof _monPtUpdateControls === 'function') _monPtUpdateControls();
+  // v34.7e: inizializza scrollbar doppia sopra/sotto (sync bidirezionale).
+  // Le colonne sticky (.mon-sticky-1 / .mon-sticky-2) sono gestite via CSS
+  // statico, funzionano anche su righe inserite dinamicamente durante streaming.
+  requestAnimationFrame(function(){
+    const topScroll = document.getElementById('monTblTopScroll');
+    const mainScroll = document.getElementById('monTblMain');
+    const tbl = document.getElementById('monTable');
+    if (!topScroll || !mainScroll || !tbl) return;
+    const topInner = document.getElementById('monTblTopInner');
+    function syncW(){ if (topInner) topInner.style.width = tbl.offsetWidth + 'px'; }
+    syncW(); setTimeout(syncW, 400);
+    // v34.7e: reset scrollLeft iniziale a 0 (render pulito dalla sinistra)
+    topScroll.scrollLeft = 0;
+    mainScroll.scrollLeft = 0;
+    // Re-sync width anche dopo resize finestra
+    if (!window._monTblResizeBound) {
+      window.addEventListener('resize', syncW);
+      window._monTblResizeBound = true;
+    }
+    let _lock = false;
+    topScroll.addEventListener('scroll', function(){ if(_lock) return; _lock=true; mainScroll.scrollLeft=topScroll.scrollLeft; _lock=false; });
+    mainScroll.addEventListener('scroll', function(){ if(_lock) return; _lock=true; topScroll.scrollLeft=mainScroll.scrollLeft; _lock=false; });
+  });
 }
 
 function loadMonExample() {
@@ -4056,7 +4161,7 @@ async function showMonDetail(name) {
   seriesCache[name] = fullSeries;
 
   showDetail(name, r.series[r.series.length-1].date, r.lat, r.lon,
-             r.hdwc, r.todayIdx, r.fcstLen||0).then(()=>{
+             r.hdwc, r.todayIdx, r.fcstLen||0, null, r.dt0||null).then(()=>{
     currentEngine = savedEngine;
     // v34.7: refresh Clear button state dopo che la card è stata aggiunta
     if (typeof _monPtUpdateControls === 'function') _monPtUpdateControls();
@@ -4065,11 +4170,26 @@ async function showMonDetail(name) {
 }
 
 function exportMonCSV() {
-  const cols=['name','lat','lon','engine','date','hdwc','hdweff','alpha','streak','maxStreak','dc','ns','slope7d','slope14d','stato','statoLabel','thr_orange','thr_red'];
-  const rows=[cols.join(','),...monResults.map(r=>cols.map(c=>r[c]??'').join(','))];
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
-  a.download=`hdwc_monitor_${new Date().toISOString().slice(0,10)}.csv`;
+  // v34.7c: export completo di tutti i campi visibili in tabella (prima mancavano
+  // fwi_d0, gs_intensity, gs_max, fire_load, hdwc16d, delta16, trend, engine_id).
+  // Escape CSV corretto per campi con virgole/virgolette/newline (nome punto
+  // potrebbe contenere virgole, es. "Horta / Aeroporto, Azores").
+  const cols = ['name','lat','lon','engine_id','engine','date','dt0',
+                'hdwc','hdweff','alpha','streak','maxStreak','dc','ns',
+                'slope7d','slope14d',
+                'fwi_d0','gs_intensity','gs_max','fire_load',
+                'hdwc16d','delta16','trend',
+                'stato','statoLabel','thr_orange','thr_red'];
+  const esc = v => {
+    if (v == null) return '';
+    const s = String(v);
+    // Quote if contains comma, double-quote, or newline. Double existing quotes.
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const rows = [cols.join(','), ...monResults.map(r => cols.map(c => esc(r[c])).join(','))];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')], {type:'text/csv'}));
+  a.download = `hdwc_monitor_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
 
