@@ -43,6 +43,20 @@
   .content { padding: 20px; overflow: auto; }
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
     padding: 16px; margin-bottom: 14px; }
+  /* v34.6 monitor grid: quando detailPanel ha classe .monitor-grid, le card si
+     dispongono in griglia 2 colonne × N righe invece che stack verticale.
+     In fullscreen (una card sola espansa) la regola non interferisce. */
+  #detailPanel.monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+  #detailPanel.monitor-grid > .card { margin-bottom: 0; min-width: 0; }
+  /* Su schermi stretti, grid collassa a 1 colonna automaticamente */
+  @media (max-width: 1100px) {
+    #detailPanel.monitor-grid { grid-template-columns: 1fr; }
+  }
   .card-title { font-size: 12px; font-weight: 600; color: var(--dim);
     text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -1021,6 +1035,108 @@ const seriesCache = {};
 // Lista ordinata: le chiavi appaiono in questo ordine all'inizio della tabella
 // e restano sticky durante scroll orizzontale. Non persiste tra sessioni.
 let _tblFrozen = ['date','engine_id','area_ha'];
+
+// ── v34.6 Monitor mode — selezione multipla per rendering in grid 2xN ──────
+// _monitorSelected contiene i fire_id checkati dall'utente. Il pulsante
+// "Render N selezionati" itera e chiama showDetail per ciascuno (pattern identico
+// al click riga, solo iterato). I grafici vengono ACCUMULATI nel detailPanel
+// sopra a quelli già presenti (OK confermato da user — se l'utente vuole
+// pulire usa il bottone × su ogni card, già esistente).
+// Layout grid 2xN applicato via classe CSS 'monitor-grid' su detailPanel
+// quando il numero di card attive è ≥ 2.
+let _monitorSelected = new Set();
+
+// Toggle singolo checkbox. Chiamato da onclick di ogni <input> di riga.
+function _monitorToggleOne(fireId, checked) {
+  if (checked) _monitorSelected.add(fireId);
+  else _monitorSelected.delete(fireId);
+  _monitorUpdateControls();
+}
+
+// Toggle "seleziona tutti i visibili" (checkbox in header).
+// Agisce solo sui fire_id presenti nella tabella renderizzata attualmente.
+function _monitorToggleAll(checked) {
+  const checkboxes = document.querySelectorAll('#tblData .monitor-chk');
+  checkboxes.forEach(cb => {
+    const fid = cb.dataset.fireId;
+    if (!fid) return;
+    cb.checked = checked;
+    if (checked) _monitorSelected.add(fid);
+    else _monitorSelected.delete(fid);
+  });
+  _monitorUpdateControls();
+}
+
+// Aggiorna il label del pulsante "Render N selezionati" + stato enabled.
+// Chiamato ogni volta che la selezione cambia.
+function _monitorUpdateControls() {
+  const btn = document.getElementById('btnRenderSelected');
+  const clearBtn = document.getElementById('btnClearSelection');
+  const n = _monitorSelected.size;
+  if (btn) {
+    btn.textContent = n > 0 ? `📊 Render ${n} selezionati` : `📊 Render selezionati`;
+    btn.disabled = (n === 0);
+    btn.style.opacity = n === 0 ? '0.5' : '1';
+    btn.style.cursor = n === 0 ? 'default' : 'pointer';
+  }
+  if (clearBtn) {
+    clearBtn.style.display = n > 0 ? '' : 'none';
+  }
+}
+
+// Deseleziona tutti (pulsante separato)
+function _monitorClearSelection() {
+  _monitorSelected.clear();
+  document.querySelectorAll('#tblData .monitor-chk').forEach(cb => cb.checked = false);
+  const selAll = document.getElementById('selAllCheckbox');
+  if (selAll) selAll.checked = false;
+  _monitorUpdateControls();
+}
+
+// Render dei punti selezionati. Itera e chiama showDetail per ciascuno
+// in sequenza (con pausa anti-429 già gestita internamente). Applica grid
+// layout al detailPanel quando ci sono ≥2 card visibili.
+async function _monitorRenderSelected() {
+  if (_monitorSelected.size === 0) return;
+  const panel = document.getElementById('detailPanel');
+  if (!panel) return;
+  panel.style.display = '';
+
+  // Costruisco lista {fire_id, date, lat, lon, area} dai results correnti
+  const selectedIds = Array.from(_monitorSelected);
+  const resultsByFid = Object.fromEntries((results||[]).map(r => [r.fire_id, r]));
+  const toRender = selectedIds
+    .map(fid => resultsByFid[fid])
+    .filter(Boolean);
+
+  if (toRender.length === 0) {
+    alert('Nessun evento selezionato trovato nei risultati correnti.');
+    return;
+  }
+
+  // Attivo grid layout se stiamo per avere ≥2 card totali
+  // (considero anche quelle già presenti nel panel)
+  const existingCards = panel.querySelectorAll('.card').length;
+  const totalCards = existingCards + toRender.length;
+  if (totalCards >= 2) {
+    panel.classList.add('monitor-grid');
+  }
+
+  // Loop sequenziale: showDetail() ha già il suo caching + pausa anti-429,
+  // funziona perfettamente in sequenza.
+  for (const r of toRender) {
+    try {
+      await showDetail(r.fire_id, r.date, r.lat, r.lon, r.area_ha);
+    } catch(e) {
+      console.error('Monitor render error for', r.fire_id, e);
+    }
+  }
+
+  // Pulisco selezione dopo render (l'utente ha visto i suoi punti, ora può
+  // selezionarne di nuovi per aggiungerli al panel)
+  _monitorClearSelection();
+}
+
 const TBL_PRESETS = {
   'Identity':    ['date','engine_id','area_ha'],
   'HDWc focus':  ['date','engine_id','area_ha','hdwc_d0','hdwc_max'],
@@ -1693,6 +1809,13 @@ function renderTable(c) {
     return sortDir*(typeof av==='number'?bv-av:String(bv).localeCompare(String(av)));
   });
   const SEP_COLS = new Set(['fwi_d0','gs_d0','fire_load']);
+  // v34.6 monitor: colonna checkbox fissa in posizione 0 (prima di tutte).
+  // Non sortable, non pinnable, title esplica la funzione.
+  const theadCheckbox = `<th title="Selezione per rendering multiplo in grid" style="white-space:nowrap;width:24px;text-align:center">
+    <input type="checkbox" id="selAllCheckbox" onclick="event.stopPropagation();_monitorToggleAll(this.checked)"
+           title="Seleziona/deseleziona tutti i visibili"
+           style="cursor:pointer">
+  </th>`;
   const thead=cols.map(([k,l,tip])=>{
     const isFrozen = frozenKeys.has(k);
     const isPinnable = k !== 'date';  // date è sempre ancorata
@@ -1748,6 +1871,12 @@ function renderTable(c) {
     }
   };
   const tbody = sorted.map(r => `<tr style="cursor:pointer" onclick="showDetail('${r.fire_id}','${r.date}',${r.lat},${r.lon},'${r.area_ha}')">
+    <td style="text-align:center;width:24px" onclick="event.stopPropagation()">
+      <input type="checkbox" class="monitor-chk" data-fire-id="${r.fire_id}"
+             ${_monitorSelected.has(r.fire_id) ? 'checked' : ''}
+             onclick="event.stopPropagation();_monitorToggleOne('${r.fire_id}', this.checked)"
+             style="cursor:pointer">
+    </td>
     ${cols.map(([k]) => cellFor(r, k)).join('')}
   </tr>`).join('');
 
@@ -1769,12 +1898,23 @@ function renderTable(c) {
   c.innerHTML=`<div class="card" style="padding:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
       <div class="card-title" style="margin:0">${sorted.length} eventi · <span style="color:var(--dim)">33 columns — scroll → for Δ · FWI · GS · FireLoad</span> · click header to sort</div>
-      <button id="btnExportAllPDF" onclick="exportAllChartsPDF()"
-        style="font-size:11px;padding:4px 12px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer"
-        onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'"
-        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">
-        📄 Esporta tutti i grafici PDF
-      </button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="btnRenderSelected" onclick="_monitorRenderSelected()" disabled
+          style="font-size:11px;padding:4px 12px;background:var(--blue);border:1px solid var(--blue);border-radius:5px;color:#fff;cursor:default;opacity:0.5"
+          title="Renderizza in grid 2xN i punti selezionati via checkbox">
+          📊 Render selezionati
+        </button>
+        <button id="btnClearSelection" onclick="_monitorClearSelection()" style="display:none;font-size:11px;padding:4px 10px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer"
+          title="Deseleziona tutti">
+          ✕ Clear
+        </button>
+        <button id="btnExportAllPDF" onclick="exportAllChartsPDF()"
+          style="font-size:11px;padding:4px 12px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer"
+          onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">
+          📄 Esporta tutti i grafici PDF
+        </button>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
       <span style="font-size:10px;color:var(--dim);letter-spacing:.05em">FROZEN COLUMNS (${stickyN}):</span>
@@ -1795,7 +1935,7 @@ function renderTable(c) {
       <div id="tblTopInner" style="height:1px"></div>
     </div>
     <div id="tblMain" style="overflow-x:auto;border:1px solid var(--border);border-radius:4px">
-      <table id="tblData"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
+      <table id="tblData"><thead><tr>${theadCheckbox}${thead}</tr></thead><tbody>${tbody}</tbody></table>
     </div>
   </div>
   <div id="detailPanel" style="display:none;margin-top:12px"></div>`;
@@ -1810,8 +1950,9 @@ function renderTable(c) {
     let _lock = false;
     topScroll.addEventListener('scroll', function(){ if(_lock) return; _lock=true; mainScroll.scrollLeft=topScroll.scrollLeft; _lock=false; });
     mainScroll.addEventListener('scroll', function(){ if(_lock) return; _lock=true; topScroll.scrollLeft=mainScroll.scrollLeft; _lock=false; });
-    // Sticky prime stickyN colonne (dinamico, in base a _tblFrozen)
-    const STICKY_N = stickyN;
+    // Sticky prime stickyN+1 colonne: la colonna 0 è sempre la checkbox monitor
+    // (v34.6), quindi lo sticky parte da 0 e include checkbox + stickyN colonne di dati
+    const STICKY_N = stickyN + 1;  // +1 per la checkbox
     const allRows = [...tbl.querySelectorAll('thead tr, tbody tr')];
     allRows.forEach(function(row){
       let acc = 0;
@@ -1831,6 +1972,10 @@ function renderTable(c) {
       const sh = mainScroll.scrollLeft > 5 ? '4px 0 8px rgba(0,0,0,.4)' : 'none';
       allRows.forEach(function(row){ const c=row.cells[STICKY_N-1]; if(c) c.style.boxShadow=sh; });
     });
+    // v34.6 monitor: sincronizzo stato controls dopo render (aggiorna
+    // il testo del pulsante "Render N selezionati" se ci sono già punti
+    // selezionati nel Set persistente).
+    _monitorUpdateControls();
   });
 }
 
@@ -2029,6 +2174,9 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     const fcDrelArr = series.map(s=>s.fc_drel ?? 0);
     const fcDrelActiveArr = series.map(s=>s.fc_drel_active === true);
     const fcBonusArr= series.map(s=>s.fc_bonus ?? 0);
+    // v34.5c: HDW_eff (he) + raw (he_raw) per tooltip — predittore dominante in Sardegna
+    const heArr_tip    = series.map(s=>parseFloat((s.he ?? 0).toFixed(1)));
+    const heRawArr_tip = series.map(s=>parseFloat((s.he_raw ?? 0).toFixed(1)));
     const alphaMax  = series.length ? (series[0].alpha_max_global ?? 0.95) : 0.95;
     const windArr  = series.map(s=>s.wind);
     const gustArr  = series.map(s=>s.gust);
@@ -2290,10 +2438,20 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
         fclassLine = `F_class: +${fcBonus} (${kLabel}=${fcK} · Fc=${fcBase.toFixed(2)}${drelTxt})<br>`;
       }
 
+      // v34.5c: HDW_eff della giornata — predittore dominante (Sardegna r=+0.675 vs area).
+      // Formato: se c'è boost F_class attivo, mostro scomposizione "he (raw R + F_class B)";
+      // altrimenti mostro solo "he" (raw e he coincidono quando he_raw < hc2).
+      const heVal    = heArr_tip[i];
+      const heRawVal = heRawArr_tip[i];
+      const heLine = (fcBonus > 0)
+        ? `HDW_eff: ${heVal} (raw ${heRawVal} + F_class ${fcBonus.toFixed(1)})<br>`
+        : `HDW_eff: ${heVal}<br>`;
+
       return (
         `${dates[i]}<br>Classe ${dc} · ${DC_NAME[dc]}${dcMismatchNote}<br>HDWc: ${hdwcArr[i]}<br>` +
         `α: ${alphaArr[i]} (${parts.join(' · ')})${satNote}<br>` +
         `Δα giorno: ${s(da)}<br>` +
+        heLine +
         fclassLine +
         `Tmax: ${tmaxArr[i]!=null?tmaxArr[i].toFixed(1)+'°C':'—'} · Tmin: ${tminArr[i]!=null?tminArr[i].toFixed(1)+'°C':'—'} · NS: ${nsArr[i]} (${NS_NAME[nsArr[i]]})<br>` +
         `Wind: ${windArr[i]!=null?windArr[i].toFixed(0):'—'} km/h · Gust: ${gustArr[i]!=null?gustArr[i].toFixed(0):'—'} km/h · ` +
