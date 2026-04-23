@@ -1079,18 +1079,45 @@ function _monitorUpdateControls() {
     btn.style.opacity = n === 0 ? '0.5' : '1';
     btn.style.cursor = n === 0 ? 'default' : 'pointer';
   }
+  // v34.6d: Clear visibile se ci sono checkbox selezionate OPPURE card aperte
+  // nel detailPanel. Label adattiva: "Clear" quando solo checkbox, "Reset grafici"
+  // quando ci sono card da chiudere. Fornisce escape visivo chiaro.
   if (clearBtn) {
-    clearBtn.style.display = n > 0 ? '' : 'none';
+    const panel = document.getElementById('detailPanel');
+    const hasCards = panel && panel.querySelectorAll('.card').length > 0;
+    const showClear = n > 0 || hasCards;
+    clearBtn.style.display = showClear ? '' : 'none';
+    clearBtn.textContent = hasCards ? '✕ Reset grafici' : '✕ Clear';
+    clearBtn.title = hasCards
+      ? 'Chiudi tutti i grafici aperti e deseleziona le checkbox'
+      : 'Deseleziona tutte le checkbox';
   }
 }
 
 // Deseleziona tutti (pulsante separato)
-function _monitorClearSelection() {
+// Deseleziona solo le checkbox (senza toccare detailPanel). Usato dopo Render
+// per resettare la selezione senza chiudere i chart appena aperti.
+function _monitorClearCheckboxesOnly() {
   _monitorSelected.clear();
   document.querySelectorAll('#tblData .monitor-chk').forEach(cb => cb.checked = false);
   const selAll = document.getElementById('selAllCheckbox');
   if (selAll) selAll.checked = false;
   _monitorUpdateControls();
+}
+
+// Clear FULL: deseleziona checkbox, SVUOTA detailPanel da tutte le card aperte,
+// rimuove layout grid 2×N per ripristinare modalità singola full-width.
+// v34.6d bugfix: prima questo toglieva solo le checkbox ma lasciava i chart
+// nel panel in grid, causando che click successivi su righe apparissero in
+// grid invece di full-width.
+function _monitorClearSelection() {
+  _monitorClearCheckboxesOnly();
+  const panel = document.getElementById('detailPanel');
+  if (panel) {
+    panel.innerHTML = '';
+    panel.classList.remove('monitor-grid');
+    panel.style.display = 'none';
+  }
 }
 
 // Render dei punti selezionati. Itera e chiama showDetail per ciascuno
@@ -1132,9 +1159,10 @@ async function _monitorRenderSelected() {
     }
   }
 
-  // Pulisco selezione dopo render (l'utente ha visto i suoi punti, ora può
-  // selezionarne di nuovi per aggiungerli al panel)
-  _monitorClearSelection();
+  // Pulisco solo le checkbox (NON il panel!) dopo render, così l'utente può
+  // selezionare nuovi punti per aggiungerli a quelli già visualizzati.
+  // Per svuotare davvero il panel (reset completo) usare il bottone Clear ✕.
+  _monitorClearCheckboxesOnly();
 }
 
 const TBL_PRESETS = {
@@ -2433,9 +2461,23 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
       const fcDrel = fcDrelArr[i], fcDrelActive = fcDrelActiveArr[i];
       let fclassLine = '';
       if (fcBonus > 0) {
-        const kLabel = fcK >= 30 ? 'k_high' : fcK >= 20 ? 'k_mid' : 'k_base';
+        // v34.6d: determino fascia termica direttamente da Tmax vs soglie preset (tc2, tc3).
+        // Più robusto del check numerico su fcK perché funziona con qualsiasi scala k regionale.
+        const tmax = tmaxArr[i];
+        const tc2 = tc2Arr[i], tc3 = tc3Arr[i];
+        let kLabel, tempRange;
+        if (tmax != null && tmax >= tc3) {
+          kLabel = 'k_high';
+          tempRange = `Tmax ≥ ${tc3}°C`;
+        } else if (tmax != null && tmax >= tc2) {
+          kLabel = 'k_mid';
+          tempRange = `Tmax ${tc2}–${tc3}°C`;
+        } else {
+          kLabel = 'k_base';
+          tempRange = `Tmax < ${tc2}°C`;
+        }
         const drelTxt = fcDrelActive ? ` · drel ×${(1+fcDrel).toFixed(2)}` : '';
-        fclassLine = `F_class: +${fcBonus} (${kLabel}=${fcK} · Fc=${fcBase.toFixed(2)}${drelTxt})<br>`;
+        fclassLine = `F_class: +${fcBonus} (${kLabel}=${fcK}, ${tempRange} · Fc=${fcBase.toFixed(2)}${drelTxt})<br>`;
       }
 
       // v34.5c: HDW_eff della giornata — predittore dominante (Sardegna r=+0.675 vs area).
@@ -2839,8 +2881,12 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
           <button onclick="exportPanelPDF('${chartId}','${fireId}','${date}')"
             style="padding:3px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--dim);cursor:pointer;font-size:11px"
             title="Export PDF">⬇ PDF</button>
-          <button onclick="document.getElementById('${panelId}').remove()"
-            style="padding:3px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--dim);cursor:pointer;font-size:11px">✕</button>
+          <button onclick="document.getElementById('${panelId}').remove();
+                           const _p=document.getElementById('detailPanel');
+                           if(_p && _p.querySelectorAll('.card').length===0){_p.classList.remove('monitor-grid');_p.style.display='none';}
+                           _monitorUpdateControls();"
+            style="padding:3px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--dim);cursor:pointer;font-size:11px"
+            title="Chiudi questo grafico">✕</button>
         </div>
       </div>
       <div style="margin-bottom:8px">${legendHTML}</div>
@@ -2903,6 +2949,8 @@ async function showDetail(fireId, date, lat, lon, area, todayOverride=null, fcst
     loaderEl?.remove();
     panel.insertAdjacentHTML('beforeend',`<div class="card" style="margin-bottom:10px"><div style="color:var(--red);font-size:12px;padding:8px">Error caricamento: ${err.message}</div></div>`);
   }
+  // v34.6d: update Clear button state (so it appears when panel gets first card)
+  if (typeof _monitorUpdateControls === 'function') _monitorUpdateControls();
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────
@@ -2920,6 +2968,121 @@ let monAbort = false;
 let monRunning = false;
 let monSortCol = 'hdwc';
 let monSortDir = -1; // -1 = desc, +1 = asc
+
+// ── v34.7 Point Monitoring multi-select ───────────────────────────────────
+// Set separato da _monitorSelected (che gestisce la tabella fire events): qui
+// gestiamo la selezione dei PUNTI CRITICI geografici per apertura multipla
+// in grid 2×N nel monDetailPanel. Chiave = r.name (unique per punto critico).
+let _monPtSelected = new Set();
+
+function _monPtToggleOne(name, checked) {
+  if (checked) _monPtSelected.add(name);
+  else _monPtSelected.delete(name);
+  _monPtUpdateControls();
+}
+
+function _monPtToggleAll(checked) {
+  const checkboxes = document.querySelectorAll('#monTbody .mon-pt-chk');
+  checkboxes.forEach(cb => {
+    const n = cb.dataset.ptName;
+    if (!n) return;
+    cb.checked = checked;
+    if (checked) _monPtSelected.add(n);
+    else _monPtSelected.delete(n);
+  });
+  _monPtUpdateControls();
+}
+
+function _monPtUpdateControls() {
+  const btn = document.getElementById('btnMonPtRender');
+  const clearBtn = document.getElementById('btnMonPtClear');
+  const n = _monPtSelected.size;
+  if (btn) {
+    btn.textContent = n > 0 ? `📊 Render ${n} punti` : `📊 Render selezionati`;
+    btn.disabled = (n === 0);
+    btn.style.opacity = n === 0 ? '0.5' : '1';
+    btn.style.cursor = n === 0 ? 'default' : 'pointer';
+  }
+  if (clearBtn) {
+    // Il pulsante Clear appare se selezione ≥ 1 OPPURE se ci sono card aperte
+    // nel monDetailPanel (in grid o singole)
+    const monDetail = document.getElementById('monDetailPanel');
+    const detailPanel = monDetail?.querySelector('#detailPanel');
+    const hasCards = detailPanel && detailPanel.querySelectorAll('.card').length > 0;
+    const showClear = n > 0 || hasCards;
+    clearBtn.style.display = showClear ? '' : 'none';
+    clearBtn.textContent = hasCards ? '✕ Reset grafici' : '✕ Clear';
+    clearBtn.title = hasCards
+      ? 'Chiudi tutti i grafici aperti e deseleziona le checkbox'
+      : 'Deseleziona tutte le checkbox';
+  }
+}
+
+// Clear SOLO checkbox (usato dopo Render per non chiudere grafici appena aperti)
+function _monPtClearCheckboxesOnly() {
+  _monPtSelected.clear();
+  document.querySelectorAll('#monTbody .mon-pt-chk').forEach(cb => cb.checked = false);
+  const selAll = document.getElementById('monPtSelAll');
+  if (selAll) selAll.checked = false;
+  _monPtUpdateControls();
+}
+
+// Clear FULL: checkbox + svuota monDetailPanel + rimuove grid
+function _monPtClearSelection() {
+  _monPtClearCheckboxesOnly();
+  const monDetail = document.getElementById('monDetailPanel');
+  if (monDetail) {
+    monDetail.innerHTML = '';
+  }
+  _monPtUpdateControls();
+}
+
+// Render multiplo: apre i chart in grid 2×N nel monDetailPanel accumulando
+// sopra quelli già aperti. showMonDetail() crea/ricrea internamente un
+// <div id="detailPanel"> dentro monDetailPanel; per accumulare dobbiamo
+// NON sovrascrivere, solo aggiungere.
+async function _monPtRenderSelected() {
+  if (_monPtSelected.size === 0) return;
+  const monDetail = document.getElementById('monDetailPanel');
+  if (!monDetail) return;
+
+  // Se monDetailPanel è vuoto, creo il container #detailPanel inner-scoped
+  // con classe monitor-grid pre-applicata (pattern analogo a showMonDetail).
+  // Se c'è già un detailPanel dalle card precedenti, lo riuso.
+  let inner = monDetail.querySelector('#detailPanel');
+  if (!inner) {
+    monDetail.innerHTML = '<div id="detailPanel" class="monitor-grid"></div>';
+    inner = monDetail.querySelector('#detailPanel');
+  } else {
+    // Attivo/conferm o grid layout se stiamo per avere ≥2 card totali
+    const existing = inner.querySelectorAll('.card').length;
+    const totalCards = existing + _monPtSelected.size;
+    if (totalCards >= 2) inner.classList.add('monitor-grid');
+  }
+
+  // showMonDetail sostituisce panel.innerHTML internamente — devo patch-are
+  // quel comportamento solo per render multiplo. Strategia: chiamo la logica
+  // di showMonDetail manualmente qui, usando helper inline che NON sovrascrive
+  // monDetailPanel ma appende una card al detailPanel interno.
+  //
+  // Approccio pragmatico: uso la versione "append" di showMonDetail invece
+  // che la versione "replace". Per non duplicare codice esistente, introduco
+  // una variabile flag globale "_monPtAppendMode" che showMonDetail controlla.
+  const selectedNames = Array.from(_monPtSelected);
+  for (const name of selectedNames) {
+    try {
+      window._monPtAppendMode = true;
+      await showMonDetail(name);
+    } catch(e) {
+      console.error('Monitor point render error for', name, e);
+    } finally {
+      window._monPtAppendMode = false;
+    }
+  }
+
+  // Pulisco solo le checkbox (NON il panel) per consentire selezioni successive
+  _monPtClearCheckboxesOnly();
+}
 
 function setMonSort(col) {
   if (col === monSortCol) monSortDir = -monSortDir;
@@ -3151,6 +3314,7 @@ async function runMonitor() {
   const tbody = document.getElementById('monTbody');
   if (tbody) tbody.innerHTML = monPoints.map((pt,i)=>
     `<tr id="monrow_${i}" style="border-bottom:1px solid #1e2233">
+       <td style="padding:7px 6px;text-align:center;width:24px"></td>
        <td style="padding:7px 10px;font-weight:600">${pt.name}</td>
        <td colspan="13" style="padding:7px 10px;color:var(--dim);font-size:11px">⏳ in attesa…</td>
      </tr>`).join('');
@@ -3222,6 +3386,7 @@ async function runMonitor() {
       monResults.push({name:pt.name,lat:pt.lat,lon:pt.lon,
         engine_id:pt.engine_id,engine:'',error:err.message});
       if (row) row.outerHTML=`<tr id="monrow_${i}" style="border-bottom:1px solid #1e2233">
+        <td style="padding:7px 6px;text-align:center;width:24px"></td>
         <td style="padding:7px 10px;font-weight:600">${pt.name}</td>
         <td colspan="13" style="padding:7px 10px;color:var(--red);font-size:11px">⚠ ${err.message}</td>
         </tr>`;
@@ -3248,8 +3413,16 @@ function monRowHTML(r, i) {
   const ns_col = r.ns>=2?'var(--red)':r.ns>=1?'var(--orange)':'';
   const sk_col = r.streak>=30?'var(--red);font-weight:600':r.streak>=14?'var(--orange)':'';
   const s7_col = r.slope7d>20?'var(--red)':r.slope7d>0?'var(--orange)':r.slope7d<0?'#38bdf8':'';
+  // v34.7b: checkbox come prima colonna, stessa pattern di renderMonitor()
+  const chkChecked = (typeof _monPtSelected !== 'undefined' && _monPtSelected.has(r.name)) ? 'checked' : '';
+  const safeName = r.name.replace(/'/g,"\\'");
   return `<tr id="monrow_${i}" style="border-bottom:1px solid #1e2233;cursor:pointer"
-    onclick="showMonDetail('${r.name.replace(/'/g,"\\'")}')">
+    onclick="showMonDetail('${safeName}')">
+    <td style="padding:7px 6px;text-align:center;width:24px" onclick="event.stopPropagation()">
+      <input type="checkbox" class="mon-pt-chk" data-pt-name="${r.name}" ${chkChecked}
+             onclick="event.stopPropagation();_monPtToggleOne('${safeName}', this.checked)"
+             style="cursor:pointer">
+    </td>
     <td style="padding:7px 10px;font-weight:600">${r.name}</td>
     <td style="padding:7px 10px;color:var(--dim);font-size:11px">${r.engine.split(' ')[0]}</td>
     <td style="padding:7px 10px;text-align:center">
@@ -3719,9 +3892,27 @@ function renderMonitor(c) {
 
   ${monPoints.length ? `
   <div class="card" style="padding:12px">
-    <div class="card-title" style="margin-bottom:10px">Stato HDWc · ${today} · finestra ${winDays}gg</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div class="card-title" style="margin:0">Stato HDWc · ${today} · finestra ${winDays}gg</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="btnMonPtRender" onclick="_monPtRenderSelected()" disabled
+          style="font-size:11px;padding:4px 12px;background:var(--blue);border:1px solid var(--blue);border-radius:5px;color:#fff;cursor:default;opacity:0.5"
+          title="Renderizza in grid 2×N i punti selezionati via checkbox">
+          📊 Render selezionati
+        </button>
+        <button id="btnMonPtClear" onclick="_monPtClearSelection()" style="display:none;font-size:11px;padding:4px 10px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer"
+          title="Deseleziona">
+          ✕ Clear
+        </button>
+      </div>
+    </div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="background:var(--bg3)">
+        <th style="padding:7px 6px;text-align:center;border-bottom:1px solid var(--border);width:24px" title="Selezione punti per rendering multiplo in grid">
+          <input type="checkbox" id="monPtSelAll" onclick="event.stopPropagation();_monPtToggleAll(this.checked)"
+                 title="Seleziona/deseleziona tutti i visibili"
+                 style="cursor:pointer">
+        </th>
         ${[['name','Punto','left'],['engine','Engine','left'],['stato','Stato','center'],
            ['hdwc','HDWc','right'],['hdweff','HDW_eff','right'],['alpha','α','right'],
            ['streak','Streak','right'],['maxStreak','Max streak','right'],
@@ -3740,10 +3931,18 @@ function renderMonitor(c) {
             const av = a[monSortCol]??-Infinity, bv = b[monSortCol]??-Infinity;
             return monSortDir * (typeof av==='number' ? bv-av : String(bv).localeCompare(String(av)));
           }).map((r,i)=>r.error
-            ? `<tr style="border-bottom:1px solid #1e2233"><td style="padding:7px 10px;font-weight:500">${r.name}</td>
+            ? `<tr style="border-bottom:1px solid #1e2233">
+               <td style="padding:7px 6px;text-align:center;width:24px"></td>
+               <td style="padding:7px 10px;font-weight:500">${r.name}</td>
                <td colspan="13" style="padding:7px 10px;color:var(--red);font-size:11px">⚠ ${r.error}</td></tr>`
             : `<tr style="border-bottom:1px solid #1e2233;cursor:pointer"
                 onclick="showMonDetail('${r.name}')">
+                <td style="padding:7px 6px;text-align:center;width:24px" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="mon-pt-chk" data-pt-name="${r.name}"
+                         ${_monPtSelected.has(r.name) ? 'checked' : ''}
+                         onclick="event.stopPropagation();_monPtToggleOne('${r.name}', this.checked)"
+                         style="cursor:pointer">
+                </td>
                 <td style="padding:7px 10px;font-weight:600">${r.name}</td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:11px">${r.engine.split(' ')[0]}</td>
                 <td style="padding:7px 10px;text-align:center">
@@ -3780,6 +3979,10 @@ function renderMonitor(c) {
     r.onload=ev=>{ monPoints=parseMonitorCSV(ev.target.result); monResults=[]; renderMonitor(document.getElementById('content')); };
     r.readAsText(f);
   });
+  // v34.7: sincronizza stato bottone Render/Clear dopo ogni render della tabella
+  // (sort, reload, nuova analisi). Le checkbox individuali vengono già
+  // renderizzate con stato checked corretto via _monPtSelected.has(r.name).
+  if (typeof _monPtUpdateControls === 'function') _monPtUpdateControls();
 }
 
 function loadMonExample() {
@@ -3793,7 +3996,12 @@ async function showMonDetail(name) {
   if (!r||!r.series) return;
   const panel = document.getElementById('monDetailPanel');
   if (!panel) return;
-  panel.innerHTML='<div id="detailPanel"></div>';
+  // v34.7: se _monPtAppendMode=true, non sovrascrivere il monDetailPanel:
+  // mantiene card esistenti e appende la nuova. In modalità append, il div
+  // #detailPanel interno deve già esistere (creato da _monPtRenderSelected).
+  if (!window._monPtAppendMode) {
+    panel.innerHTML='<div id="detailPanel"></div>';
+  }
 
   const savedEngine = currentEngine;
   currentEngine = ENGINES[r.engine_id]||ENGINES[detectRegion(r.lon,r.lat)]||ENGINES.all;
@@ -3850,6 +4058,8 @@ async function showMonDetail(name) {
   showDetail(name, r.series[r.series.length-1].date, r.lat, r.lon,
              r.hdwc, r.todayIdx, r.fcstLen||0).then(()=>{
     currentEngine = savedEngine;
+    // v34.7: refresh Clear button state dopo che la card è stata aggiunta
+    if (typeof _monPtUpdateControls === 'function') _monPtUpdateControls();
   });
   panel.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
