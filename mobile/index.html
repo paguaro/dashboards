@@ -119,6 +119,51 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
               padding:8px 10px;margin-bottom:10px;font-size:10px}
 #coordDisplay .coord-val{font-family:var(--mono);font-weight:700;color:var(--accent);
                           font-size:12px;margin-top:2px}
+#coordGeoRow{display:flex;align-items:center;gap:6px;margin-top:4px;min-height:18px}
+#coordGeoName{flex:1;font-size:10px;color:#374151;font-weight:600;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#coordGeoName.loading{color:var(--dim);font-style:italic;font-weight:500}
+#coordGeoName.empty{color:var(--dim);font-weight:500}
+#btnQuickSave{background:var(--accent);color:#fff;border:none;border-radius:6px;
+              padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;
+              flex-shrink:0;transition:opacity .15s}
+#btnQuickSave:disabled{opacity:.4;cursor:not-allowed}
+#btnQuickSave:active{opacity:.7}
+
+/* Saved Points section */
+#spInputRow{display:flex;gap:6px;margin-bottom:8px}
+#spCoordInput{flex:1;min-width:0;padding:7px 9px;border:1px solid var(--border);
+              border-radius:6px;font-size:11px;font-family:var(--mono);
+              background:var(--surface);color:var(--text);outline:none;
+              transition:border-color .15s}
+#spCoordInput:focus{border-color:var(--accent)}
+#spCoordInput.error{border-color:#dc2626;background:rgba(220,38,38,.04)}
+.sp-btn{padding:7px 10px;border:1px solid var(--border);border-radius:6px;
+        background:var(--surface);font-size:11px;font-weight:700;cursor:pointer;
+        transition:background .15s;flex-shrink:0}
+.sp-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.sp-btn:active{opacity:.7}
+#spHint{font-size:9.5px;color:#dc2626;min-height:13px;margin-bottom:6px;
+        padding-left:2px}
+#spToggleRow{display:flex;align-items:center;gap:6px;margin-bottom:8px;
+             font-size:10.5px;color:var(--dim);cursor:pointer;user-select:none}
+#spToggleRow input[type=checkbox]{margin:0;accent-color:var(--accent);cursor:pointer}
+#spList{max-height:180px;overflow-y:auto;border-top:1px solid var(--border);
+        margin-top:4px}
+#spList:empty::before{content:'Sem pontos salvos';display:block;text-align:center;
+                      color:var(--dim);font-size:10px;padding:10px;font-style:italic}
+.sp-item{display:flex;align-items:center;gap:6px;padding:6px 4px;
+         border-bottom:1px solid var(--border);font-size:10.5px}
+.sp-item:last-child{border-bottom:none}
+.sp-item-main{flex:1;min-width:0;cursor:pointer;overflow:hidden}
+.sp-item-main:active{opacity:.6}
+.sp-item-name{font-weight:700;color:var(--text);white-space:nowrap;
+              overflow:hidden;text-overflow:ellipsis}
+.sp-item-coord{font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:1px}
+.sp-item-act{background:none;border:none;padding:3px 5px;font-size:12px;
+             cursor:pointer;color:var(--dim);border-radius:4px}
+.sp-item-act:active{background:rgba(0,0,0,.08)}
+.sp-item-act.del:active{color:#dc2626}
 
 /* ICNF layer btn */
 #btnICNF{width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;
@@ -326,6 +371,28 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
       <div style="font-size:9px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Coordinates</div>
       <div class="coord-val" id="coordVal">— Nenhum ponto</div>
       <div style="font-size:9px;color:var(--dim);margin-top:2px" id="nomeVal"></div>
+      <div id="coordGeoRow" style="display:none">
+        <div id="coordGeoName" class="empty">—</div>
+        <button id="btnQuickSave" onclick="spQuickSave()" disabled>+ Save</button>
+      </div>
+    </div>
+
+    <!-- Add / Saved Points -->
+    <div class="sh-sect" id="shSavedPoints">
+      <div class="sh-sect-title">📍 Add / Saved Points</div>
+      <div id="spInputRow">
+        <input type="text" id="spCoordInput" autocomplete="off" autocapitalize="off"
+               spellcheck="false"
+               placeholder="40.2, -8.4  |  40°12'N 8°24'W">
+        <button class="sp-btn primary" onclick="spGoFromInput()">Go</button>
+        <button class="sp-btn" onclick="spSaveFromInput()">Save</button>
+      </div>
+      <div id="spHint"></div>
+      <label id="spToggleRow">
+        <input type="checkbox" id="spRevGeo" onchange="spToggleRevGeo()">
+        <span>Auto reverse geocoding (OSM Nominatim)</span>
+      </label>
+      <div id="spList"></div>
     </div>
 
     <!-- Risk -->
@@ -372,7 +439,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
         α Portugal · ANEPC 2014-2025<br>
         HDW_eff 70/30 gust-weight<br>
         Open-Meteo · ERA5 warmup 21d<br>
-        v5.0 mobile
+        v5.1 mobile
       </div>
     </div>
 
@@ -523,10 +590,10 @@ function switchTab(btn) {
   btn.classList.add('active');
   const pane = document.getElementById(btn.dataset.pane);
   pane.classList.add('active');
-  // Relayout active chart
+  // Force chart resize when pane becomes visible (fixes width=0 from hidden container)
   setTimeout(() => {
     const chartDiv = pane.querySelector('[id^="chart-72"]');
-    if (chartDiv && chartDiv.data) Plotly.relayout(chartDiv.id, {});
+    if (chartDiv && chartDiv.data) Plotly.Plots.resize(chartDiv.id);
     if (btn.dataset.pane === 'pane-wind' && _hourly72) redraw72Rose();
     if ((btn.dataset.pane==='pane-temp'||btn.dataset.pane==='pane-hdw') && _hourly72)
       init72hRelayout();
@@ -580,6 +647,8 @@ function selectPoint(lat, lng) {
   document.getElementById('coordVal').textContent =
     lat.toFixed(5) + '° N · ' + Math.abs(lng).toFixed(5) + '° W';
   lsSavePoint(lat, lng, '');
+  // Update saved-points UI: show geo row + trigger reverse geocoding (debounced)
+  if (typeof spReverseGeocode === 'function') spReverseGeocode(lat, lng);
   queryAll(lat, lng);
 }
 
@@ -892,6 +961,368 @@ function lsRestorePoint(){
   }catch(e){}
 }
 
+// ── Saved Points module ────────────────────────────────────────────────────
+const SP_LS_POINTS = 'firemeteo_mobile_saved_points_v1';
+const SP_LS_REVGEO = 'firemeteo_mobile_revgeo_enabled_v1';
+const SP_NOMINATIM = 'https://nominatim.openstreetmap.org/reverse';
+const SP_UA = 'FireMeteo-Mobile/5.1 (github.com/paguaro/dashboards)';
+let _spSavedMarkers = [];    // L.circleMarker[] for saved points (red, permanent)
+let _spRevGeoTimer = null;   // debounce handle for reverse geocoding
+let _spCurrentGeoName = '';  // last geocoded name for current point (may be '')
+let _spLastGeoCoords = null; // {lat,lng} of last geocoded point (cache)
+let _spLastGeoName = '';     // cached name for _spLastGeoCoords
+
+// ── Parser: accepts DD, DM, DMS, with various separators ──
+function parseCoords(txt){
+  if (!txt || typeof txt !== 'string') return null;
+  // Normalize: replace degree/minute/second symbols with spaces, split on common separators
+  let s = txt.trim()
+    .replace(/[°º]/g,' ')
+    .replace(/[′']/g,' ')
+    .replace(/[″"]/g,' ')
+    .replace(/[,;\t]/g,' ')
+    // Insert space between digit and hemisphere letter (e.g. "40.2N" -> "40.2 N", "N40" -> "N 40")
+    .replace(/(\d)\s*([NSEWOnsewo])\b/g,'$1 $2')
+    .replace(/\b([NSEWOnsewo])\s*(\d|[+-])/g,'$1 $2')
+    .replace(/\s+/g,' ')
+    .trim();
+  if (!s) return null;
+
+  // Tokenize: numbers (with optional sign/decimal) and single-letter hemisphere markers
+  const tokens = s.split(' ');
+  const nums = [];
+  const hemis = [];
+  for (const t of tokens) {
+    if (/^[NSEWOnsewo]$/.test(t)) {
+      hemis.push(t.toUpperCase() === 'O' ? 'W' : t.toUpperCase());
+    } else if (/^[+-]?\d+(\.\d+)?$/.test(t)) {
+      nums.push(parseFloat(t));
+    } else {
+      return null; // unknown token
+    }
+  }
+  if (nums.length < 2) return null;
+
+  // Decide format based on count and hemisphere markers
+  let lat, lng;
+  const nHemi = hemis.length;
+
+  if (nums.length === 2) {
+    // DD: lat lng
+    lat = nums[0]; lng = nums[1];
+  } else if (nums.length === 4) {
+    // DM: lat_d lat_m lng_d lng_m  (with or without hemi)
+    lat = Math.sign(nums[0] || 1) * (Math.abs(nums[0]) + nums[1]/60);
+    lng = Math.sign(nums[2] || 1) * (Math.abs(nums[2]) + nums[3]/60);
+  } else if (nums.length === 6) {
+    // DMS: lat_d lat_m lat_s lng_d lng_m lng_s
+    lat = Math.sign(nums[0] || 1) * (Math.abs(nums[0]) + nums[1]/60 + nums[2]/3600);
+    lng = Math.sign(nums[3] || 1) * (Math.abs(nums[3]) + nums[4]/60 + nums[5]/3600);
+  } else {
+    return null;
+  }
+
+  // Apply hemisphere markers (override sign). First hemi → lat, second → lng.
+  if (nHemi >= 1) {
+    const h1 = hemis[0];
+    if (h1 === 'S') lat = -Math.abs(lat);
+    else if (h1 === 'N') lat = Math.abs(lat);
+    else if (h1 === 'W') lng = -Math.abs(lng);   // only-lng hemi ambiguous, handled below
+    else if (h1 === 'E') lng = Math.abs(lng);
+  }
+  if (nHemi >= 2) {
+    const h2 = hemis[1];
+    if (h2 === 'W') lng = -Math.abs(lng);
+    else if (h2 === 'E') lng = Math.abs(lng);
+  }
+
+  // Validate range
+  if (isNaN(lat) || isNaN(lng)) return null;
+  if (lat < -90 || lat > 90) return null;
+  if (lng < -180 || lng > 180) return null;
+
+  return {lat, lng};
+}
+
+// ── Reverse geocoding via Nominatim (1s debounce) ──
+function spIsRevGeoEnabled(){
+  try { return localStorage.getItem(SP_LS_REVGEO) === '1'; } catch(e) { return false; }
+}
+function spSetRevGeoEnabled(on){
+  try { localStorage.setItem(SP_LS_REVGEO, on ? '1' : '0'); } catch(e) {}
+}
+
+function spReverseGeocode(lat, lng){
+  // Called from selectPoint → debounced 1s, aborts previous
+  if (_spRevGeoTimer) clearTimeout(_spRevGeoTimer);
+
+  // Clear display immediately, show as empty unless toggle is active
+  _spCurrentGeoName = '';
+  spUpdateCoordDisplay(lat, lng);
+
+  if (!spIsRevGeoEnabled()) return;
+
+  // Cache hit?
+  if (_spLastGeoCoords &&
+      Math.abs(_spLastGeoCoords.lat - lat) < 1e-5 &&
+      Math.abs(_spLastGeoCoords.lng - lng) < 1e-5) {
+    _spCurrentGeoName = _spLastGeoName;
+    spUpdateCoordDisplay(lat, lng);
+    return;
+  }
+
+  // Show loading
+  const geoEl = document.getElementById('coordGeoName');
+  if (geoEl) { geoEl.className = 'loading'; geoEl.textContent = '📍 Locating…'; }
+  const btn = document.getElementById('btnQuickSave');
+  if (btn) btn.disabled = true;
+
+  _spRevGeoTimer = setTimeout(async () => {
+    try {
+      const url = `${SP_NOMINATIM}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&accept-language=pt`;
+      const ctl = new AbortController();
+      const tmo = setTimeout(() => ctl.abort(), 3000);
+      const r = await fetch(url, { headers: { 'Accept':'application/json' }, signal: ctl.signal });
+      clearTimeout(tmo);
+      if (!r.ok) throw new Error('http ' + r.status);
+      const j = await r.json();
+      const a = j.address || {};
+      // "Comune + regione": prefer town/village/city/municipality + county/state
+      const loc = a.city || a.town || a.village || a.municipality || a.hamlet || a.county || '';
+      const reg = a.county && (a.city||a.town||a.village||a.municipality||a.hamlet)
+                    ? a.county
+                    : (a.state || a.region || '');
+      const name = [loc, (reg && reg !== loc) ? reg : ''].filter(Boolean).join(', ');
+      _spCurrentGeoName = name || '';
+      _spLastGeoCoords = {lat, lng};
+      _spLastGeoName = _spCurrentGeoName;
+      spUpdateCoordDisplay(lat, lng);
+    } catch(e) {
+      console.warn('[revgeo] failed:', e.message);
+      _spCurrentGeoName = '';
+      spUpdateCoordDisplay(lat, lng);
+    }
+  }, 1000);
+}
+
+function spUpdateCoordDisplay(lat, lng){
+  const row = document.getElementById('coordGeoRow');
+  const el  = document.getElementById('coordGeoName');
+  const btn = document.getElementById('btnQuickSave');
+  if (!row || !el || !btn) return;
+  const hasPoint = (lat != null && lng != null && !isNaN(lat) && !isNaN(lng));
+  row.style.display = hasPoint ? 'flex' : 'none';
+  if (!hasPoint) return;
+  btn.disabled = false;
+  if (_spCurrentGeoName) {
+    el.className = '';
+    el.textContent = '📍 ' + _spCurrentGeoName;
+  } else {
+    el.className = 'empty';
+    el.textContent = spIsRevGeoEnabled() ? '— (no location)' : '—';
+  }
+}
+
+// ── Storage CRUD ──
+function spLoadAll(){
+  try {
+    const s = localStorage.getItem(SP_LS_POINTS);
+    if (!s) return [];
+    const arr = JSON.parse(s);
+    return Array.isArray(arr) ? arr : [];
+  } catch(e) { return []; }
+}
+function spSaveAll(arr){
+  try { localStorage.setItem(SP_LS_POINTS, JSON.stringify(arr)); } catch(e) {}
+}
+function spAdd(name, lat, lng){
+  const arr = spLoadAll();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  arr.push({ id, name, lat, lng, createdAt: new Date().toISOString() });
+  spSaveAll(arr);
+  return id;
+}
+function spRemove(id){
+  const arr = spLoadAll().filter(p => p.id !== id);
+  spSaveAll(arr);
+}
+function spRename(id, newName){
+  const arr = spLoadAll();
+  const p = arr.find(x => x.id === id);
+  if (p) { p.name = newName; spSaveAll(arr); }
+}
+
+// ── Saved markers on map (red, permanent, tooltip with name) ──
+function spClearMarkers(){
+  _spSavedMarkers.forEach(m => { try { map.removeLayer(m); } catch(e){} });
+  _spSavedMarkers = [];
+}
+function spRenderMarkers(){
+  if (!map) return;
+  spClearMarkers();
+  const arr = spLoadAll();
+  arr.forEach(p => {
+    const m = L.circleMarker([p.lat, p.lng], {
+      radius: 7, color: '#dc2626', fillColor: '#dc2626',
+      fillOpacity: .85, weight: 2
+    });
+    m.bindTooltip(p.name, {permanent:false, direction:'top', offset:[0,-8], opacity:.9});
+    m.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      map.setView([p.lat, p.lng], Math.max(map.getZoom(), 11));
+      selectPoint(p.lat, p.lng);
+      if (!document.getElementById('sheet').classList.contains('open')) toggleSheet();
+    });
+    m.addTo(map);
+    _spSavedMarkers.push(m);
+  });
+}
+
+// ── List rendering ──
+function spEscapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function spRenderList(){
+  const host = document.getElementById('spList');
+  if (!host) return;
+  const arr = spLoadAll();
+  if (!arr.length) { host.innerHTML = ''; return; }
+  const rows = arr.map(p => {
+    const coord = p.lat.toFixed(4) + ', ' + p.lng.toFixed(4);
+    return (
+      '<div class="sp-item" data-id="'+p.id+'">'+
+        '<div class="sp-item-main" onclick="spSelect(\''+p.id+'\')">'+
+          '<div class="sp-item-name">'+spEscapeHtml(p.name)+'</div>'+
+          '<div class="sp-item-coord">'+coord+'</div>'+
+        '</div>'+
+        '<button class="sp-item-act" onclick="spEditName(\''+p.id+'\')" title="Rename">✎</button>'+
+        '<button class="sp-item-act del" onclick="spDelete(\''+p.id+'\')" title="Delete">🗑</button>'+
+      '</div>'
+    );
+  }).join('');
+  host.innerHTML = rows;
+}
+
+// ── UI actions ──
+function spSelect(id){
+  const p = spLoadAll().find(x => x.id === id);
+  if (!p) return;
+  map.setView([p.lat, p.lng], Math.max(map.getZoom(), 11));
+  selectPoint(p.lat, p.lng);
+}
+function spEditName(id){
+  const p = spLoadAll().find(x => x.id === id);
+  if (!p) return;
+  const nv = prompt('New name:', p.name);
+  if (nv == null) return;
+  const name = nv.trim();
+  if (!name) return;
+  spRename(id, name);
+  spRenderList();
+  spRenderMarkers();
+}
+function spDelete(id){
+  const p = spLoadAll().find(x => x.id === id);
+  if (!p) return;
+  if (!confirm('Delete "'+p.name+'"?')) return;
+  spRemove(id);
+  spRenderList();
+  spRenderMarkers();
+  showToast('Point deleted', 1200);
+}
+function spShowHint(msg, isError){
+  const el = document.getElementById('spHint');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isError ? '#dc2626' : 'var(--dim)';
+}
+function spClearInputError(){
+  document.getElementById('spCoordInput').classList.remove('error');
+  spShowHint('');
+}
+function spGoFromInput(){
+  const input = document.getElementById('spCoordInput');
+  const parsed = parseCoords(input.value);
+  if (!parsed) {
+    input.classList.add('error');
+    spShowHint('Invalid coordinates. Try: 40.2,-8.4 or 40°12\'N 8°24\'W', true);
+    return;
+  }
+  spClearInputError();
+  map.setView([parsed.lat, parsed.lng], Math.max(map.getZoom()||8, 11));
+  selectPoint(parsed.lat, parsed.lng);
+}
+function spSaveFromInput(){
+  const input = document.getElementById('spCoordInput');
+  const parsed = parseCoords(input.value);
+  if (!parsed) {
+    input.classList.add('error');
+    spShowHint('Invalid coordinates. Try: 40.2,-8.4 or 40°12\'N 8°24\'W', true);
+    return;
+  }
+  spClearInputError();
+  // Go first (triggers reverse geocoding with debounce 1s if toggle on)
+  map.setView([parsed.lat, parsed.lng], Math.max(map.getZoom()||8, 11));
+  selectPoint(parsed.lat, parsed.lng);
+  // Save with prompt — reverse geo may not have returned yet (1s debounce + fetch).
+  // Wait briefly if toggle is on, else prompt immediately.
+  const promptSave = () => {
+    const def = _spCurrentGeoName || ('Ponto ' + (spLoadAll().length + 1));
+    const nv = prompt('Save point as:', def);
+    if (nv == null) return;
+    const name = nv.trim() || def;
+    spAdd(name, parsed.lat, parsed.lng);
+    spRenderList();
+    spRenderMarkers();
+    input.value = '';
+    showToast('Saved: ' + name, 1500);
+  };
+  if (spIsRevGeoEnabled()) setTimeout(promptSave, 1400);
+  else promptSave();
+}
+function spQuickSave(){
+  // Save currently selected point (_currentLat / _currentLng)
+  const lat = _currentLat, lng = _currentLng;
+  if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+    showToast('No point selected', 1500);
+    return;
+  }
+  const def = _spCurrentGeoName || ('Ponto ' + (spLoadAll().length + 1));
+  const nv = prompt('Save point as:', def);
+  if (nv == null) return;
+  const name = nv.trim() || def;
+  spAdd(name, lat, lng);
+  spRenderList();
+  spRenderMarkers();
+  showToast('Saved: ' + name, 1500);
+}
+function spToggleRevGeo(){
+  const cb = document.getElementById('spRevGeo');
+  spSetRevGeoEnabled(!!cb.checked);
+  // If currently have a point, trigger reverse geo now (or clear it)
+  if (_currentLat != null && _currentLng != null && !isNaN(_currentLat) && !isNaN(_currentLng)) {
+    spReverseGeocode(_currentLat, _currentLng);
+  }
+}
+function spInit(){
+  // Restore toggle state
+  const cb = document.getElementById('spRevGeo');
+  if (cb) cb.checked = spIsRevGeoEnabled();
+  // Clear error on input
+  const inp = document.getElementById('spCoordInput');
+  if (inp) {
+    inp.addEventListener('input', () => spClearInputError());
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); spGoFromInput(); }
+    });
+  }
+  spRenderList();
+  spRenderMarkers();
+}
+// ── end Saved Points module ───────────────────────────────────────────────────
+
 function hdwcSoglieHTML(hdwcVal, hdwcPeak, hdwcPeakDate) {
   if (!HDWC_SOGLIE?.mesi) return '';
   const mkeys = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -1017,6 +1448,8 @@ function hdwcTrendHTML(hdwCum, todayIdx){
 window.addEventListener('load', () => {
   initMap();
   window.addEventListener('resize', recalcLayout);
+  // Initialize Saved Points (parser UI, toggle state, list, markers)
+  spInit();
   // Restore last point
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY)||'null');
