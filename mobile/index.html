@@ -288,10 +288,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 <!-- Day selector -->
 <div id="daySelStrip" style="display:none;background:var(--surface);border-bottom:1px solid var(--border);
      padding:3px 14px;display:none;align-items:center;gap:8px;flex-shrink:0">
-  <span style="font-size:10px;color:var(--dim);font-weight:600">Janela:</span>
-  <button class="day-btn active" id="dbtn1" onclick="mobileDayPreset(1)">1d</button>
-  <button class="day-btn" id="dbtn2" onclick="mobileDayPreset(2)">2d</button>
-  <button class="day-btn" id="dbtn3" onclick="mobileDayPreset(3)">3d</button>
+  <span style="font-size:10px;color:var(--dim);font-weight:600">Horizonte:</span>
+  <button class="day-btn active" id="dbtn3d" onclick="setMainWindow('3d')">3d</button>
+  <button class="day-btn" id="dbtn7d" onclick="setMainWindow('7d')">7d</button>
+  <button class="day-btn" id="dbtn16d" onclick="setMainWindow('16d')">16d</button>
+  <span id="zoomSelStrip" style="display:flex;align-items:center;gap:6px;margin-left:6px;padding-left:8px;border-left:1px solid var(--border)">
+    <span style="font-size:10px;color:var(--dim);font-weight:600">Zoom:</span>
+    <button class="day-btn" id="dbtn1" onclick="mobileDayPreset(1)">1d</button>
+    <button class="day-btn" id="dbtn2" onclick="mobileDayPreset(2)">2d</button>
+    <button class="day-btn active" id="dbtn3" onclick="mobileDayPreset(3)">3d</button>
+  </span>
   <span id="dayWinLabel" style="font-size:10px;color:var(--dim);margin-left:auto"></span>
 </div>
 
@@ -439,7 +445,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
         α Portugal · ANEPC 2014-2025<br>
         HDW_eff 70/30 gust-weight<br>
         Open-Meteo · ERA5 warmup 21d<br>
-        v5.1 mobile
+        16d forecast · ECMWF-IFS · HDWc climo p75/p95<br>
+        v5.2 mobile
       </div>
     </div>
 
@@ -859,22 +866,24 @@ function recalcLayout() {
 // ── draw72h (wrapper) ──────────────────────────────────────────────────────
 function draw72h(meteo) {
   if (!meteo?.hourly?.time) return;
-  _hourly72 = meteo.hourly;
-  const _t72start = new Date(); _t72start.setHours(0,0,0,0);
-  const _t72end   = new Date(_t72start.getTime() + 72*3600000);
-  const h = meteo.hourly;
-  const mask = h.time.map(t => { const ts=new Date(t); return ts>=_t72start && ts<_t72end; });
-  const sl = k => (h[k]||[]).filter((_,i) => mask[i]);
-  const times = sl('time');
-  const temps = sl('temperature_2m');
-  const rhs   = sl('relativehumidity_2m');
-  const ws    = sl('windspeed_10m');
-  const wg    = sl('windgusts_10m');
-  const wd    = sl('winddirection_10m');
-  const prec  = sl('precipitation');
-  const hdws  = times.map((_,i) => calcHDW(temps[i],rhs[i],ws[i],wg[i])||0);
+  _lastMeteo = meteo;               // cache for setMainWindow redraws (v5.2)
+  _hourly72  = meteo.hourly;        // kept legacy name; contains full hourly payload
 
-  ts72Init(times);
+  if (_mainWindowMode === '7d') {
+    _drawMode7dHourly(meteo);
+  } else if (_mainWindowMode === '16d') {
+    _drawMode16dDaily(meteo);
+  } else {
+    // '3d' — legacy v5.1 path, unchanged (regression-zero)
+    const _t72start = new Date(); _t72start.setHours(0,0,0,0);
+    const _t72end   = new Date(_t72start.getTime() + 72*3600000);
+    const h = meteo.hourly;
+    const mask = h.time.map(t => { const ts=new Date(t); return ts>=_t72start && ts<_t72end; });
+    const sl = k => (h[k]||[]).filter((_,i) => mask[i]);
+    const times = sl('time');
+    ts72Init(times);
+  }
+
   redraw72Rose();
   setTimeout(() => {
     init72hRelayout();
@@ -883,6 +892,75 @@ function draw72h(meteo) {
       hoverModes[id]='x unified';
     });
   }, 900);
+}
+
+// ── Mode 7d: hourly 168h with extended opts ───────────────────────────────
+function _drawMode7dHourly(meteo) {
+  const h = meteo.hourly;
+  const _tstart = new Date(); _tstart.setHours(0,0,0,0);
+  const _tend   = new Date(_tstart.getTime() + 168*3600000);
+  const mask = h.time.map(t => { const ts=new Date(t); return ts>=_tstart && ts<_tend; });
+  const sl = k => (h[k]||[]).filter((_,i) => mask[i]);
+  const times = sl('time');
+  if (!times.length) return;
+  const temps = sl('temperature_2m');
+  const rhs   = sl('relativehumidity_2m');
+  const ws    = sl('windspeed_10m');
+  const wg    = sl('windgusts_10m');
+  const wd    = sl('winddirection_10m');
+  const prec  = sl('precipitation');
+  const hdws  = times.map((_,i) => calcHDW(temps[i],rhs[i],ws[i],wg[i])||0);
+
+  const extOpts = {extended:true};
+  draw72Temp(times, temps, rhs, ws, wg, wd, extOpts);
+  draw72HDW(times, hdws, ws, wg, wd, extOpts);
+  draw72Prec(times, prec, rhs, extOpts);
+}
+
+// ── Mode 16d: daily aggregates (Blocchi 4+5+6+7) ──────────────────────────
+function _drawMode16dDaily(meteo) {
+  const d = meteo.daily;
+  if (!d?.time?.length) {
+    console.warn('[v5.2] 16d: meteo.daily missing or empty');
+    return;
+  }
+  const times    = d.time;                             // 16 strings YYYY-MM-DD
+  const tmax     = d.temperature_2m_max         || [];
+  const tmin     = d.temperature_2m_min         || [];
+  const rhMean   = d.relative_humidity_2m_mean  || [];
+  const precSum  = d.precipitation_sum          || [];
+  const windMax  = d.windspeed_10m_max          || [];
+  const gustMax  = d.windgusts_10m_max          || [];
+
+  // HDW_eff_day_max from hourly (more accurate than calcHDW on daily Tmax)
+  const hdwEffDayMax = computeHdwEffDayMaxFromHourly(meteo.hourly, times);
+
+  // HDWc cumulative: use existing calcHDWCum_v2 with daily HDW + warmup
+  const hdwArrDaily = times.map((_, i) =>
+    calcHDW(tmax[i], rhMean[i], windMax[i], gustMax[i]) || 0);
+  const wu = meteo._histWarmup;
+  let wuHdw = null, wuDates = null;
+  if (wu?.time?.length) {
+    wuHdw = wu.time.map((_, i) =>
+      calcHDW(wu.temperature_2m_max?.[i], wu.relative_humidity_2m_mean?.[i],
+              wu.windspeed_10m_max?.[i],  wu.windgusts_10m_max?.[i]) || 0);
+    wuDates = wu.time;
+  }
+  let hdwcCum = [];
+  try {
+    const r = calcHDWCum_v2(hdwArrDaily, times, tmax, tmin, precSum, wuHdw, wuDates);
+    hdwcCum = r?.cum || [];
+  } catch(e) {
+    console.warn('[v5.2] calcHDWCum_v2 failed:', e.message);
+    hdwcCum = times.map(() => 0);
+  }
+
+  // Monthly soglie (PT month keys)
+  const monthlySoglie = getCurrentMonthlySoglie();
+
+  drawDailyTemp(times, tmax, tmin, rhMean);
+  drawDailyHDW(times, hdwEffDayMax, hdwcCum, monthlySoglie);
+  drawDailyPrec(times, precSum, rhMean);
 }
 
 // Override plotlyBaseConfig for mobile (no modebar, compact)
@@ -1323,85 +1401,7 @@ function spInit(){
 }
 // ── end Saved Points module ───────────────────────────────────────────────────
 
-function hdwcSoglieHTML(hdwcVal, hdwcPeak, hdwcPeakDate) {
-  if (!HDWC_SOGLIE?.mesi) return '';
-  const mkeys = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
-  const mkey  = mkeys[new Date().getMonth()];
-  const m     = HDWC_SOGLIE.mesi[mkey];
-  if (!m) return '';
-
-  const soglie = [
-    { pct:'P25', val:m.p25, dot:'🔵', label:'NORMAL',    color:'#6b7280' },
-    { pct:'P50', val:m.p50, dot:'🟢', label:'MÉDIO',      color:'#16a34a' },
-    { pct:'P75', val:m.p75, dot:'🟡', label:'ALTO',       color:'#ca8a04' },
-    { pct:'P90', val:m.p90, dot:'🟠', label:'MUITO ALTO', color:'#d97706' },
-    { pct:'P95', val:m.p95, dot:'🔴', label:'EXTREMO',    color:'#b91c1c' },
-  ];
-
-  
-  let curBand = -1;
-  if (hdwcVal != null) {
-    if      (hdwcVal >= (m.p95||Infinity)) curBand = 4;
-    else if (hdwcVal >= (m.p90||Infinity)) curBand = 3;
-    else if (hdwcVal >= (m.p75||Infinity)) curBand = 2;
-    else if (hdwcVal >= (m.p50||Infinity)) curBand = 1;
-    else if (hdwcVal >= (m.p25||Infinity)) curBand = 0;
-  }
-
-  const monthLabel = m.label || mkey.toUpperCase();
-
-  const belowRow = ''; 
-
-  
-  const curColor = curBand >= 0 ? soglie[curBand].color : '#6b7280';
-  const curLabel = curBand >= 0
-    ? (curBand < soglie.length - 1
-        ? soglie[curBand].label + '–' + soglie[curBand+1].label
-        : '≥ ' + soglie[curBand].label)
-    : 'ABAIXO P25';
-  const atualRow = hdwcVal != null
-    ? `<div style="display:grid;grid-template-columns:22px 32px 1fr auto;`+
-      `gap:2px;align-items:center;font-size:10px;padding:3px 4px;`+
-      `background:${curColor}22;border-left:2px solid ${curColor};`+
-      `border-radius:2px;font-weight:700;margin:2px 0">`+
-      `<span>◀</span>`+
-      `<span style="color:${curColor}">HOJE</span>`+
-      `<span style="color:${curColor}">${curLabel}</span>`+
-      `<span style="font-family:var(--mono);text-align:right;color:${curColor}">${hdwcVal.toFixed(1)}</span>`+
-      `</div>`
-    : '';
-
-  
-  var hdwcCheck = (hdwcPeak != null && hdwcPeak > (hdwcVal||0)) ? hdwcPeak : hdwcVal;
-  const anomalyFlag = (hdwcCheck != null && m.p95 != null && hdwcCheck > m.p95)
-    ? `<div style="display:flex;align-items:center;gap:7px;margin:5px 0 2px;
-        padding:6px 10px;background:rgba(127,29,29,.1);border:1.5px solid rgba(127,29,29,.4);
-        border-radius:5px">
-        <span style="font-size:14px">⚠️</span>
-        <div><div style="font-size:10px;font-weight:700;color:#7f1d1d;letter-spacing:.05em">ANOMALIA SAZONAL</div>
-        <div style="font-size:9px;color:#b91c1c;margin-top:1px">${hdwcPeakDate?hdwcPeakDate+" · ":""}HDWc ${hdwcCheck.toFixed(1)} · P95 ${m.p95.toFixed(1)} · +${(hdwcCheck-m.p95).toFixed(1)} acima do extremo histórico</div></div>
-        </div>`
-    : '';
-
-  const rows = soglie.map((s, i) => {
-    const valStr = (s.val != null) ? s.val.toFixed(1) : '—';
-    return `<div style="display:grid;grid-template-columns:22px 32px 1fr auto;`+
-           `gap:2px;align-items:center;font-size:10px;padding:2px 4px;`+
-           `border-left:2px solid transparent;">`+
-           `<span>${s.dot}</span>`+
-           `<span style="color:var(--dim)">${s.pct}</span>`+
-           `<span style="color:${s.color}">${s.label}</span>`+
-           `<span style="font-family:var(--mono);text-align:right;color:var(--dim)">${valStr}</span>`+
-           `</div>`;
-  }).join('');
-
-  return `<div style="margin-top:7px;border:1px solid var(--border);border-radius:5px;`+
-         `padding:6px 8px;background:var(--surface)">`+
-         `<div style="font-size:9px;color:var(--dim);font-weight:600;letter-spacing:.05em;`+
-         `margin-bottom:4px">LIMIARES HISTÓRICOS ${monthLabel.toUpperCase()} · 2000–2025</div>`+
-         anomalyFlag + atualRow + rows +
-         `</div>`;
-}
+// hdwcSoglieHTML defined later (single canonical version after v5.2 cleanup)
 
 function hdwcTrendHTML(hdwCum, todayIdx){
   if (todayIdx == null || !hdwCum) return '';
@@ -1712,12 +1712,16 @@ function nightDayShapes(times) {
   return shapes;
 }
 
-function baseLayout72(times, extraShapes) {
+function baseLayout72(times, extraShapes, opts) {
+  opts = opts || {};
+  // v5.2: in extended mode (7d/16d) use date-only tick to reduce crowding
+  const tickFmt = opts.tickFormat || '%H:%M\n%d/%m';
+  const showNightShapes = opts.showNightShapes !== false;  // default true; 16d daily can disable
   return {
     margin: {t:10,r:55,b:40,l:45},
-    shapes: [...nightDayShapes(times), ...(extraShapes||[])],
+    shapes: [...(showNightShapes ? nightDayShapes(times) : []), ...(extraShapes||[])],
     xaxis: {
-      type:'date', tickformat:'%H:%M\n%d/%m',
+      type:'date', tickformat: tickFmt,
       tickfont:{size:9,color:'#374151'}, gridcolor:'#e5e7eb',
       linecolor:'#d1d5db'
     },
@@ -1727,31 +1731,42 @@ function baseLayout72(times, extraShapes) {
   };
 }
 
-function draw72Temp(times, temps, rhs, ws, wg, wd) {
+function draw72Temp(times, temps, rhs, ws, wg, wd, opts) {
+  opts = opts || {};
+  const ext = opts.extended === true;
+  const layoutOpts = ext ? {tickFormat:'%d/%m'} : {};
   const traces = [
     {
       x:times, y:temps, name:'T °C', type:'scatter', mode:'lines',
-      line:{color:'#e85d2f',width:2}, yaxis:'y',
+      line:{color:'#e85d2f', width: ext ? 1 : 2}, yaxis:'y',
       hovertemplate:'<b>%{x|%H:%M %d/%m}</b><br>T: %{y:.1f}°C<extra></extra>'
     },
     {
       x:times, y:rhs, name:'HR %', type:'scatter', mode:'lines',
-      line:{color:'#3b82f6',width:1.5,dash:'dot'}, yaxis:'y2',
+      line:{color:'#3b82f6', width: ext ? 1 : 1.5, dash:'dot'}, yaxis:'y2',
       hovertemplate:'HR: %{y:.0f}%<extra></extra>'
     }
   ];
   const layout = {
-    ...baseLayout72(times),
+    ...baseLayout72(times, null, layoutOpts),
     height: Math.max(180, (document.getElementById('chartArea')?.offsetHeight||240)),
     yaxis:{title:{text:'T °C',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
     yaxis2:{title:{text:'HR %',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,100],showgrid:false,zeroline:false},
   };
   Plotly.react('chart-72temp', traces, layout, plotlyBaseConfig('72temp'));
-  // Barbs at fixed fraction of chart height (independent from temp line)
-  if (!_fsActiveChart) requestAnimationFrame(() => drawBarbs('barbs-72temp','chart-72temp', times, ws, wg, wd, null));
+  // Barbs: skip in extended mode (too dense on 168h)
+  if (ext) {
+    const svg = document.getElementById('barbs-72temp');
+    if (svg) svg.innerHTML = '';
+  } else if (!_fsActiveChart) {
+    requestAnimationFrame(() => drawBarbs('barbs-72temp','chart-72temp', times, ws, wg, wd, null));
+  }
 }
 
-function draw72HDW(times, hdws, ws, wg, wd) {
+function draw72HDW(times, hdws, ws, wg, wd, opts) {
+  opts = opts || {};
+  const ext = opts.extended === true;
+  const layoutOpts = ext ? {tickFormat:'%d/%m'} : {};
   const barColors = hdws.map(h =>
     h>=150?'#7f1d1d':h>=80?'#b91c1c':h>=40?'#e85d2f':h>=15?'#d97706':'#86efac');
   const thLines = [40,80,150].map((v,i)=>({
@@ -1766,27 +1781,35 @@ function draw72HDW(times, hdws, ws, wg, wd) {
     },
     {
       x:times, y:wg, name:'Rajada km/h', type:'scatter', mode:'lines',
-      line:{color:'#7c3aed',width:1.5}, yaxis:'y2',
+      line:{color:'#7c3aed', width: ext ? 1 : 1.5}, yaxis:'y2',
       hovertemplate:'Rajada: %{y:.1f} km/h<extra></extra>'
     },
     {
       x:times, y:ws, name:'Vento km/h', type:'scatter', mode:'lines',
-      line:{color:'#93c5fd',width:1}, yaxis:'y2',
+      line:{color:'#93c5fd', width: ext ? 0.8 : 1}, yaxis:'y2',
       hovertemplate:'Vento: %{y:.1f} km/h<extra></extra>'
     }
   ];
   const layout = {
-    ...baseLayout72(times, thLines),
+    ...baseLayout72(times, thLines, layoutOpts),
     height: Math.max(160, (document.getElementById('chartArea')?.offsetHeight||220)),
     barmode:'overlay',
     yaxis:{title:{text:'HDW',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
     yaxis2:{title:{text:'km/h',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',showgrid:false,zeroline:false},
   };
   Plotly.react('chart-72hdw', traces, layout, plotlyBaseConfig('72hdw'));
-  if (!_fsActiveChart) requestAnimationFrame(() => drawBarbs('barbs-72hdw','chart-72hdw', times, ws, wg, wd, null));
+  if (ext) {
+    const svg = document.getElementById('barbs-72hdw');
+    if (svg) svg.innerHTML = '';
+  } else if (!_fsActiveChart) {
+    requestAnimationFrame(() => drawBarbs('barbs-72hdw','chart-72hdw', times, ws, wg, wd, null));
+  }
 }
 
-function draw72Prec(times, prec, rhs) {
+function draw72Prec(times, prec, rhs, opts) {
+  opts = opts || {};
+  const ext = opts.extended === true;
+  const layoutOpts = ext ? {tickFormat:'%d/%m'} : {};
   const traces = [
     {
       x:times, y:prec, name:'Precip. mm', type:'bar',
@@ -1795,18 +1818,240 @@ function draw72Prec(times, prec, rhs) {
     },
     {
       x:times, y:rhs, name:'HR %', type:'scatter', mode:'lines',
-      line:{color:'#16a34a',width:1.5}, yaxis:'y2',
+      line:{color:'#16a34a', width: ext ? 1 : 1.5}, yaxis:'y2',
       hovertemplate:'HR: %{y:.0f}%<extra></extra>'
     }
   ];
   const layout = {
-    ...baseLayout72(times),
+    ...baseLayout72(times, null, layoutOpts),
     height: Math.max(140, (document.getElementById('chartArea')?.offsetHeight||180)),
     barmode:'overlay',
     yaxis:{title:{text:'mm',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
     yaxis2:{title:{text:'HR %',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,100],showgrid:false,zeroline:false},
   };
   Plotly.react('chart-72prec', traces, layout, plotlyBaseConfig('72prec'));
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║ v5.2 — DAILY 16d MODE (Blocchi 4 + 5 + 6 + 7)                            ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+// Helper: aggregate hourly HDW into per-day max (more accurate than calcHDW on daily aggregates)
+function computeHdwEffDayMaxFromHourly(hourly, dailyTimes) {
+  if (!hourly?.time || !dailyTimes?.length) return (dailyTimes||[]).map(() => 0);
+  const hourMax = {};
+  for (let i = 0; i < hourly.time.length; i++) {
+    const date = (hourly.time[i] || '').split('T')[0];
+    if (!date) continue;
+    const h = calcHDW(
+      hourly.temperature_2m?.[i],
+      hourly.relativehumidity_2m?.[i],
+      hourly.windspeed_10m?.[i],
+      hourly.windgusts_10m?.[i]
+    );
+    if (h != null && (!(date in hourMax) || h > hourMax[date])) hourMax[date] = h;
+  }
+  return dailyTimes.map(d => hourMax[d] != null ? hourMax[d] : 0);
+}
+
+// Helper: get current month's HDWC_SOGLIE entry (PT 3-letter month keys)
+function getCurrentMonthlySoglie() {
+  if (!HDWC_SOGLIE?.mesi) return null;
+  const mKeys = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
+  const mIdx = (new Date()).getMonth();
+  return HDWC_SOGLIE.mesi[mKeys[mIdx]] || null;
+}
+
+// Helper: build divider + annotation for "extended forecast" zone (day+7.5 → day+16)
+function buildExtendedConfidenceShapes(dailyTimes) {
+  if (!dailyTimes || dailyTimes.length < 9) return {shapes:[], annotations:[]};
+  // Divider midway between index 7 (day 8) and index 8 (day 9) — i.e. day+7.5
+  const t7 = new Date(dailyTimes[7]).getTime();
+  const t8 = new Date(dailyTimes[8]).getTime();
+  const xDivider = new Date((t7 + t8) / 2).toISOString();
+  const xLast = dailyTimes[dailyTimes.length - 1];
+  return {
+    shapes: [{
+      type:'line', xref:'x', yref:'paper',
+      x0: xDivider, x1: xDivider, y0: 0, y1: 1,
+      line:{color:'#94a3b8', width:1, dash:'dash'}
+    }],
+    annotations: [{
+      x: xLast, y: 0.97, xref:'x', yref:'paper',
+      xanchor:'right', yanchor:'top',
+      text: 'Extended · lower confidence',
+      showarrow: false,
+      font: {size: 8, color:'#64748b'},
+      bgcolor: 'rgba(255,255,255,0.85)',
+      borderpad: 2
+    }]
+  };
+}
+
+// Base layout for daily charts (no nightDayShapes — irrelevant on daily scale)
+function baseLayoutDaily(dailyTimes, extraShapes, extraAnnotations) {
+  return {
+    margin: {t:10,r:55,b:40,l:45},
+    shapes: [...(extraShapes||[])],
+    annotations: [...(extraAnnotations||[])],
+    xaxis: {
+      type:'date', tickformat:'%d/%m',
+      tickfont:{size:9,color:'#374151'}, gridcolor:'#e5e7eb',
+      linecolor:'#d1d5db'
+    },
+    paper_bgcolor:'white', plot_bgcolor:'rgba(248,250,252,0.8)',
+    hoverlabel:{bgcolor:'#1f2937',font:{size:11,color:'#f9fafb',family:'"DM Sans",system-ui,sans-serif'},namelength:0},
+    legend:{orientation:'h',x:0.5,xanchor:'center',y:1.1,font:{size:9},bgcolor:'rgba(255,255,255,0.9)'},
+  };
+}
+
+// ── Daily Temp: Tmax bar (color by class) + Tmin bar overlay + RH_mean line ──
+function drawDailyTemp(times, tmax, tmin, rhMean) {
+  // Tmax color classes: <20 celeste, 20-30 verde, 30-35 arancio, >=35 rosso
+  const tmaxColors = tmax.map(t => {
+    if (t == null) return '#cbd5e1';
+    if (t >= 35) return '#b91c1c';
+    if (t >= 30) return '#e85d2f';
+    if (t >= 20) return '#86efac';
+    return '#93c5fd';
+  });
+  const ext = buildExtendedConfidenceShapes(times);
+  const traces = [
+    {
+      x:times, y:tmax, name:'Tmax', type:'bar',
+      marker:{color:tmaxColors, opacity:0.85}, yaxis:'y',
+      hovertemplate:'<b>%{x|%d/%m}</b><br>Tmax: %{y:.1f}°C<extra></extra>'
+    },
+    {
+      x:times, y:tmin, name:'Tmin', type:'bar',
+      marker:{color:'#3b82f6', opacity:0.7}, yaxis:'y',
+      hovertemplate:'Tmin: %{y:.1f}°C<extra></extra>'
+    },
+    {
+      x:times, y:rhMean, name:'HR média', type:'scatter', mode:'lines+markers',
+      line:{color:'#16a34a', width:1.2, dash:'dot'},
+      marker:{size:4, color:'#16a34a'},
+      yaxis:'y2',
+      hovertemplate:'HR: %{y:.0f}%<extra></extra>'
+    }
+  ];
+  const layout = {
+    ...baseLayoutDaily(times, ext.shapes, ext.annotations),
+    height: Math.max(180, (document.getElementById('chartArea')?.offsetHeight||240)),
+    barmode:'overlay',
+    yaxis:{title:{text:'T °C',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
+    yaxis2:{title:{text:'HR %',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,100],showgrid:false,zeroline:false},
+  };
+  Plotly.react('chart-72temp', traces, layout, plotlyBaseConfig('72temp-daily'));
+  const svg = document.getElementById('barbs-72temp');
+  if (svg) svg.innerHTML = '';
+}
+
+// ── Daily HDW: HDW_eff_day_max bars + HDWc cumulative line + p75/p95 monthly thresholds ──
+function drawDailyHDW(times, hdwEffDayMax, hdwcCum, monthlySoglie) {
+  // Bar color classes (same as hourly): 15/40/80/150
+  const barColors = hdwEffDayMax.map(h =>
+    h>=150?'#7f1d1d':h>=80?'#b91c1c':h>=40?'#e85d2f':h>=15?'#d97706':'#86efac');
+  const ext = buildExtendedConfidenceShapes(times);
+
+  // p75/p95 horizontal threshold lines on yaxis2 (HDWc scale)
+  const thrShapes = [];
+  const thrAnnotations = [];
+  if (monthlySoglie) {
+    if (monthlySoglie.p75 != null) {
+      thrShapes.push({
+        type:'line', xref:'paper', yref:'y2',
+        x0:0, x1:1, y0:monthlySoglie.p75, y1:monthlySoglie.p75,
+        line:{color:'#d97706', width:1, dash:'dot'}
+      });
+      thrAnnotations.push({
+        x:1, y:monthlySoglie.p75, xref:'paper', yref:'y2',
+        xanchor:'right', yanchor:'bottom',
+        text:'p75', showarrow:false,
+        font:{size:8, color:'#d97706'}
+      });
+    }
+    if (monthlySoglie.p95 != null) {
+      thrShapes.push({
+        type:'line', xref:'paper', yref:'y2',
+        x0:0, x1:1, y0:monthlySoglie.p95, y1:monthlySoglie.p95,
+        line:{color:'#b91c1c', width:1, dash:'dot'}
+      });
+      thrAnnotations.push({
+        x:1, y:monthlySoglie.p95, xref:'paper', yref:'y2',
+        xanchor:'right', yanchor:'bottom',
+        text:'p95', showarrow:false,
+        font:{size:8, color:'#b91c1c'}
+      });
+    }
+  }
+
+  const traces = [
+    {
+      x:times, y:hdwEffDayMax, name:'HDW_eff max', type:'bar',
+      marker:{color:barColors, opacity:0.8}, yaxis:'y',
+      hovertemplate:'<b>%{x|%d/%m}</b><br>HDW max: %{y:.1f}<extra></extra>'
+    },
+    {
+      x:times, y:hdwcCum, name:'HDWc cum.', type:'scatter', mode:'lines+markers',
+      line:{color:'#7c3aed', width:2},
+      marker:{size:5, color:'#7c3aed'},
+      yaxis:'y2',
+      hovertemplate:'HDWc: %{y:.1f}<extra></extra>'
+    }
+  ];
+
+  // y2 range: max(hdwcCum, p95)*1.1
+  const hdwcMax = Math.max(...(hdwcCum.filter(v => v != null && !isNaN(v))), 0);
+  const p95Val = monthlySoglie?.p95 || 0;
+  const y2Top = Math.max(hdwcMax, p95Val) * 1.1 || 100;
+
+  const layout = {
+    ...baseLayoutDaily(times,
+      [...ext.shapes, ...thrShapes],
+      [...ext.annotations, ...thrAnnotations]),
+    height: Math.max(160, (document.getElementById('chartArea')?.offsetHeight||220)),
+    barmode:'overlay',
+    yaxis:{title:{text:'HDW',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
+    yaxis2:{title:{text:'HDWc',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,y2Top],showgrid:false,zeroline:false},
+  };
+  Plotly.react('chart-72hdw', traces, layout, plotlyBaseConfig('72hdw-daily'));
+  const svg = document.getElementById('barbs-72hdw');
+  if (svg) svg.innerHTML = '';
+}
+
+// ── Daily Precip: precipitation_sum bars (color by intensity) + RH_mean line ──
+function drawDailyPrec(times, precSum, rhMean) {
+  const precColors = precSum.map(p => {
+    if (p == null || p === 0) return 'rgba(0,0,0,0)';
+    if (p >= 30) return '#1e3a8a';
+    if (p >= 10) return '#3b82f6';
+    if (p >= 2)  return '#7dd3fc';
+    return '#bae6fd';
+  });
+  const ext = buildExtendedConfidenceShapes(times);
+  const traces = [
+    {
+      x:times, y:precSum, name:'Precip mm', type:'bar',
+      marker:{color:precColors}, yaxis:'y',
+      hovertemplate:'<b>%{x|%d/%m}</b><br>Precip: %{y:.1f} mm<extra></extra>'
+    },
+    {
+      x:times, y:rhMean, name:'HR média', type:'scatter', mode:'lines+markers',
+      line:{color:'#16a34a', width:1.2, dash:'dot'},
+      marker:{size:4, color:'#16a34a'},
+      yaxis:'y2',
+      hovertemplate:'HR: %{y:.0f}%<extra></extra>'
+    }
+  ];
+  const layout = {
+    ...baseLayoutDaily(times, ext.shapes, ext.annotations),
+    height: Math.max(140, (document.getElementById('chartArea')?.offsetHeight||180)),
+    barmode:'overlay',
+    yaxis:{title:{text:'mm',font:{size:10}},tickfont:{size:9},gridcolor:'#e5e7eb',zeroline:false},
+    yaxis2:{title:{text:'HR %',font:{size:10}},tickfont:{size:9},overlaying:'y',side:'right',range:[0,100],showgrid:false,zeroline:false},
+  };
+  Plotly.react('chart-72prec', traces, layout, plotlyBaseConfig('72prec-daily'));
 }
 
 function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
@@ -2682,6 +2927,35 @@ function mobileDayPreset(days) {
 
   ts72Redraw(0, ei);
 }
+
+// ── Main window mode (v5.2) ────────────────────────────────────────────────
+// Governs Temp/HDW/Precip panes. Rose has its own selector (Blocco 8).
+let _mainWindowMode = '3d';
+let _lastMeteo = null;  // cached last fetch, needed to redraw on mode change
+
+function setMainWindow(mode) {
+  if (!['3d','7d','16d'].includes(mode)) return;
+  _mainWindowMode = mode;
+  ['3d','7d','16d'].forEach(m => {
+    const btn = document.getElementById('dbtn'+m);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+  // Show zoom sub-selector ONLY in 3d mode (1d/2d/3d zoom inside 72h)
+  const zoom = document.getElementById('zoomSelStrip');
+  if (zoom) zoom.style.display = (mode === '3d') ? 'flex' : 'none';
+  // Redraw Temp/HDW/Precip with new mode (draw72h branches on _mainWindowMode)
+  if (_lastMeteo) draw72h(_lastMeteo);
+  // Resize after react — same pattern as switchTab fix in v5.1
+  setTimeout(() => {
+    ['chart-72temp','chart-72hdw','chart-72prec'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) try { Plotly.Plots.resize(el); } catch(e){}
+    });
+  }, 50);
+}
+
+// Legacy: kept as no-op for backward compat with any external callers
+function ts72PresetLegacy(days) { /* deprecated v5.2 */ }
 
 // ── Mobile stubs ──────────────────────────────────────────────────────────
 const CHART_LABELS = {};
