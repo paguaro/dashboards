@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FireMeteo v33 · ICNF + Open-Meteo</title>
+<title>FireMeteo v52 · ICNF + Open-Meteo</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -3701,7 +3701,7 @@ const HDW_V2 = {
   T_stress_onset:       28,    // = tmax_class2 alias (°C)
   T_stress_severe:      35,    // = tmax_class3 alias (°C)
   days_to_stress:        4,    // = streak_days alias (gg consecutivi cl2/3)
-  days_to_severe_stress: 7,    // soglia futura long-streak boost (non attiva)
+  days_to_severe_stress: 7,    // soglia long-streak boost logaritmico (ATTIVA in calcAlpha_v2 dal v42)
   RH_wilt:              38,    // RH% sotto cui traspirazione bloccata (modulatore notte, futuro)
   VPD_stress:           22.0,  // hPa (= 2.2 kPa × 10) — VPD critico vegetazione
   // VPD notturno — soglie derivate da RH_dry/RH_very_dry/RH_wilt regionali
@@ -3726,7 +3726,7 @@ let _activeEngineConfig = null; // full JSON from config builder when loaded
 // Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
 // detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
 // which is critical for night-window NS calculations outside Europe/Lisbon.
-console.log('%c[FireMeteo v50.5 — FWI canonical + Phase 4 foehn markers + alpha_min cleanup + thermal_window migration — 22/4/26]%c gate c2:OR c3:AND, warmup continuity, thermal_window→hdw_eff_params (backward-compat)', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+console.log('%c[FireMeteo v52 — fix HDW_P75_MENSILE→getActiveSoglie() in updatePeakDay (P75 dinamico per preset/custom JSON) — 24/4/26]%c gate c2:OR c3:AND, warmup continuity, thermal_window→hdw_eff_params (backward-compat)', 'color:#4ade80;font-weight:bold', 'color:#aaa');
 function _getTimezone() {
   const tz = _activeEngineConfig?.meta?.timezone;
   if (tz && typeof tz === 'string' && tz.length > 0) return tz;
@@ -5870,7 +5870,14 @@ function updatePeakDay(hdwArr, hdwCum, dates, todayIdx) {
     fwiSuffix;
 
   
-  const THR = HDW_P75_MENSILE[new Date().getMonth()]; 
+  // v52 fix: usa getActiveSoglie() invece di HDW_P75_MENSILE statico, così
+  // se l'utente carica JSON soglie custom o cambia preset (Greece/Cal/Canada/etc),
+  // il "Peak Day" badge usa la stessa soglia del chart e non drifta. Fallback
+  // su HDW_P75_MENSILE preserva il comportamento se preset/soglie non disponibili.
+  const _mkeysPk = ['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];
+  const _monthPk = new Date().getMonth();
+  const _sogPk   = getActiveSoglie()?.mesi?.[_mkeysPk[_monthPk]];
+  const THR = _sogPk?.p75 ?? HDW_P75_MENSILE[_monthPk];
   
   let bestStart = -1, bestEnd = -1, bestLen = 0;
   let curStart = -1;
