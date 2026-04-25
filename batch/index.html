@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HDWc Batch Analysis v34 · Portogallo</title>
+<title>HDWc Batch Analysis v36 · Portogallo</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -416,6 +416,29 @@ let allFeatures = [];
 
 function hdw(tmax,rh,wind,gust) {
   const P=currentEngine.p;
+  // v35 BUG-WIND diagnostic: log una volta per ogni cambio engine i pesi attivi
+  // v36: include anche thermal_window status (letto ma NON applicato)
+  if (typeof window !== 'undefined' && window._hdw_last_engine !== currentEngine?.name) {
+    const _wm = P.wm ?? 0.7, _wg = P.wg ?? 0.3;
+    console.log(`%c[BATCH v36] Engine="${currentEngine?.name}" → wind weights wm=${_wm} wg=${_wg}` +
+                (P.wm == null ? ' (DEFAULT — preset non aveva cfg.wind)' : ' (FROM PRESET)'),
+                'color:#facc15;font-weight:bold');
+    if (P.tw_start != null && P.tw_end != null) {
+      console.log(`%c[BATCH v36] thermal_window=${P.tw_start}-${P.tw_end} (READ but NOT APPLIED — batch usa daily aggregates, vedi commento in hdw())`,
+                  'color:#fb923c');
+    }
+    window._hdw_last_engine = currentEngine?.name;
+  }
+  // v36 — NOTA THERMAL_WINDOW (cfg.hdw_eff_params.thermal_window_start/end):
+  // Il preset può specificare una finestra oraria diurna (es. 10-17) per limitare
+  // il calcolo HDW alle ore "calde" del giorno. In firemeteo viene applicata sui
+  // dati orari. Nel batch NON è applicabile perché Open-Meteo /v1/archive ritorna
+  // SOLO daily aggregates (Tmax/RHmean/Wmax/Gmax pre-aggregati su 24h dal server).
+  // I parametri vengono letti in p.tw_start/tw_end per coerenza preset/firemeteo,
+  // ma non modificano questo calcolo. Diagnostic in console al cambio engine.
+  // Decisione design 21/04/26: divergenza intenzionale batch=daily / firemeteo=hourly.
+  // Per applicare davvero la finestra: refactoring fetch hourly + ricalcolo (~5h work).
+  //
   // v34 [CALIB] B-1: gate termico sotto cui HDW=0 (default 10°C, sotto HDW non operativo)
   const t_gate = P.hdw_t_gate ?? 10;
   if (tmax==null||rh==null||wind==null||tmax<=t_gate) return 0;
@@ -712,7 +735,17 @@ document.getElementById('packageInput').addEventListener('change', e => {
             kb: (cfg.hdw_eff_params||{}).k_base  ?? 10,
             km: (cfg.hdw_eff_params||{}).k_mid   ?? 20,
             kh: (cfg.hdw_eff_params||{}).k_high  ?? 30,
-            drt:(cfg.hdw_eff_params||{}).delta_rel_threshold ?? 0.20
+            drt:(cfg.hdw_eff_params||{}).delta_rel_threshold ?? 0.20,
+            // v35 fix BUG-WIND: pesi vento dal preset (default firemeteo 70/30 se assenti)
+            wm: (cfg.wind || {}).w_mean_weight ?? 0.7,
+            wg: (cfg.wind || {}).w_gust_weight ?? 0.3,
+            // v36 thermal_window — letti per coerenza preset/firemeteo ma NON APPLICATI:
+            // batch usa daily aggregates da Open-Meteo (Tmax/RHmean/Wmax/Gmax pre-aggregati 24h),
+            // non hourly. Filtrare a finestra 10-17 richiederebbe fetch hourly + ricalcolo,
+            // cambio strutturale fuori scope. Decisione design 21/04/26: divergenza intenzionale
+            // con firemeteo (che usa hourly). Vedi commento in hdw() per diagnostic.
+            tw_start: (cfg.hdw_eff_params||{}).thermal_window_start ?? null,
+            tw_end:   (cfg.hdw_eff_params||{}).thermal_window_end   ?? null
           }
         };
 
@@ -820,7 +853,13 @@ document.getElementById('configInput').addEventListener('change', e => {
           kb: (cfg.hdw_eff_params||{}).k_base  ?? 10,
           km: (cfg.hdw_eff_params||{}).k_mid   ?? 20,
           kh: (cfg.hdw_eff_params||{}).k_high  ?? 30,
-          drt:(cfg.hdw_eff_params||{}).delta_rel_threshold ?? 0.20
+          drt:(cfg.hdw_eff_params||{}).delta_rel_threshold ?? 0.20,
+          // v35 fix BUG-WIND: pesi vento dal preset (default firemeteo 70/30 se assenti)
+          wm: (cfg.wind || {}).w_mean_weight ?? 0.7,
+          wg: (cfg.wind || {}).w_gust_weight ?? 0.3,
+          // v36 thermal_window: marker semantico (NON APPLICATO — vedi commento in hdw())
+          tw_start: (cfg.hdw_eff_params||{}).thermal_window_start ?? null,
+          tw_end:   (cfg.hdw_eff_params||{}).thermal_window_end   ?? null
         }
       };
       BBOXES[id] = bbox;
@@ -929,6 +968,9 @@ async function analyzeFire(fire) {
   const savedEngine = currentEngine;
   const fireEngineId = detectRegion(lon, lat);
   currentEngine = ENGINES[fireEngineId] || ENGINES.all;
+  // v35.1 BUG-WIND diagnostic: log per ogni evento — quale engine viene usato e con quali pesi
+  console.log(`%c[runFire ${fire_id||'?'}] lat=${lat} lon=${lon} → engine="${currentEngine.name}" (id=${fireEngineId}) · wm=${currentEngine.p.wm ?? '0.7(DFLT)'} wg=${currentEngine.p.wg ?? '0.3(DFLT)'}`,
+              'color:#a78bfa');
   const series=runEngine(days);
   // d0 = giorno di ignizione. Quando postDays>0 (o date_end presente con fetch anno intero),
   // la serie contiene giorni oltre l'ignizione. d0 NON è l'ultimo giorno: lo cerchiamo per data.
@@ -3234,7 +3276,13 @@ function _registerMonEngine(cfg, fallbackName) {
       kb: (cfg.hdw_eff_params || {}).k_base  ?? 10,
       km: (cfg.hdw_eff_params || {}).k_mid   ?? 20,
       kh: (cfg.hdw_eff_params || {}).k_high  ?? 30,
-      drt:(cfg.hdw_eff_params || {}).delta_rel_threshold ?? 0.20
+      drt:(cfg.hdw_eff_params || {}).delta_rel_threshold ?? 0.20,
+      // v35 fix BUG-WIND: pesi vento dal preset (default firemeteo 70/30 se assenti)
+      wm: (cfg.wind || {}).w_mean_weight ?? 0.7,
+      wg: (cfg.wind || {}).w_gust_weight ?? 0.3,
+      // v36 thermal_window: marker semantico (NON APPLICATO — vedi commento in hdw())
+      tw_start: (cfg.hdw_eff_params || {}).thermal_window_start ?? null,
+      tw_end:   (cfg.hdw_eff_params || {}).thermal_window_end   ?? null
     }
   };
   // Bbox: da meta.bbox, altrimenti da calibration points con buffer 0.3°
