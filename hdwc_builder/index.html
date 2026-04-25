@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HDWC Engine Config Builder v8.3.5</title>
+<title>HDWC Engine Config Builder v8.4.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -295,6 +295,13 @@
     width: 100%; padding: 0 1px; }
   .zm-inline-edit:focus { border-bottom-color: #E05A1E; }
   .nav-item.zm-tab { border-top: 1px solid #e8e4de; margin-top: 6px; }
+  .lvl-badge { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: auto; letter-spacing: 0; font-family: 'Inter', sans-serif; }
+  .lvl-badge.l1 { background: #fef3e7; color: #ea580c; }
+  .lvl-badge.l2 { background: #dcfce7; color: #16a34a; }
+  .lvl-badge.l3 { background: #ede9fe; color: #7c3aed; }
+  .nav-item.active .lvl-badge.l1 { background: #fed7aa; }
+  .nav-item.active .lvl-badge.l2 { background: #bbf7d0; }
+  .nav-item.active .lvl-badge.l3 { background: #ddd6fe; }
 
   /* ── Zona edit banner ────────────────────────────────────────────────────── */
   #zm-edit-banner { background: #fff8f5; border-bottom: 2px solid #E05A1E;
@@ -330,7 +337,7 @@
 <div id="header">
   <div>
     <div class="brand-title">HDWC ENGINE CONFIG</div>
-    <div class="brand-sub" id="brand-sub">REGIONAL PRESET BUILDER v7.3 · —</div>
+    <div class="brand-sub" id="brand-sub">REGIONAL PRESET BUILDER v8.4.1 · —</div>
   </div>
   <div class="hdr-btns">
     <label class="btn btn-ghost" style="cursor:pointer">
@@ -357,18 +364,13 @@
   <!-- SIDEBAR -->
   <div id="sidebar">
     <button class="nav-item active" data-section="meta"><span class="nav-icon">⬡</span>IDENTITÀ</button>
-    <button class="nav-item" data-section="importalpha" style="background:#eff6ff;border-left:2px solid #3b82f6;color:#1d4ed8">
-      <span class="nav-icon">📡</span>IMPORT α ERA5
-    </button>
-    <button class="nav-item" data-section="vegetation"><span class="nav-icon">◈</span>VEGETATION</button>
-    <button class="nav-item" data-section="classification"><span class="nav-icon">◉</span>CLASSIFICATION</button>
-    <button class="nav-item" data-section="night"><span class="nav-icon">◐</span>NOTTI</button>
-    <button class="nav-item" data-section="streak"><span class="nav-icon">◆</span>STREAK / α</button>
-    <button class="nav-item" data-section="alpha"><span class="nav-icon">◇</span>ALPHA MENSILE</button>
-    <button class="nav-item" data-section="washout"><span class="nav-icon">◎</span>WASHOUT</button>
-    <button class="nav-item" data-section="wind"><span class="nav-icon">◁</span>WIND</button>
-    <button class="nav-item" data-section="hdweff"><span class="nav-icon">⚡</span>HDW_EFF PARAMS</button>
-    <button class="nav-item" data-section="foehn"><span class="nav-icon">🌬</span>VENTI DOMINANTI</button>
+    <button class="nav-item" data-section="hdweff"><span class="nav-icon">⚡</span>EVENTO ATMOSFERICO <span class="lvl-badge l1">L1</span></button>
+    <button class="nav-item" data-section="classification"><span class="nav-icon">◉</span>CLASSIFICATION <span class="lvl-badge l2">L2</span></button>
+    <button class="nav-item" data-section="night"><span class="nav-icon">◐</span>NIGHT SCORE <span class="lvl-badge l2">L2</span></button>
+    <button class="nav-item" data-section="streak"><span class="nav-icon">◆</span>STREAK / Δα <span class="lvl-badge l3">L3</span></button>
+    <button class="nav-item" data-section="alpha"><span class="nav-icon">◇</span>ALPHA MENSILE <span class="lvl-badge l3">L3</span></button>
+    <button class="nav-item" data-section="washout"><span class="nav-icon">◎</span>WASHOUT (β) <span class="lvl-badge l3">L3</span></button>
+    <button class="nav-item" data-section="foehn"><span class="nav-icon">🌬</span>VENTI DOMINANTI <span class="lvl-badge l3">L3</span></button>
     <button class="nav-item" data-section="soglie"><span class="nav-icon">▦</span>MONTHLY THRESHOLDS</button>
     <button class="nav-item zm-tab" data-section="zonemgr"><span class="nav-icon">📦</span>ZONE MANAGER</button>
   </div>
@@ -612,27 +614,19 @@ function sectionMeta() {
     ${bboxSet && bb[2]>=bb[3] ? `<div class="wind-warning">⚠ latMin must be < latMax</div>` : ''}`;
 }
 
-function sectionVegetation() {
-  return `
-    <div class="info-box" style="margin-bottom:18px">
-      Questi parametri modificano la classificazione giornaliera quando i dati di
-      umidità relativa sono disponibili (percorso orario o daily RH).
-      Si attivano in <b>classifyDay_v2</b> indipendentemente dalla streak.
-    </div>
-    ${divider("Modificatori di classificazione")}
-    ${slider("vh1","RH appassimento",20,60,1,"vegetation","RH_wilt","%","Forza dc≥2 quando rhMean ≤ soglia AND hdwEff ≥ HDW_c2×0.75","vegetation.RH_wilt")}
-    ${slider("vv1","VPD stress",0.5,5,0.1,"vegetation","VPD_stress"," kPa","Promuove dc+1 quando VPD diurno ≥ soglia AND hdwEff ≥ HDW_c2×0.75","vegetation.VPD_stress")}
-    ${divider("Memoria α")}
-    ${slider("vd2","Giorni a stress grave",3,21,1,"vegetation","days_to_severe_stress"," gg","Soglia streak per il long-streak boost logaritmico di α","vegetation.days_to_severe_stress")}`;
-}
 
 function sectionClassification() {
   return `
+    <div class="info-box" style="background:#dcfce7;border-color:#16a34a;color:#166534;margin-bottom:18px">
+      <b style="color:#16a34a">Livello 2 — Classificazione giornaliera</b><br>
+      Soglie e logiche per assegnare la classe del giorno (dc ∈ 0/1/2/3) usata da streak e Δα.
+      Include: pioggia efficace · soglie Tmax/HDW_eff · gate asimmetrico · soglie RH · modificatori vegetazione.
+    </div>
     ${divider("Pioggia")}
-    ${slider("cr1","Pioggia efficace",1,10,0.5,"classification","Rain_effective_mm"," mm","Sotto questa soglia la pioggia non resetta il sistema","classification.Rain_effective_mm")}
+    ${slider("cr1","Pioggia efficace",1,10,0.5,"classification","Rain_effective_mm"," mm","Sotto questa soglia la pioggia non resetta il sistema. NON è la soglia washout (separata in WASHOUT tab).","classification.Rain_effective_mm")}
     ${divider("Soglie temperatura")}
-    ${slider("ct1","Tmax → Classe 2",25,40,1,"classification","Tmax_class2","°C","","classification.Tmax_class2")}
-    ${slider("ct2","Tmax → Classe 3",30,45,1,"classification","Tmax_class3","°C","","classification.Tmax_class3")}
+    ${slider("ct1","Tmax → Classe 2",25,40,1,"classification","Tmax_class2","°C","DUAL: usato anche per attivare bonus k_mid in EVENTO ATMOSFERICO","classification.Tmax_class2")}
+    ${slider("ct2","Tmax → Classe 3",30,45,1,"classification","Tmax_class3","°C","DUAL: usato anche per attivare bonus k_high","classification.Tmax_class3")}
     ${divider("Soglie HDW_eff")}
     ${slider("ch1","HDW_eff → Classe 2",20,150,5,"classification","HDW_eff_class2","","Soglia bassa = più giorni in classe 2","classification.HDW_eff_class2")}
     ${slider("ch2","HDW_eff → Classe 3",50,300,5,"classification","HDW_eff_class3","","","classification.HDW_eff_class3")}
@@ -669,40 +663,107 @@ function sectionClassification() {
     </div>
     ${divider("Umidità relativa")}
     ${slider("crh1","RH secco",30,80,1,"classification","RH_dry","%","Doppio uso: classificazione diurna E modulatore secchezza notturna (night score +1)","classification.RH_dry")}
-    ${slider("crh2","RH molto secco",15,60,1,"classification","RH_very_dry","%","Doppio uso: secchezza diurna severa E soglia VPD notturno per ns≥2 (percorso proxy)","classification.RH_very_dry")}`;
+    ${slider("crh2","RH molto secco",15,60,1,"classification","RH_very_dry","%","Doppio uso: secchezza diurna severa E soglia VPD notturno per ns≥2 (percorso proxy)","classification.RH_very_dry")}
+
+    ${divider("Modificatori vegetazione (in classifyDay_v2 e calcAlpha_v2)")}
+    <div class="info-box" style="margin-bottom:14px;background:#f0fdf4;border-color:#16a34a;color:#166534">
+      Modificatori che agiscono sulla classification quando i dati di umidità/VPD sono disponibili.
+      <b>RH_wilt</b> e <b>VPD_stress</b> operano in classifyDay_v2 come promotori di dc (indipendenti dalla streak).
+      <b>days_to_severe_stress</b> attiva invece il <b>long-streak boost logaritmico</b> in calcAlpha_v2 (vedi dettaglio sotto).
+    </div>
+    ${slider("vh1","RH appassimento",20,60,1,"vegetation","RH_wilt","%","Forza dc≥2 quando rhMean ≤ soglia AND hdwEff ≥ HDW_c2×0.75","vegetation.RH_wilt")}
+    ${slider("vv1","VPD stress",0.5,5,0.1,"vegetation","VPD_stress"," kPa","Promuove dc+1 quando VPD diurno ≥ soglia AND hdwEff ≥ HDW_c2×0.75","vegetation.VPD_stress")}
+    ${slider("vd2","Giorni a stress grave (soglia long-streak boost)",3,21,1,"vegetation","days_to_severe_stress"," gg","Oltre questa soglia di streak (cl2 o cl3) α riceve un boost logaritmico decrescente: Δα_long = delta_dry3 × ln(1 + extra) / 10, con extra = streak − soglia. Vedi info-box sotto per dettaglio operativo.","vegetation.days_to_severe_stress")}
+    <div class="info-box" style="margin-top:10px;background:#ede9fe;border-color:#7c3aed;color:#5b21b6;font-size:11.5px;padding:10px 12px">
+      <b style="color:#7c3aed">Long-streak boost logaritmico (ATTIVO in calcAlpha_v2)</b><br>
+      Quando la streak cl2/cl3 supera <code>days_to_severe_stress</code> (default ${config.vegetation?.days_to_severe_stress??7} gg), α riceve un contributo aggiuntivo oltre Δα_dry:
+      <div style="font-family:'DM Mono',monospace;font-size:11px;background:#fff;padding:6px 10px;margin:6px 0;border-radius:3px;color:#333">
+        Δα_long = delta_dry3 × ln(1 + extra) / 10
+      </div>
+      dove <code>extra = streak − days_to_severe_stress</code>. Esempi operativi con <code>delta_dry3 = ${config.streak?.delta_alpha_dry_class3?.toFixed(3)??'0.010'}</code>:<br>
+      &nbsp;• streak = soglia + 1 (extra=1) → Δα_long ≈ ${config.streak?.delta_alpha_dry_class3 ? (config.streak.delta_alpha_dry_class3 * Math.log(2) / 10).toFixed(4) : '0.0007'} (trascurabile)<br>
+      &nbsp;• streak = soglia + 5 → Δα_long ≈ ${config.streak?.delta_alpha_dry_class3 ? (config.streak.delta_alpha_dry_class3 * Math.log(6) / 10).toFixed(4) : '0.0018'}<br>
+      &nbsp;• streak = soglia + 13 → Δα_long ≈ ${config.streak?.delta_alpha_dry_class3 ? (config.streak.delta_alpha_dry_class3 * Math.log(14) / 10).toFixed(4) : '0.0026'} (max pratico)<br>
+      È additivo a Δα_dry: in streak lunghe il contributo totale è Δα_dry + Δα_long. Decrescente (ln) per evitare runaway. Nota storica v8.4.1: la vecchia documentazione lo marcava "INERT dal v49 M-8" — errore, è attivo dal v42.
+    </div>`;
 }
 
 function sectionNight() {
   const sc = config.night;
+  const dn = config.streak.delta_alpha_night;
+  const cls = config.classification;
+
+  // Helper: slider per ogni livello NS riga della tabella
+  const lvlRow = (lvl, color, name, tThr, tThrKey, tMin, tMax, scoreDesc) => `
+    <div class="ns-level-card" style="border-left:4px solid ${color};background:#fff;padding:14px 16px;border-radius:6px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="background:${color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;font-family:'DM Mono',monospace;flex-shrink:0">NS=${lvl}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px;color:#222">${name}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">${scoreDesc}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Soglia T (°C)</div>
+          <input type="number" min="${tMin}" max="${tMax}" step="1" value="${tThr}"
+            onchange="config.night.${tThrKey}=parseFloat(this.value)||0;refresh()"
+            style="width:100%;padding:6px 8px;border:1px solid ${color}66;border-radius:4px;font-family:'DM Mono',monospace;font-size:14px;color:${color};font-weight:500">
+        </div>
+        <div>
+          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Δα contributo</div>
+          <input type="number" min="0" max="0.030" step="0.001" value="${dn[lvl]}"
+            onchange="config.streak.delta_alpha_night[${lvl}]=parseFloat(this.value)||0;refresh()"
+            style="width:100%;padding:6px 8px;border:1px solid ${color}66;border-radius:4px;font-family:'DM Mono',monospace;font-size:14px;color:${color};font-weight:500">
+        </div>
+      </div>
+    </div>`;
+
   return `
-    <div class="info-box" style="border-color:#3b82f6;background:#eff6ff;margin-bottom:18px">
-      <span style="color:#1d4ed8;font-weight:600">Night RH thresholds →</span>
-      <span style="color:#1e40af"> Le soglie di umidità relativa notturna (RH_dry e RH_very_dry) sono condivise con la sezione
-      <b>CLASSIFICATION</b>. Lo stesso valore governa sia la classificazione diurna sia il modulatore
-      di secchezza notturna che può elevare il night score di +1.
-      Vai in CLASSIFICATION → "RH secco" e "RH molto secco" per modificarle.</span>
+    <div class="info-box" style="background:#dcfce7;border-color:#16a34a;color:#166534;margin-bottom:18px">
+      <b style="color:#16a34a">Livello 2 — Night Score (recupero notturno)</b><br>
+      Quantifica quanto la notte ha fatto recuperare il sistema. NS=0 (notte fresca, recupero completo) → NS=3 (notte severa, zero recupero).
+      Tutti i parametri di un livello (soglia T + peso Δα su α) sono raggruppati in una <b>singola scheda per livello</b>.
     </div>
-    ${divider("Soglie termiche notturne")}
-    ${slider("nt1","Notte calda (score 1)",14,22,1,"night","T_night_warm","°C","","night.T_night_warm")}
-    ${slider("nt2","Notte tropicale (score 2)",16,26,1,"night","T_night_tropical","°C","","night.T_night_tropical")}
-    ${slider("nt3","Notte severa (score 3)",20,32,1,"night","T_night_severe","°C","","night.T_night_severe")}
-    ${divider("Finestra notturna")}
-    ${slider("nh1","Ore minime sopra soglia",1,8,1,"night","night_hours_min"," h","Ore notturne calde minime per attivare night_score","night.night_hours_min")}
-    <div class="grid2">
+
+    ${divider("Finestra notturna e gate termico")}
+    <div class="grid2" style="margin-bottom:8px">
       ${textInput("Inizio notte","night","night_window_start","es. 20:00")}
       ${textInput("Fine notte","night","night_window_end","es. 08:00")}
     </div>
+    ${slider("nh1","Ore minime sopra soglia",1,8,1,"night","night_hours_min"," h","Gate termico bifase: ore notturne sopra T_warm minime per attivare un livello NS. Se nh < night_hours_min, NS resta 0 anche con RH secca (modulatore non consultato).","night.night_hours_min")}
+
+    ${divider("Soglie e contributi α per livello (NS=1, NS=2, NS=3)")}
+    <div class="info-box" style="background:#fffbeb;border-color:#f59e0b;color:#78350f;font-size:11px;margin-bottom:14px;padding:8px 12px">
+      Ogni scheda raggruppa i 2 parametri di un livello: <b>soglia T</b> (in °C) e <b>contributo Δα</b> (incremento giornaliero di α quando il livello è raggiunto).
+      Il contributo Δα è additivo a Δα_dry/streak — si sommano nei giorni in cui sono entrambi attivi.
+    </div>
+    ${lvlRow(1, '#d97706', 'Notte calda', sc.T_night_warm, 'T_night_warm', 14, 22, 'Tmin ≥ T_warm o ≥ night_hours_min ore calde — recupero ridotto')}
+    ${lvlRow(2, '#ea580c', 'Notte tropicale', sc.T_night_tropical, 'T_night_tropical', 16, 26, 'Tmin ≥ T_tropical o ore tropicali sufficienti — recupero molto limitato')}
+    ${lvlRow(3, '#dc2626', 'Notte severa', sc.T_night_severe, 'T_night_severe', 20, 32, 'Tmin ≥ T_severe — zero recupero, persistenza massima')}
+
+    <div class="info-box" style="border-color:#3b82f6;background:#eff6ff;margin-top:12px">
+      <span style="color:#1d4ed8;font-weight:600">Soglie RH (path A modulator) →</span>
+      <span style="color:#1e40af"> <b>RH_dry</b> e <b>RH_very_dry</b> sono in <b>CLASSIFICATION</b> (DUAL: classification diurna + modulatore secchezza notturna +1).
+      Vai in CLASSIFICATION → "RH secco" e "RH molto secco" per modificarle. Attualmente: <b>RH_dry=${cls.RH_dry}%, RH_very_dry=${cls.RH_very_dry}%</b>.</span>
+    </div>
+
     <div class="score-table" style="margin-top:16px">
-      <div class="score-row"><div class="score-badge" style="color: #444">Score 0</div><div class="score-desc">Tmin &lt; ${sc.T_night_warm}°C — notte normale, recupero completo</div></div>
-      <div class="score-row"><div class="score-badge" style="color: #d97706">Score 1</div><div class="score-desc">Tmin ≥ ${sc.T_night_warm}°C o ≥${sc.night_hours_min}h calde — notte calda</div></div>
-      <div class="score-row"><div class="score-badge" style="color: #ea580c">Score 2</div><div class="score-desc">Tmin ≥ ${sc.T_night_tropical}°C o ≥${sc.night_hours_min}h ≥${sc.T_night_tropical}°C — tropicale</div></div>
-      <div class="score-row" style="border-bottom:none"><div class="score-badge" style="color: #dc2626">Score 3</div><div class="score-desc">Tmin ≥ ${sc.T_night_severe}°C — notte severa, zero recupero</div></div>
+      <div class="score-row"><div class="score-badge" style="color: #444">Score 0</div><div class="score-desc">Tmin &lt; ${sc.T_night_warm}°C — notte normale, Δα=${dn[0]}</div></div>
+      <div class="score-row"><div class="score-badge" style="color: #d97706">Score 1</div><div class="score-desc">Tmin ≥ ${sc.T_night_warm}°C o ≥${sc.night_hours_min}h calde — Δα=${dn[1]}</div></div>
+      <div class="score-row"><div class="score-badge" style="color: #ea580c">Score 2</div><div class="score-desc">Tmin ≥ ${sc.T_night_tropical}°C o ≥${sc.night_hours_min}h ≥${sc.T_night_tropical}°C — Δα=${dn[2]}</div></div>
+      <div class="score-row" style="border-bottom:none"><div class="score-badge" style="color: #dc2626">Score 3</div><div class="score-desc">Tmin ≥ ${sc.T_night_severe}°C — Δα=${dn[3]}</div></div>
     </div>`;
 }
 
 function sectionStreak() {
   const dn = config.streak.delta_alpha_night;
   return `
+    <div class="info-box" style="background:#ede9fe;border-color:#7c3aed;color:#5b21b6;margin-bottom:18px">
+      <b style="color:#7c3aed">Livello 3 — Streak / contributi giornalieri Δα</b><br>
+      Definisce <b>quando</b> e <b>quanto</b> α cresce o decresce giorno per giorno. Sezione dedicata ai contributi additivi Δα_dry, Δα_relief.
+      I contributi Δα_night (per livello NS) sono ora raggruppati nel tab <b>NIGHT SCORE</b> per coerenza con le soglie T.
+    </div>
     <div class="info-box" style="margin-bottom:18px">
       <b>Reset behavior:</b> la streak si azzera sia con class 0 (pioggia ≥ Rain_effective_mm)
       sia con class 1 (giorno neutro). Dopo ogni reset riparte da zero: servono di nuovo
@@ -715,22 +776,12 @@ function sectionStreak() {
     ${divider("Incremento α da streak secco")}
     ${slider("sd1","Δα giorno classe 2",0,0.030,0.001,"streak","delta_alpha_dry_class2","","Incremento giornaliero di α in streak classe 2","streak.delta_alpha_dry_class2")}
     ${slider("sd2","Δα giorno classe 3",0,0.050,0.001,"streak","delta_alpha_dry_class3","","Incremento giornaliero di α in streak classe 3","streak.delta_alpha_dry_class3")}
-    ${divider("Δα da night score [0–3]")}
-    ${[0,1,2,3].map(i => `
-    <div class="slider-field">
-      <div class="slider-header">
-        <span class="slider-label">Night score ${i}${i>0?_iBadge('streak.delta_alpha_night_'+i):''}</span>
-        <div class="slider-value-wrapper">
-          <span class="slider-value" id="sv-ns${i}">${dn[i]}</span>
-          <input type="number" class="slider-number" id="sn-ns${i}" value="${dn[i]}" step="0.001" min="0" max="0.030"
-            onchange="config.streak.delta_alpha_night[${i}]=parseFloat(this.value);document.getElementById('sv-ns${i}').textContent=this.value;document.getElementById('sl-ns${i}').value=this.value;refresh()">
-        </div>
-      </div>
-      <input type="range" id="sl-ns${i}" min="0" max="0.030" step="0.001" value="${dn[i]}"
-        oninput="document.getElementById('sn-ns${i}').value=this.value;document.getElementById('sv-ns${i}').textContent=this.value;config.streak.delta_alpha_night[${i}]=parseFloat(this.value);refresh()">
-    </div>`).join('')}
     ${divider("Disagravamento")}
-    ${slider("sr1","Δα classe 0 (relief)",-0.05,0,0.001,"streak","delta_alpha_relief","","Negativo: riduce α nei giorni di disagravamento","streak.delta_alpha_relief")}`;
+    ${slider("sr1","Δα classe 0 (relief)",-0.05,0,0.001,"streak","delta_alpha_relief","","Negativo: riduce α nei giorni di disagravamento","streak.delta_alpha_relief")}
+    <div class="info-box" style="margin-top:14px;background:#f0fdf4;border-color:#16a34a;color:#166534;font-size:11px;padding:8px 12px">
+      ℹ️ I contributi <b>Δα_night per livello NS=1/2/3</b> (precedentemente qui) sono ora raggruppati nel tab <b>NIGHT SCORE</b> insieme alle soglie T corrispondenti.
+      Valori attuali: NS=1 → Δα=${dn[1]}, NS=2 → Δα=${dn[2]}, NS=3 → Δα=${dn[3]}.
+    </div>`;
 }
 
 function sectionAlpha() {
@@ -757,6 +808,11 @@ function sectionAlpha() {
     </div>`).join('');
 
   return `
+    <div class="info-box" style="background:#ede9fe;border-color:#7c3aed;color:#5b21b6;margin-bottom:18px">
+      <b style="color:#7c3aed">Livello 3 — Memoria cumulativa (baseline α)</b><br>
+      Definisce la baseline mensile <b>alpha_ref</b> per ogni mese (12 valori, uno per mese) e il tetto strutturale <b>alpha_max_global</b>.
+      Pavimento dinamico di α: ogni mese ha la sua propria α_ref come pavimento (non una soglia globale fissa).
+    </div>
     ${divider("Alpha mensile regionale")}
     <div class="info-box">
       Il pavimento dinamico di α è <span class="hl">α_floor = min(alpha_ref)</span>.<br>
@@ -772,7 +828,8 @@ function sectionAlpha() {
     </div>
     ${warns.length ? `<div class="warn-box"><div class="warn-title">⚠ SALTI MENSILI > 0.15</div>${warns.map(w=>`<div class="warn-item">· ${w}</div>`).join('')}</div>` : ''}
     ${divider("Cap globale")}
-    ${slider("am1","Alpha max globale",0.80,0.99,0.01,"alpha","alpha_max_global","","Nessun α può superare questo valore","alpha.alpha_max_global")}`;
+    ${slider("am1","Alpha max globale",0.80,0.99,0.01,"alpha","alpha_max_global","","Nessun α può superare questo valore. Default 0.95 = decadimento HDWc ~5%/giorno con HDW_eff=0. Sotto questo valore: decadimento più rapido.","alpha.alpha_max_global")}
+    ${_renderImportAlphaCard()}`;
 }
 
 function sectionWashout() {
@@ -810,18 +867,6 @@ function sectionWashout() {
     ${legend}` : ''}`;
 }
 
-function sectionWind() {
-  const w = config.wind;
-  const sum = (w.w_mean_weight + w.w_gust_weight).toFixed(2);
-  return `
-    ${divider("Composizione vento efficace")}
-    <div class="formula-box">
-      W_eff = <span style="color: #E05A1E;font-weight:500">${w.w_mean_weight}</span> · Wind_mean &nbsp;+&nbsp; <span style="color: #E05A1E;font-weight:500">${w.w_gust_weight}</span> · Gust_max
-    </div>
-    ${slider("wm","Peso vento medio",0,1,0.05,"wind","w_mean_weight","","","wind.w_mean_weight")}
-    ${slider("wg","Peso raffica",0,1,0.05,"wind","w_gust_weight","","","wind.w_gust_weight")}
-    ${Math.abs(sum - 1) > 0.01 ? `<div class="wind-warning">⚠ La somma dei pesi è ${sum} — dovrebbe essere 1.00</div>` : ''}`;
-}
 
 let soglieActiveTab = "hdwc";
 
@@ -916,7 +961,7 @@ function sectionSoglie() {
   );
 }
 
-// ─── SECTION: IMPORT α ERA5 ────────────────────────────────────────────────────
+// ─── IMPORT α ERA5 (sub-section di ALPHA MENSILE) ─────────────────────────────
 let _importedCalib = null;
 
 // Named handler — avoids quote-escaping hell inside template literals
@@ -930,18 +975,20 @@ function _loadAlphaCalibFile(input) {
       if (!d.alpha_ref || !Array.isArray(d.alpha_ref) || d.alpha_ref.length !== 12)
         throw new Error('alpha_ref mancante o non ha 12 valori');
       _importedCalib = d;
-      refresh();
+      // Auto-switch to ALPHA MENSILE tab where the import card now lives
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-      const btn = document.querySelector('.nav-item[data-section="importalpha"]');
-      if (btn) { btn.classList.add('active'); activeSection = 'importalpha'; refresh(); }
+      const btn = document.querySelector('.nav-item[data-section="alpha"]');
+      if (btn) { btn.classList.add('active'); activeSection = 'alpha'; }
+      refresh();
     } catch(err) { alert('Invalid file: ' + err.message); }
   };
   r.readAsText(f);
   input.value = '';
 }
 
-function sectionImportAlpha() {
-  const MONTHS = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+// Renderer del pannello import α (chiamato inline da sectionAlpha)
+function _renderImportAlphaCard() {
+  const MONTHS_LBL = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const hasData = _importedCalib != null;
   const meta = _importedCalib?.meta || {};
 
@@ -950,8 +997,8 @@ function sectionImportAlpha() {
   if (hasData) {
     const nA = _importedCalib.alpha_ref;
     const oA = config.alpha.alpha_ref;
-    for (let i=0;i<11;i++) { const d=Math.abs(nA[i+1]-nA[i]); if(d>0.15) warns.push(MONTHS[i]+'→'+MONTHS[i+1]+': Δ='+d.toFixed(2)); }
-    for (let i=3;i<8;i++) { if(nA[i+1]<nA[i]) warns.push('Inversione '+MONTHS[i]+'→'+MONTHS[i+1]); }
+    for (let i=0;i<11;i++) { const d=Math.abs(nA[i+1]-nA[i]); if(d>0.15) warns.push(MONTHS_LBL[i]+'→'+MONTHS_LBL[i+1]+': Δ='+d.toFixed(2)); }
+    for (let i=3;i<8;i++) { if(nA[i+1]<nA[i]) warns.push('Inversione '+MONTHS_LBL[i]+'→'+MONTHS_LBL[i+1]); }
     const rows = nA.map((na,m) => {
       const oa=oA[m]; const d=na-oa;
       const ds=d===0?'=':(d>0?'+':'')+d.toFixed(2);
@@ -960,7 +1007,7 @@ function sectionImportAlpha() {
       const sc=cal.source==='365d'?'src-365d':cal.source==='blended'?'src-blended':'src-global';
       const sl=cal.source==='365d'?'●365d':cal.source==='blended'?'◑mix':'?glb';
       return `<div class="import-diff-row">
-        <span style="color:#555">${MONTHS[m]}</span>
+        <span style="color:#555">${MONTHS_LBL[m]}</span>
         <span><b style="font-family:'DM Mono',monospace">${oa.toFixed(2)}</b>→<b style="font-family:'DM Mono',monospace;color:#E05A1E">${na.toFixed(2)}</b></span>
         <span class="${dc}" style="font-family:'DM Mono',monospace">${ds}</span>
         <span class="src-badge ${sc}">${sl}</span>
@@ -981,10 +1028,10 @@ function sectionImportAlpha() {
     <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="_applyImportedAlpha()">✓ Applica α ERA5 calibrati</button>`;
   }
 
-  return `<div class="info-box">Import the JSON <b>alpha_calib_*.json</b> esportato dal dashboard FireMeteo
-    (bottone <b>Export α calibrati</b> in the α Sensitivity panel after loading ERA5 365d).<br>
-    Aggiorna automaticamente <b>alpha_ref</b> with locally calibrated values. Ideal for calibrating presets for <b>ecoregioni specifiche</b>.</div>
-  ${divider('Carica file calibrazione ERA5')}
+  return `${divider('Import α calibrati ERA5 (opzionale)')}
+  <div class="info-box" style="background:#eff6ff;border-color:#3b82f6;color:#1e40af;font-size:12px;margin-bottom:14px">
+    📡 Importa il JSON <b>alpha_calib_*.json</b> esportato dal dashboard FireMeteo (bottone <b>Export α calibrati</b> nel pannello α Sensitivity dopo aver caricato ERA5 365d). Aggiorna automaticamente <b>alpha_ref</b> con valori calibrati localmente. Ideale per ecoregioni specifiche.
+  </div>
   <div style="margin-bottom:14px">
     <input type="file" id="alphaCalibFileInput" accept=".json" style="display:none"
       onchange="_loadAlphaCalibFile(this)">
@@ -993,8 +1040,9 @@ function sectionImportAlpha() {
       📡 Scegli alpha_calib_*.json
     </button>
   </div>
-  ${hasData?diffHTML:'<div class="info-box" style="color:#777;text-align:center">No file loaded.</div>'}`;
+  ${hasData?diffHTML:`<div class="info-box" style="color:#777;text-align:center;font-size:11px">Nessun file caricato. L'import è opzionale: i valori manuali qui sopra restano pienamente validi.</div>`}`;
 }
+
 
 function _applyImportedAlpha() {
   if(!_importedCalib)return;
@@ -1008,17 +1056,33 @@ function _applyImportedAlpha() {
   if(btn){btn.classList.add('active');activeSection='alpha';refresh();}
 }
 
-// ─── SECTION: HDW_EFF PARAMS ──────────────────────────────────────────────────
+// ─── SECTION: EVENTO ATMOSFERICO (L1) — fonde HdwEff + Wind ───────────────────
 function sectionHdwEff() {
   const p = config.hdw_eff_params;
+  const w = config.wind;
+  const sumW = (w.w_mean_weight + w.w_gust_weight).toFixed(2);
   return `
-    <div class="fclass-box">
+    <div class="info-box" style="background:#fef3e7;border-color:#ea580c;color:#9a3412;margin-bottom:18px">
+      <b style="color:#ea580c">Livello 1 — Evento atmosferico giornaliero</b><br>
+      Parametri che governano <b>HDW_eff giornaliero</b> (pericolosità istantanea dell'atmosfera, indipendente dalla storia).
+      Sezione composta da: vento efficace W_eff · bonus F_class · finestra termica diurna.
+    </div>
+
+    ${divider('Composizione vento efficace W_eff')}
+    <div class="formula-box">
+      W_eff = <span style="color: #E05A1E;font-weight:500">${w.w_mean_weight}</span> · Wind_mean &nbsp;+&nbsp; <span style="color: #E05A1E;font-weight:500">${w.w_gust_weight}</span> · Gust_max
+    </div>
+    ${slider("wm","Peso vento medio",0,1,0.05,"wind","w_mean_weight","","Default 0.7. Aumentare in regimi a vento sostenuto continuo (Atlantico).","wind.w_mean_weight")}
+    ${slider("wg","Peso raffica",0,1,0.05,"wind","w_gust_weight","","Default 0.3. Aumentare in regimi a vento turbolento (Maestrale, Santa Ana). Vincolo: somma con w_mean_weight = 1.00.","wind.w_gust_weight")}
+    ${Math.abs(sumW - 1) > 0.01 ? `<div class="wind-warning">⚠ La somma dei pesi è ${sumW} — dovrebbe essere 1.00</div>` : ''}
+
+    <div class="fclass-box" style="margin-top:18px">
       <b>HDW_eff = HDW_raw + k · F_class</b><br>
-      Dove <code>F_class ∈ [0,1]</code> is the HDW_raw position between class2/class3 thresholds.<br>
-      <code>k</code> depends on day's Tmax (base / mid / high).<br>
+      Dove <code>F_class ∈ [0,1]</code> è la posizione di HDW_raw tra le soglie class2/class3.<br>
+      <code>k</code> dipende dal Tmax giornaliero (base / mid / high).<br>
       Se Δrel = (HDW_raw_oggi − HDW_eff_ieri)/HDW_eff_ieri &gt; threshold, F_class viene amplificato di (1 + Δrel).
     </div>
-    ${divider('Costanti k per intensità')}
+    ${divider('Costanti k per intensità (bonus F_class)')}
 ` +
     slider('ke1','k base (Tmax < class2)',0,50,1,'hdw_eff_params','k_base','',
       'Amplificatore quando Tmax sotto soglia class2','hdw_eff_params.k_base') +
@@ -1026,7 +1090,7 @@ function sectionHdwEff() {
       'Amplificatore a temperatura moderata','hdw_eff_params.k_mid') +
     slider('ke3','k high (Tmax ≥ class3)',0,80,1,'hdw_eff_params','k_high','',
       'Amplificatore a temperatura elevata','hdw_eff_params.k_high') +
-    divider('Soglia variazione relativa') +
+    divider('Soglia variazione relativa Δrel (asimmetrica v1.2)') +
     slider('ke4','Δrel threshold',0,0.50,0.01,'hdw_eff_params','delta_rel_threshold','',
       'Se (HDW_raw_oggi − HDW_eff_ieri)/HDW_eff_ieri supera questa soglia, F_class viene amplificato. Attenzione: numeratore è il grezzo di oggi (pre-bonus), denominatore è il valore amplificato di ieri.','hdw_eff_params.delta_rel_threshold') +
     divider('Finestra termica diurna (max HDW_eff giornaliero)') +
@@ -1037,7 +1101,7 @@ function sectionHdwEff() {
     <div class="info-box" style="margin-top:12px">
       Comportamento chiave: sotto <span class="hl">HDW_eff_class2</span> il bonus è zero —
       i giorni normali non vengono toccati.<br>
-      Scegli k <b>moderati</b> for humid climates, <b>alti</b> per climi secchi con picchi esplosivi.
+      Scegli k <b>moderati</b> per climi umidi, <b>alti</b> per climi secchi con picchi esplosivi.
     </div>`;
 }
 
@@ -1518,11 +1582,10 @@ function sectionFoehn() {
 // ─── RENDER ───────────────────────────────────────────────────────────────────
 function renderSection() {
   const map = {
-    meta: sectionMeta, vegetation: sectionVegetation,
+    meta: sectionMeta,
     classification: sectionClassification, night: sectionNight,
     streak: sectionStreak, alpha: sectionAlpha,
-    washout: sectionWashout, wind: sectionWind,
-    importalpha: sectionImportAlpha,
+    washout: sectionWashout,
     hdweff: sectionHdwEff, foehn: sectionFoehn,
     soglie: sectionSoglie
   };
