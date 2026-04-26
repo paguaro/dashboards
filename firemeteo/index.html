@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FireMeteo v52 · ICNF + Open-Meteo</title>
+<title>FireMeteo v53 · ICNF + Open-Meteo</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -3677,7 +3677,14 @@ const HDW_V2 = {
   // hard floor di α. In realtà calcAlpha_v2 (§10.7) usa un floor DINAMICO:
   // floor = 0 se dc=0 (reset pioggia), altrimenti = alphaRef(mese). Il campo
   // alpha_min era codice morto mai letto dal clamp operativo. Rimosso in v50.5.
-  delta_dry2:   0.005,  delta_dry3:   0.010,
+  // v53 (26/4/26) — boost streak rinforzato: default dd2/dd3 raddoppiati + log divisor=2
+  // (era 0.005/0.010 e /10 hardcoded). Razionale: con αRef estivi alti (≥0.80) il sistema
+  // streak era quasi inerte (asintoto α streak-only ~0.864). Nuovi default rendono il boost
+  // operativamente visibile su preset come Sardegna 6.x. Preset esistenti che dichiarano
+  // delta_alpha_dry_class2/3 nel JSON sovrascrivono questi default (override semantica).
+  // Il divisor è ora parametrico (cfg.streak.log_divisor) con default 2.
+  delta_dry2:   0.010,  delta_dry3:   0.020,
+  streak_log_divisor: 2,
   delta_n1:     0.005,  delta_n2:     0.010,  delta_n3:     0.015,
   delta_rel:   -0.010,
   // Extended params — overridable by engine config JSON
@@ -3726,7 +3733,8 @@ let _activeEngineConfig = null; // full JSON from config builder when loaded
 // Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
 // detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
 // which is critical for night-window NS calculations outside Europe/Lisbon.
-console.log('%c[FireMeteo v52 — fix HDW_P75_MENSILE→getActiveSoglie() in updatePeakDay (P75 dinamico per preset/custom JSON) — 24/4/26]%c gate c2:OR c3:AND, warmup continuity, thermal_window→hdw_eff_params (backward-compat)', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+console.log('%c[FireMeteo v53 — boost streak rinforzato: dd2/dd3 raddoppiati (0.010/0.020) + log_divisor parametrico (default 2, ex /10) — 26/4/26]%c override via cfg.streak.{delta_alpha_dry_class2/3,log_divisor}', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+console.log(`%c[FireMeteo v53] Defaults streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} (preset JSON sovrascrive)`, 'color:#facc15');
 function _getTimezone() {
   const tz = _activeEngineConfig?.meta?.timezone;
   if (tz && typeof tz === 'string' && tz.length > 0) return tz;
@@ -3754,6 +3762,8 @@ function _applyEngineConfig(cfg) {
   if (st.streak_activation_days   != null) HDW_V2.streak_days  = st.streak_activation_days;
   if (st.delta_alpha_dry_class2   != null) HDW_V2.delta_dry2   = st.delta_alpha_dry_class2;
   if (st.delta_alpha_dry_class3   != null) HDW_V2.delta_dry3   = st.delta_alpha_dry_class3;
+  // v53: log_divisor del boost long-streak (ex hardcoded /10, ora parametrico, default 2)
+  if (st.log_divisor              != null) HDW_V2.streak_log_divisor = st.log_divisor;
   if (Array.isArray(st.delta_alpha_night) && st.delta_alpha_night.length >= 4) {
     HDW_V2.delta_n1 = st.delta_alpha_night[1];
     HDW_V2.delta_n2 = st.delta_alpha_night[2];
@@ -3839,6 +3849,9 @@ function _applyEngineConfig(cfg) {
   } else {
     HDW_V2.foehn_winds = null;
   }
+  // v53 diagnostic: log effettivo streak parameters dopo applicazione preset
+  console.log(`%c[FireMeteo v53] Engine="${cfg?.meta?.preset_name||'?'}" → streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} streak_days=${HDW_V2.streak_days} severe_stress=${HDW_V2.days_to_severe_stress}gg`,
+              'color:#a78bfa');
   // Sync rose overlay button visibility after engine change
   setTimeout(_syncRoseOverlayBtn, 0);
 }
@@ -4204,11 +4217,14 @@ function calcAlpha_v2(alphaRef, dc, ns, streak, foehDelta=0) {
   let da = 0;
   if (streak >= HDW_V2.streak_days) { if (dc === 2) da = HDW_V2.delta_dry2; else if (dc === 3) da = HDW_V2.delta_dry3; }
   // Long-streak boost (Δα decrescente oltre days_to_severe_stress)
-  // Δα_long = delta_dry3 × ln(1 + extra) / 10   extra = streak - soglia
+  // v53: divisor parametrico (HDW_V2.streak_log_divisor, default 2; ex hardcoded /10).
+  // Razionale: con divisor=10 il boost saturava precocemente su αRef alti. Con divisor=2
+  // (αRef=0.85, streak=30 dc=2): α 0.858→0.869, asintoto 0.864→0.901.
   let da_long = 0;
   if ((dc === 2 || dc === 3) && streak > HDW_V2.days_to_severe_stress) {
     const extra = streak - HDW_V2.days_to_severe_stress;
-    da_long = HDW_V2.delta_dry3 * Math.log(1 + extra) / 10;
+    const _div  = HDW_V2.streak_log_divisor || 2;
+    da_long = HDW_V2.delta_dry3 * Math.log(1 + extra) / _div;
   }
   const dn = [0, HDW_V2.delta_n1, HDW_V2.delta_n2, HDW_V2.delta_n3][ns] || 0;
   const dr = dc === 0 ? HDW_V2.delta_rel : 0;
