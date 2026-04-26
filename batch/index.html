@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HDWc Batch Analysis v36 · Portogallo</title>
+<title>HDWc Batch Analysis v37 · Portogallo</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -418,13 +418,16 @@ function hdw(tmax,rh,wind,gust) {
   const P=currentEngine.p;
   // v35 BUG-WIND diagnostic: log una volta per ogni cambio engine i pesi attivi
   // v36: include anche thermal_window status (letto ma NON applicato)
+  // v37: include anche streak parameters (dd2, dd3, log_divisor)
   if (typeof window !== 'undefined' && window._hdw_last_engine !== currentEngine?.name) {
     const _wm = P.wm ?? 0.7, _wg = P.wg ?? 0.3;
-    console.log(`%c[BATCH v36] Engine="${currentEngine?.name}" → wind weights wm=${_wm} wg=${_wg}` +
+    console.log(`%c[BATCH v37] Engine="${currentEngine?.name}" → wind weights wm=${_wm} wg=${_wg}` +
                 (P.wm == null ? ' (DEFAULT — preset non aveva cfg.wind)' : ' (FROM PRESET)'),
                 'color:#facc15;font-weight:bold');
+    console.log(`%c[BATCH v37] Engine="${currentEngine?.name}" → streak: dd2=${P.dd2} dd3=${P.dd3} log_divisor=${P.long_streak_boost_scale ?? 2} streak_days=${P.streak} severe_stress=${P.days_to_severe_stress ?? 7}gg`,
+                'color:#a78bfa');
     if (P.tw_start != null && P.tw_end != null) {
-      console.log(`%c[BATCH v36] thermal_window=${P.tw_start}-${P.tw_end} (READ but NOT APPLIED — batch usa daily aggregates, vedi commento in hdw())`,
+      console.log(`%c[BATCH v37] thermal_window=${P.tw_start}-${P.tw_end} (READ but NOT APPLIED — batch usa daily aggregates, vedi commento in hdw())`,
                   'color:#fb923c');
     }
     window._hdw_last_engine = currentEngine?.name;
@@ -522,9 +525,11 @@ function alpha(aRef,d,n,sk,foehDelta=0) {
   let da_long=0;
   if ((d===2||d===3) && sk>( P.days_to_severe_stress??7)) {
     const extra=sk-(P.days_to_severe_stress??7);
-    // v34 [CALIB] B-5: attenuatore del boost long-streak (default 10 = 10% intensità di dd3).
-    // Il log(1+extra) cresce lentamente: dopo 14gg di streak extra → log=2.7 → boost = 0.27·dd3.
-    const long_scale = P.long_streak_boost_scale ?? 10;
+    // v37 (26/4/26) — long_streak_boost_scale default 10→2: con divisor=10 il boost saturava
+    // precocemente su αRef estivi alti (≥0.80, Sardegna/Spain/Greece). Con divisor=2 il boost
+    // resta significativo per streak prolungati. Override via cfg.streak.log_divisor.
+    // Il log(1+extra) cresce lentamente: dopo 14gg di streak extra → log=2.7 → boost = 1.35·dd3 (con /2).
+    const long_scale = P.long_streak_boost_scale ?? 2;
     da_long = P.dd3 * Math.log(1+extra) / long_scale;
   }
   const raw=aRef+(P.dn[n]||0)+(d===0?P.drel:0)+da+da_long+foehDelta;
@@ -631,7 +636,7 @@ function runEngine(days) {
     const P_=currentEngine.p;
     const da_dry   = sk>=P_.streak ? (d_s===2?P_.dd2 : d_s===3?P_.dd3 : 0) : 0;
     const da_long  = (d_s===2||d_s===3) && sk>(P_.days_to_severe_stress??7)
-                     ? P_.dd3*Math.log(1+sk-(P_.days_to_severe_stress??7))/10 : 0;
+                     ? P_.dd3*Math.log(1+sk-(P_.days_to_severe_stress??7))/(P_.long_streak_boost_scale??2) : 0;
     const da_night = P_.dn[n] || 0;
     const da_relief= d_s===0 ? P_.drel : 0;
     // ── Componenti Δ_fclass per tooltip (v34.4) ─────────────────────────────
@@ -718,8 +723,11 @@ document.getElementById('packageInput').addEventListener('change', e => {
             mc2: (cl.mode_class2==='AND'||cl.mode_class2==='OR') ? cl.mode_class2 : 'OR',
             mc3: (cl.mode_class3==='AND'||cl.mode_class3==='OR') ? cl.mode_class3 : 'AND',
             streak: st.streak_activation_days ?? 4,
-            dd2: st.delta_alpha_dry_class2 ?? 0.004,
-            dd3: st.delta_alpha_dry_class3 ?? 0.009,
+            // v37: nuovi default streak (era 0.004/0.009) — preset esistenti che dichiarano dd2/dd3 sovrascrivono
+            dd2: st.delta_alpha_dry_class2 ?? 0.010,
+            dd3: st.delta_alpha_dry_class3 ?? 0.020,
+            // v37: log_divisor parametrico (default 2, era /10 hardcoded)
+            long_streak_boost_scale: st.log_divisor ?? 2,
             dn:  st.delta_alpha_night ?? [0,0.004,0.008,0.012],
             drel: st.delta_alpha_relief ?? -0.008,
             amax: al.alpha_max_global ?? 0.95,
@@ -836,8 +844,11 @@ document.getElementById('configInput').addEventListener('change', e => {
           mc2: (cl.mode_class2==='AND'||cl.mode_class2==='OR') ? cl.mode_class2 : 'OR',
           mc3: (cl.mode_class3==='AND'||cl.mode_class3==='OR') ? cl.mode_class3 : 'AND',
           streak: st.streak_activation_days ?? 4,
-          dd2: st.delta_alpha_dry_class2 ?? 0.004,
-          dd3: st.delta_alpha_dry_class3 ?? 0.009,
+          // v37: nuovi default streak (era 0.004/0.009) — preset esistenti che dichiarano dd2/dd3 sovrascrivono
+          dd2: st.delta_alpha_dry_class2 ?? 0.010,
+          dd3: st.delta_alpha_dry_class3 ?? 0.020,
+          // v37: log_divisor parametrico (default 2, era /10 hardcoded)
+          long_streak_boost_scale: st.log_divisor ?? 2,
           dn: st.delta_alpha_night ?? [0,0.004,0.008,0.012],
           drel: st.delta_alpha_relief ?? -0.008,
           amax: al.alpha_max_global ?? 0.95,
@@ -3259,8 +3270,11 @@ function _registerMonEngine(cfg, fallbackName) {
       mc2: (cl.mode_class2==='AND'||cl.mode_class2==='OR') ? cl.mode_class2 : 'OR',
       mc3: (cl.mode_class3==='AND'||cl.mode_class3==='OR') ? cl.mode_class3 : 'AND',
       streak: st.streak_activation_days ?? 4,
-      dd2: st.delta_alpha_dry_class2 ?? 0.004,
-      dd3: st.delta_alpha_dry_class3 ?? 0.009,
+      // v37: nuovi default streak (era 0.004/0.009) — preset esistenti che dichiarano dd2/dd3 sovrascrivono
+      dd2: st.delta_alpha_dry_class2 ?? 0.010,
+      dd3: st.delta_alpha_dry_class3 ?? 0.020,
+      // v37: log_divisor parametrico (default 2, era /10 hardcoded)
+      long_streak_boost_scale: st.log_divisor ?? 2,
       dn:  st.delta_alpha_night ?? [0, 0.004, 0.008, 0.012],
       drel: st.delta_alpha_relief ?? -0.008,
       amax: al.alpha_max_global ?? 0.95,
