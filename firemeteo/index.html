@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FireMeteo v53 · ICNF + Open-Meteo</title>
+<title>FireMeteo v54 · ICNF + Open-Meteo</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -3733,8 +3733,8 @@ let _activeEngineConfig = null; // full JSON from config builder when loaded
 // Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
 // detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
 // which is critical for night-window NS calculations outside Europe/Lisbon.
-console.log('%c[FireMeteo v53 — boost streak rinforzato: dd2/dd3 raddoppiati (0.010/0.020) + log_divisor parametrico (default 2, ex /10) — 26/4/26]%c override via cfg.streak.{delta_alpha_dry_class2/3,log_divisor}', 'color:#4ade80;font-weight:bold', 'color:#aaa');
-console.log(`%c[FireMeteo v53] Defaults streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} (preset JSON sovrascrive)`, 'color:#facc15');
+console.log('%c[FireMeteo v54 — wind shift classification: triangoli switch tipizzati T1-T4 (drift/shift/inversione/reversal) usando wind_eff con pesi preset attivo — 26/4/26]%c override soglie in classifyWindShift()', 'color:#4ade80;font-weight:bold', 'color:#aaa');
+console.log(`%c[FireMeteo v54] Defaults streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} (preset JSON sovrascrive)`, 'color:#facc15');
 function _getTimezone() {
   const tz = _activeEngineConfig?.meta?.timezone;
   if (tz && typeof tz === 'string' && tz.length > 0) return tz;
@@ -3850,7 +3850,7 @@ function _applyEngineConfig(cfg) {
     HDW_V2.foehn_winds = null;
   }
   // v53 diagnostic: log effettivo streak parameters dopo applicazione preset
-  console.log(`%c[FireMeteo v53] Engine="${cfg?.meta?.preset_name||'?'}" → streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} streak_days=${HDW_V2.streak_days} severe_stress=${HDW_V2.days_to_severe_stress}gg`,
+  console.log(`%c[FireMeteo v54] Engine="${cfg?.meta?.preset_name||'?'}" → streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} streak_days=${HDW_V2.streak_days} severe_stress=${HDW_V2.days_to_severe_stress}gg`,
               'color:#a78bfa');
   // Sync rose overlay button visibility after engine change
   setTimeout(_syncRoseOverlayBtn, 0);
@@ -7970,6 +7970,39 @@ function detectWindShifts(dates, wnd, gst, dirs, tmx) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Wind shift classification (v54) ─────────────────────────────────────────
+// Classifica gli switch flaggati da detectWindShifts in 4 tipi operativi
+// usando wind_eff (con pesi vento del preset attivo) + gust_factor + dDir.
+// Tipo 1 = drift morbido (rumore di fondo, ~80% switch in regime stazionario)
+// Tipo 2 = shift netto (rotazione media + intensificazione)
+// Tipo 3 = inversione (rotazione forte + vento sostenuto)
+// Tipo 4 = reversal estremo (frontale + downburst)
+//
+// Riusa HDW_V2.w_mean / HDW_V2.w_gust del preset → la classificazione si
+// auto-adatta al regime regionale (es. ichnusa 0.05/0.95 vs default 0.7/0.3).
+function classifyWindShift(s, wmean, wgust) {
+  const W = parseFloat(s.speed) || 0;
+  const G = parseFloat(s.gust)  || W;
+  const wind_eff = wmean * W + wgust * Math.max(G, W);
+  const gf = G / Math.max(W, 0.5);
+  const dDir  = s.dDir || 0;
+  const dWind = parseFloat(s.dWind) || 0;
+
+  if (dDir >= 120 && wind_eff >= 40 && gf >= 3.0)              return 4;
+  if (dDir >=  90 && wind_eff >= 30)                           return 3;
+  if (dDir >=  60 && wind_eff >= 20)                           return 2;
+  if (dDir >=  45 && dWind >= 15 && wind_eff >= 25)            return 2;
+  return 1;
+}
+
+const SHIFT_STYLE = {
+  1: { color: '#fbbf24', size:  8, outline: null,    outlineW: 0,   label: 'Drift morbido'    },
+  2: { color: '#fb923c', size: 11, outline: '#7c2d12', outlineW: 1.5, label: 'Shift netto'      },
+  3: { color: '#dc2626', size: 14, outline: '#7f1d1d', outlineW: 1.5, label: 'Inversione'       },
+  4: { color: '#7c3aed', size: 17, outline: '#000000', outlineW: 2,   label: 'Reversal estremo' },
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 // State for prec barbs redraw on relayout
 let _precBarbData = null;
 
@@ -8024,7 +8057,7 @@ function drawPrec(meteo,todayIdx){
     ...(hasGust?[{x:pd,y:gst,name:'Raffica km/h',type:'scatter',mode:'lines',
      line:{color:'#15803d',width:1.2,dash:'dot'},yaxis:'y3'}]:[]),
   ];
-  // ── Wind-shift markers ───────────────────────────────────────────────
+  // ── Wind-shift markers (v54: classificati T1-T4) ─────────────────────────
   if (hasWind) {
     const _dirs = _kp
       ? (d.winddirection_10m_dominant||[]).filter((_,i)=>_kp[i])
@@ -8034,28 +8067,51 @@ function drawPrec(meteo,todayIdx){
       : (d.temperature_2m_max||[]).slice(0, pd.length);
     const shifts = detectWindShifts(pd, wnd, gst, _dirs, _tmx);
     if (shifts.length) {
-      const shiftY = shifts.map(s => (s.gust != null ? s.gust : s.speed) + 4);
-      const shiftText = shifts.map(s => {
-        const parts = [];
-        // Direction: from→to with signed rotation and veering/backing label
-        if (s.hasDir && s.dDir != null) {
-          const sign = s.dDirSigned != null ? (s.dDirSigned > 0 ? '+' : '') : '';
-          const fromTo = (s.fromDir && s.toDir) ? ' (' + s.fromDir + '\u2192' + s.toDir + ')' : '';
-          const rot = s.rotation ? ' ' + s.rotation : '';
-          parts.push('\u0394dir ' + sign + s.dDirSigned + '\u00b0' + rot + fromTo);
-        }
-        if (s.dWind != null) parts.push('\u0394wind ' + (s.dWind > 0 ? '+' : '') + s.dWind + ' km/h');
-        if (s.dGust != null) parts.push('\u0394gust ' + (s.dGust > 0 ? '+' : '') + s.dGust + ' km/h');
-        if (s.dTemp != null) parts.push('\u0394T ' + (s.dTemp > 0 ? '+' : '') + s.dTemp + '\u00b0C');
-        return '\u26a1 Wind shift<br>' + parts.join('<br>');
+      // v54: classifica ogni shift e raggruppa in 4 trace tipizzati
+      const wmean = HDW_V2?.w_mean ?? 0.7;
+      const wgust = HDW_V2?.w_gust ?? 0.3;
+      const shiftsByType = {1:[], 2:[], 3:[], 4:[]};
+      shifts.forEach(s => {
+        const t = classifyWindShift(s, wmean, wgust);
+        shiftsByType[t].push(s);
       });
-      traces.push({
-        x: shifts.map(s=>s.date), y: shiftY,
-        name: 'Wind shift', type: 'scatter', mode: 'markers',
-        marker: { symbol:'triangle-up', size:11, color:'#dc2626', line:{color:'#7f1d1d',width:1.5} },
-        yaxis: 'y3',
-        hovertemplate: shiftText.map(t=>t+'<extra></extra>'),
-        showlegend: true,
+
+      [1,2,3,4].forEach(t => {
+        const items = shiftsByType[t];
+        if (!items.length) return;
+        const style = SHIFT_STYLE[t];
+        traces.push({
+          x: items.map(s => s.date),
+          y: items.map(s => (s.gust != null ? s.gust : s.speed) + 4),
+          name: 'Shift T' + t + ' ' + style.label,
+          type: 'scatter', mode: 'markers',
+          marker: {
+            symbol: 'triangle-up',
+            size: style.size,
+            color: style.color,
+            line: style.outline ? { color: style.outline, width: style.outlineW } : { width: 0 }
+          },
+          yaxis: 'y3',
+          hovertemplate: items.map(s => {
+            const parts = ['\u26a1 Wind shift Tipo ' + t + ' \u2014 ' + style.label.toUpperCase()];
+            if (s.hasDir && s.dDir != null) {
+              const sign = s.dDirSigned != null ? (s.dDirSigned > 0 ? '+' : '') : '';
+              const fromTo = (s.fromDir && s.toDir) ? ' (' + s.fromDir + '\u2192' + s.toDir + ')' : '';
+              const rot = s.rotation ? ' ' + s.rotation : '';
+              parts.push('\u0394dir ' + sign + s.dDirSigned + '\u00b0' + rot + fromTo);
+            }
+            if (s.dWind != null) parts.push('\u0394wind ' + (s.dWind > 0 ? '+' : '') + s.dWind + ' km/h');
+            if (s.dGust != null) parts.push('\u0394gust ' + (s.dGust > 0 ? '+' : '') + s.dGust + ' km/h');
+            if (s.dTemp != null) parts.push('\u0394T ' + (s.dTemp > 0 ? '+' : '') + s.dTemp + '\u00b0C');
+            const W = parseFloat(s.speed) || 0;
+            const G = parseFloat(s.gust)  || W;
+            const we = (wmean * W + wgust * Math.max(G, W)).toFixed(1);
+            const gf = (G / Math.max(W, 0.5)).toFixed(1);
+            parts.push('wind_eff: ' + we + ' km/h, GF: ' + gf + '\u00d7');
+            return parts.join('<br>') + '<extra></extra>';
+          }),
+          showlegend: true,
+        });
       });
     }
   }
