@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HDWC Engine Config Builder v8.4.1</title>
+<title>HDWC Engine Config Builder v8.4.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -337,7 +337,7 @@
 <div id="header">
   <div>
     <div class="brand-title">HDWC ENGINE CONFIG</div>
-    <div class="brand-sub" id="brand-sub">REGIONAL PRESET BUILDER v8.4.1 · —</div>
+    <div class="brand-sub" id="brand-sub">REGIONAL PRESET BUILDER v8.4.2 · —</div>
   </div>
   <div class="hdr-btns">
     <label class="btn btn-ghost" style="cursor:pointer">
@@ -400,6 +400,11 @@
 </div>
 
 <script>
+// hdwc_builder v8.4.2 — Build: 2026-04-28T13:30:27
+// FIXES:
+//   1. _zmNormalize: deep merge sub-sections (vegetation, streak, alpha, washout, wind, soglie)
+//   2. zmExportPkg/zmExportZone/btn-download: appendChild(a) before click() per Firefox compat
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const MONTHS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
@@ -684,7 +689,7 @@ function sectionClassification() {
       &nbsp;• streak = soglia + 1 (extra=1) → Δα_long ≈ ${config.streak?.delta_alpha_dry_class3 ? (config.streak.delta_alpha_dry_class3 * Math.log(2) / 10).toFixed(4) : '0.0007'} (trascurabile)<br>
       &nbsp;• streak = soglia + 5 → Δα_long ≈ ${config.streak?.delta_alpha_dry_class3 ? (config.streak.delta_alpha_dry_class3 * Math.log(6) / 10).toFixed(4) : '0.0018'}<br>
       &nbsp;• streak = soglia + 13 → Δα_long ≈ ${config.streak?.delta_alpha_dry_class3 ? (config.streak.delta_alpha_dry_class3 * Math.log(14) / 10).toFixed(4) : '0.0026'} (max pratico)<br>
-      È additivo a Δα_dry: in streak lunghe il contributo totale è Δα_dry + Δα_long. Decrescente (ln) per evitare runaway. Nota storica v8.4.1: la vecchia documentazione lo marcava "INERT dal v49 M-8" — errore, è attivo dal v42.
+      È additivo a Δα_dry: in streak lunghe il contributo totale è Δα_dry + Δα_long. Decrescente (ln) per evitare runaway. Nota storica v8.4.2: la vecchia documentazione lo marcava "INERT dal v49 M-8" — errore, è attivo dal v42.
     </div>`;
 }
 
@@ -1646,7 +1651,7 @@ function refresh() {
   // Brand
   let brandSuffix = config.meta.preset_name || '—';
   if (zmSelIdx >= 0 && zmPkg.length > 0) brandSuffix += ` [zona ${zmSelIdx+1}/${zmPkg.length}]`;
-  document.getElementById('brand-sub').textContent = `REGIONAL PRESET BUILDER v8.2 · ${brandSuffix}`;
+  document.getElementById('brand-sub').textContent = `REGIONAL PRESET BUILDER v8.4.2 · ${brandSuffix}`;
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -1693,7 +1698,10 @@ document.getElementById('btn-download').addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = url;
   a.download = `hdwc_preset_${config.meta.region_id || 'custom'}.json`;
+  // v8.4.2 FIX: appendChild prima di click()
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 });
 
@@ -1955,6 +1963,14 @@ function _zmDefaultConfig() {
 function _zmNormalize(raw) {
   const def = _zmDefaultConfig();
   const out = { ...def, ...raw };
+  // v8.4.2 FIX: deep-merge sub-sections — shallow spread top-level era buggy
+  // (zone con sub-config parziale perdevano campi di default → export rotto)
+  out.vegetation = { ...def.vegetation, ...(raw.vegetation||{}) };
+  out.streak = { ...def.streak, ...(raw.streak||{}) };
+  out.alpha = { ...def.alpha, ...(raw.alpha||{}) };
+  out.washout = { ...def.washout, ...(raw.washout||{}) };
+  out.wind = { ...def.wind, ...(raw.wind||{}) };
+  out.soglie = JSON.parse(JSON.stringify({ ...def.soglie, ...(raw.soglie||{}) }));
   const D_SOGLIE = { livelli:['verde','giallo','arancio','rosso','viola'], colori:['#4ade80','#facc15','#fb923c','#ef4444','#7c3aed'], etichette:['Basso','Moderato','Alto','Molto alto','Estremo'] };
   ['hdwc','hdw_eff'].forEach(tab => {
     const src = raw.soglie?.[tab];
@@ -2136,11 +2152,15 @@ function zmExportPkg() {
   if (errsAll.length > 0) {
     if (!confirm('Validazione: ' + errsAll.length + ' avvisi.\n\n' + errsAll.slice(0,5).join('\n') + '\n\nEsportare comunque?')) return;
   }
+  // v8.4.2 FIX: appendChild prima di click() — alcuni browser ignorano click su anchor non nel DOM
   const blob = new Blob([JSON.stringify(zmPkg, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url;
   a.download = 'hdwc_package_' + new Date().toISOString().slice(0,10) + '.json';
-  a.click(); URL.revokeObjectURL(url);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function zmExportZone(idx) {
@@ -2150,11 +2170,15 @@ function zmExportZone(idx) {
   if (errs.length > 0) {
     if (!confirm('Validazione: ' + errs.join('; ') + '\n\nEsportare comunque?')) return;
   }
+  // v8.4.2 FIX: appendChild prima di click()
   const blob = new Blob([JSON.stringify(z, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url;
   a.download = 'hdwc_preset_' + (z.meta?.region_id||'zone') + '.json';
-  a.click(); URL.revokeObjectURL(url);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── ZONE MANAGER RENDER ─────────────────────────────────────────────────────
