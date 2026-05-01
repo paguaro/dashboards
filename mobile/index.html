@@ -446,7 +446,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
         HDW_eff 70/30 gust-weight<br>
         Open-Meteo · ERA5 warmup 21d<br>
         16d forecast · ECMWF-IFS · HDWc climo p75/p95<br>
-        v5.2 mobile
+        v5.3 mobile
       </div>
     </div>
 
@@ -463,6 +463,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 <div id="toast"></div>
 
 <script>
+// mobile_v5.3 — Build: 2026-05-01T15:29:37
+// FIX: drawBarbs angleRad (dir-90)→(dir+90) per allineamento con desktop (firemeteo/portugal/sardegna)
+//      Vecchia formula era convenzione FROM (meteorologica classica)
+//      Nuova formula è convenzione TO (wind vector, allineata con desktop dashboards)
+
 // ── Constants ──────────────────────────────────────────────────────────────
 const METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 const ARCH_URL  = 'https://archive-api.open-meteo.com/v1/archive';
@@ -2092,8 +2097,9 @@ function drawBarbs(svgId, plotDivId, times, ws, wg, wd, _unused) {
     const cy = fixedCY;
     if (isNaN(cx)) continue;
 
-    // Shaft points FROM direction wind comes from (met convention)
-    const angleRad = (dir - 90) * Math.PI / 180;
+    // Wind barbs uniform with desktop dashboards (firemeteo/portugal/sardegna): (dir + 90)
+    // Convention: shaft + ganci point toward direction wind blows TO (wind vector style)
+    const angleRad = (dir + 90) * Math.PI / 180;
     const tx = cx + BARB_LEN * Math.cos(angleRad);
     const ty = cy + BARB_LEN * Math.sin(angleRad);
 
