@@ -960,6 +960,7 @@ tr:hover{background:#f9fafb}
           <div class="chart-header">
             <div class="chart-title" onclick="toggleChart('chart-hdw-content')">🔥 HDW_inst · HDW_eff · HDWc <span id="chart-hdw-title-range" style="font-weight:400;color:var(--dim);font-size:12px"></span></div>
             <div class="chart-controls">
+              <button class="chart-control-btn" id="diag-hdw-toggle" title="Tooltip diagnóstico (componentes α)" onclick="toggleDiagToolTipMode()" style="font-size:13px">🔬</button>
               <button class="chart-control-btn hover-unified btn-hover-toggle" id="hover-hdw" title="Hover: unificado" onclick="toggleHoverMode('chart-hdw')">◈</button>
               <button class="chart-control-btn" title="Adicionar anotação" onclick="toggleAnnotationMode('chart-hdw')">✏</button>
               <button class="chart-control-btn" title="Expandir" onclick="toggleFullscreen('card-hdw','chart-hdw','chart-hdw-content')">⤢</button>
@@ -1360,6 +1361,21 @@ tr:hover{background:#f9fafb}
 <div id="toast"></div>
 
 <script>
+// portugal_v10.1 — Build: 2026-05-04T18:20:56
+// BUGFIX: chart-72temp/72hdw fullscreen barbs ora rispettano il drill range,
+//   non più filtrati a [oggi, oggi+72h]. Stesso fix del firemeteo_v55.1.
+//   In modalità normale (slider 72h) comportamento invariato; in modalità drill
+//   (selezione periodo esteso 7+ giorni) le barbe ora coprono tutto il range visibile.
+
+// portugal_v10 — Build: 2026-05-04T18:00:37
+// Trapianto v55 features da firemeteo_v55:
+//   1. Tooltip diagnostico HDWc (toggle 🔬, PT-PT labels): α breakdown, F_class detail,
+//      dc strict mismatch, α saturated note, Tmax/Tmin/Vento/Rajada/Dir/Chuva inline.
+//   2. calcAlpha_v2 + _fclassBonus accept _components/_comp arg.
+//   3. calcHDWCum_v2 esporta 16 nuovi array diagnostici.
+//   4. window._lastDiag global expose per drawHDW.
+//   5. Persistence localStorage diag_tooltip_mode.
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // portugal_v9 · BUILD 2026-04-28T12:44:59 — Fork da firemeteo_v54_0 con mod Portugal-specific
 // PT_ZONES_PACKAGE 13 zone · ERA5 calibration · PT geo-detection priority
@@ -4241,7 +4257,10 @@ function classifyDay_v2(hdwEff, tmax, rain, ns, rhMean, strict=false) {
   }
   return dc;
 }
-function calcAlpha_v2(alphaRef, dc, ns, streak, foehDelta=0) {
+function calcAlpha_v2(alphaRef, dc, ns, streak, foehDelta=0, _components=null) {
+  // v55: optional _components is an object that, if passed, gets populated with
+  // the breakdown (da_dry, da_long, da_night, da_relief, da_foehn, raw, clamped).
+  // Backward-compatible: if not passed, behaves as before.
   let da = 0;
   if (streak >= HDW_V2.streak_days) { if (dc === 2) da = HDW_V2.delta_dry2; else if (dc === 3) da = HDW_V2.delta_dry3; }
   // Long-streak boost (Δα decrescente oltre days_to_severe_stress)
@@ -4259,7 +4278,18 @@ function calcAlpha_v2(alphaRef, dc, ns, streak, foehDelta=0) {
   // foehDelta: contributo venti dominanti pericolosi (score × delta_alpha_per_score_unit)
   const raw = alphaRef + da + da_long + dn + dr + foehDelta;
   const floor = (dc === 0) ? 0 : alphaRef;
-  return Math.min(HDW_V2.alpha_max, Math.max(floor, raw));
+  const clamped = Math.min(HDW_V2.alpha_max, Math.max(floor, raw));
+  if (_components) {
+    _components.da_dry   = da;
+    _components.da_long  = da_long;
+    _components.da_night = dn;
+    _components.da_relief= dr;
+    _components.da_foehn = foehDelta;
+    _components.raw      = raw;
+    _components.clamped  = clamped;
+    _components.saturated = (clamped >= HDW_V2.alpha_max - 0.001 && raw > HDW_V2.alpha_max + 0.001);
+  }
+  return clamped;
 }
 function calcBeta_v2(rain, rainHours) {
   if (!HDW_V2.washout_enabled) return 1.0;
@@ -4300,19 +4330,30 @@ function calcHDWCum_v2(hdwRawArr, dates, tmaxArr, tminArr, rainArr,
   // ── Helper interno: F_class amplificatore non-lineare (v24) ─────────────────
   // Applicato al risultato del percorso orario (o a hdwRaw nel fallback).
   // prevHdwEff: valore hdwEff del giorno precedente (stesso pipeline) per drel.
-  function _fclassBonus(hdwEff, tmax, prevHdwEff) {
-    if (hdwEff < HDW_V2.hdw_class2) return hdwEff;
+  function _fclassBonus(hdwEff, tmax, prevHdwEff, _comp=null) {
+    // v55: optional _comp object collects breakdown (k, Fc, drel, drelActive, bonus).
+    if (hdwEff < HDW_V2.hdw_class2) {
+      if (_comp) { _comp.k = 0; _comp.Fc = 0; _comp.drel = 0; _comp.drelActive = false; _comp.bonus = 0; }
+      return hdwEff;
+    }
     let Fc = (hdwEff >= HDW_V2.hdw_class3)
       ? 1
       : (hdwEff - HDW_V2.hdw_class2) / (HDW_V2.hdw_class3 - HDW_V2.hdw_class2);
+    const Fc_base = Fc;
     const k = (tmax >= HDW_V2.tmax_class3) ? HDW_V2.k_high
             : (tmax >= HDW_V2.tmax_class2) ? HDW_V2.k_mid
             : HDW_V2.k_base;
+    let drel = 0, drelActive = false;
     if (prevHdwEff > 0) {
-      const drel = (hdwEff - prevHdwEff) / prevHdwEff;
-      if (drel > HDW_V2.delta_rel_threshold) Fc = Fc * (1 + drel);
+      drel = (hdwEff - prevHdwEff) / prevHdwEff;
+      if (drel > HDW_V2.delta_rel_threshold) {
+        Fc = Fc * (1 + drel);
+        drelActive = true;
+      }
     }
-    return hdwEff + k * Fc;
+    const bonus = k * Fc;
+    if (_comp) { _comp.k = k; _comp.Fc = Fc_base; _comp.drel = drel; _comp.drelActive = drelActive; _comp.bonus = bonus; }
+    return hdwEff + bonus;
   }
 
   // Helper interno: night score da dati orari (se disponibili)
@@ -4356,6 +4397,12 @@ function calcHDWCum_v2(hdwRawArr, dates, tmaxArr, tminArr, rainArr,
   // ── Loop principale ────────────────────────────────────────────────────────
   const cum=[], alphas=[], alphaRefs=[], dayClasses=[], nightScores=[], dryStreaks=[];
   const hdwEffArr=[], hdwInstArr=[], deltaHDW=[], deltaHDWC=[], deltaAlpha=[];
+  // v55 diagnostic arrays — esposti per tooltip ricco (default off, attivabili da UI)
+  const dayClassesStrict=[];
+  const daDryArr=[], daLongArr=[], daNightArr=[], daReliefArr=[], daFoehnArr=[];
+  const alphaRawArr=[], alphaSaturatedArr=[];
+  const fcKArr=[], fcFcArr=[], fcDrelArr=[], fcDrelActiveArr=[], fcBonusArr=[];
+  const hdwRawArrOut=[], betaArr=[], foehnScoreArr=[];
   // v48 H-2: propaga continuità dal warmup (streak + prevHdwEff).
   // Previene reset a 0 che sottostimava α nei primi 4-5 giorni del main
   // quando il warmup aveva già costruito una secca in corso.
@@ -4381,7 +4428,8 @@ function calcHDWCum_v2(hdwRawArr, dates, tmaxArr, tminArr, rainArr,
     // prevHdwEff usato per il termine drel (accelerazione relativa giorno su giorno)
     const hdwEffH = _hdwEffFromHourly(dates[i], hourlyTimes, hourlyTemps, hourlyRH, hourlyWind, hourlyGust);
     const hdwBase = hdwEffH != null ? hdwEffH : hdwRaw;
-    const hdwEff  = _fclassBonus(hdwBase, tmax, prevHdwEff);
+    const _fcComp = {};                                                    // v55 diagnostic
+    const hdwEff  = _fclassBonus(hdwBase, tmax, prevHdwEff, _fcComp);
 
     // Night score (da orario se disponibile) + modulatore VPD notturno
     const ns = _ns(dates[i], tmin, rhMean);
@@ -4401,7 +4449,8 @@ function calcHDWCum_v2(hdwRawArr, dates, tmaxArr, tminArr, rainArr,
     const _foehDelta = _fsc * ((HDW_V2.foehn_winds?.delta_alpha_per_score_unit) || 0);
 
     // α dinamico (usa dc_s strict per coerenza con streak)
-    const alpha = calcAlpha_v2(aRef, dc_s, ns, streak, _foehDelta);
+    const _aComp = {};                                                     // v55 diagnostic
+    const alpha = calcAlpha_v2(aRef, dc_s, ns, streak, _foehDelta, _aComp);
 
     // β washout con spread factor da intensità oraria precipitazione
     const _rainHrs = hourlyPrecip ? _rainHoursInDay(dates[i], hourlyTimes, hourlyPrecip) : null;
@@ -4421,6 +4470,23 @@ function calcHDWCum_v2(hdwRawArr, dates, tmaxArr, tminArr, rainArr,
     dayClasses.push(dc);
     nightScores.push(ns);
     dryStreaks.push(streak);
+    // v55 diagnostic arrays
+    dayClassesStrict.push(dc_s);
+    daDryArr.push(parseFloat(_aComp.da_dry.toFixed(4)));
+    daLongArr.push(parseFloat(_aComp.da_long.toFixed(4)));
+    daNightArr.push(parseFloat(_aComp.da_night.toFixed(4)));
+    daReliefArr.push(parseFloat(_aComp.da_relief.toFixed(4)));
+    daFoehnArr.push(parseFloat(_aComp.da_foehn.toFixed(4)));
+    alphaRawArr.push(parseFloat(_aComp.raw.toFixed(4)));
+    alphaSaturatedArr.push(_aComp.saturated);
+    fcKArr.push(parseFloat((_fcComp.k||0).toFixed(2)));
+    fcFcArr.push(parseFloat((_fcComp.Fc||0).toFixed(3)));
+    fcDrelArr.push(parseFloat((_fcComp.drel||0).toFixed(3)));
+    fcDrelActiveArr.push(_fcComp.drelActive||false);
+    fcBonusArr.push(parseFloat((_fcComp.bonus||0).toFixed(3)));
+    hdwRawArrOut.push(parseFloat(hdwBase.toFixed(2)));    // pre-bonus (raw)
+    betaArr.push(parseFloat(beta.toFixed(3)));
+    foehnScoreArr.push(_fsc);
 
     prev       = cur;
     prevHdwEff = hdwEff;
@@ -4428,7 +4494,12 @@ function calcHDWCum_v2(hdwRawArr, dates, tmaxArr, tminArr, rainArr,
     prevAlpha  = alpha;
   }
 
-  return { cum, alphas, alphaRefs, dayClasses, nightScores, dryStreaks, hdwEffArr, hdwInstArr, deltaHDW, deltaHDWC, deltaAlpha };
+  return { cum, alphas, alphaRefs, dayClasses, nightScores, dryStreaks, hdwEffArr, hdwInstArr, deltaHDW, deltaHDWC, deltaAlpha,
+    // v55 diagnostic data — opzionali, popolati sempre. UI li usa solo se diag mode ON.
+    dayClassesStrict, daDryArr, daLongArr, daNightArr, daReliefArr, daFoehnArr,
+    alphaRawArr, alphaSaturatedArr,
+    fcKArr, fcFcArr, fcDrelArr, fcDrelActiveArr, fcBonusArr,
+    hdwRawArrOut, betaArr, foehnScoreArr };
 }
 // ── Vegetation indices: FMC (EFFIS) + SWI (Copernicus) ──────────────────────────
 // Fired in background on every selectPoint — no visual layer, badge only
@@ -6838,7 +6909,13 @@ function renderAll(meteo){
 
   setTimeout(()=>{
     drawAlphaSensitivity(meteo);
-    const {dayClasses:_dc_draw, nightScores:_ns_draw, hdwEffArr:_hdwEff_draw, hdwInstArr:_hdwInst_draw, dryStreaks:_dr_draw} = (()=>{
+    const {dayClasses:_dc_draw, nightScores:_ns_draw, hdwEffArr:_hdwEff_draw, hdwInstArr:_hdwInst_draw, dryStreaks:_dr_draw,
+           alphas:_al_draw, alphaRefs:_alRef_draw, dayClassesStrict:_dcs_draw,
+           daDryArr:_daDry_draw, daNightArr:_daNight_draw, daReliefArr:_daRel_draw, daFoehnArr:_daFoehn_draw,
+           alphaRawArr:_alRaw_draw, alphaSaturatedArr:_alSat_draw,
+           fcKArr:_fcK_draw, fcFcArr:_fcFc_draw, fcDrelArr:_fcDrel_draw, fcDrelActiveArr:_fcDrelA_draw, fcBonusArr:_fcBon_draw,
+           hdwRawArrOut:_hdwRaw_draw, betaArr:_beta_draw, foehnScoreArr:_fsc_draw,
+           deltaAlpha:_dAlpha_draw, deltaHDWC:_dHdwc_draw} = (()=>{
       try {
         const _d=meteo.daily;
         const {hdw:_wu,dates:_wd,rain:_wr,tmin:_wt}=getWarmup(meteo);
@@ -6852,6 +6929,19 @@ function renderAll(meteo){
         );
       } catch(e) { return {dayClasses:null,nightScores:null,hdwEffArr:hdwArr,hdwInstArr:hdwArr,dryStreaks:null}; }
     })();
+    // v55: salvo diagnostic arrays su window per accesso da drawHDW (evita di stravolgere signature)
+    window._lastDiag = {
+      alphas:_al_draw, alphaRefs:_alRef_draw, dayClassesStrict:_dcs_draw,
+      daDry:_daDry_draw, daNight:_daNight_draw, daRelief:_daRel_draw, daFoehn:_daFoehn_draw,
+      alphaRaw:_alRaw_draw, alphaSaturated:_alSat_draw,
+      fcK:_fcK_draw, fcFc:_fcFc_draw, fcDrel:_fcDrel_draw, fcDrelActive:_fcDrelA_draw, fcBonus:_fcBon_draw,
+      hdwRaw:_hdwRaw_draw, beta:_beta_draw, foehnScore:_fsc_draw,
+      dryStreaks:_dr_draw, deltaAlpha:_dAlpha_draw, deltaHDWC:_dHdwc_draw,
+      tmax:meteo?.daily?.temperature_2m_max||null, tmin:meteo?.daily?.temperature_2m_min||null,
+      rain:meteo?.daily?.precipitation_sum||null,
+      wind:meteo?.daily?.windspeed_10m_max||null, gust:meteo?.daily?.windgusts_10m_max||null,
+      dirDom:meteo?.daily?.winddirection_10m_dominant||null
+    };
     drawTemp(meteo,todayIdx,hdwArr,hdwCum,_dc_draw,_ns_draw);
     drawHDW(meteo,todayIdx,_hdwInst_draw,_hdwEff_draw,hdwCum,_dc_draw,_ns_draw);
     try { drawFWI(meteo,todayIdx,hdwCum); } catch(e) { console.warn('drawFWI failed:', e); }   // v50 Fase 3: card FWI canonical
@@ -7160,11 +7250,123 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
     showlegend:false,
   } : null;
 
-  // Hover template barre
+  // Hover template barre — v55 ricco quando diagnostic mode ON, minimal altrimenti
+  const _diag = window._lastDiag;
+  const _diagOn = window._diagToolTipMode === true;
+  const _DC_NAMES = ['sem stress','neutra','agravamento','grave'];
+  const _NS_NAMES = ['normal','quente','tropical','severa'];
+  const dirSymbol = (deg) => {
+    if (deg == null) return '—';
+    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+    return dirs[Math.round(((deg%360)+360)%360 / 22.5) % 16];
+  };
+  const _dailyTimes = (meteo && meteo.daily && meteo.daily.time) || [];
+  const _diagIdxOf = (dt) => _dailyTimes.indexOf(dt);
   const instHover = fDates.map((dt,i) => {
     const inst = fInst[i]??0, eff = inst + (fDelta[i]||0);
-    const dc = fDC ? ['🔵 Classe 0','⚪ Classe 1','🟠 Classe 2','🔴 Classe 3'][fDC[i]??1] : '';
-    return `${dt}<br>HDW_inst: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${fDelta[i]>0?`<br>Δ fclass: +${fDelta[i].toFixed(1)}`:''}${dc?`<br>${dc}`:'`'}<extra></extra>`;
+    const dcLabel = fDC ? ['🔵 Classe 0','⚪ Classe 1','🟠 Classe 2','🔴 Classe 3'][fDC[i]??1] : '';
+    if (!_diagOn || !_diag) {
+      // Tooltip MINIMAL (default legacy)
+      return `${dt}<br>HDW_inst: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${fDelta[i]>0?`<br>Δ fclass: +${fDelta[i].toFixed(1)}`:''}${dcLabel?`<br>${dcLabel}`:''}<extra></extra>`;
+    }
+    // ── DIAGNOSTIC TOOLTIP — pattern barText batch v37 ──────────────────────
+    const di = _diagIdxOf(dt);
+    if (di < 0) {
+      return `${dt}<br>HDW_inst: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${dcLabel?`<br>${dcLabel}`:''}<extra></extra>`;
+    }
+    const dc      = (_diag.dayClasses && _diag.dayClasses[di]) ?? (fDC ? fDC[i] : null);
+    const dc_s    = _diag.dayClassesStrict ? _diag.dayClassesStrict[di] : null;
+    const alpha   = _diag.alphas      ? _diag.alphas[di]      : null;
+    const aRef    = _diag.alphaRefs   ? _diag.alphaRefs[di]   : null;
+    const daDry   = _diag.daDry       ? _diag.daDry[di]       : 0;
+    const daNight = _diag.daNight     ? _diag.daNight[di]     : 0;
+    const daRel   = _diag.daRelief    ? _diag.daRelief[di]    : 0;
+    const daFoehn = _diag.daFoehn     ? _diag.daFoehn[di]     : 0;
+    const aRaw    = _diag.alphaRaw    ? _diag.alphaRaw[di]    : null;
+    const aSat    = _diag.alphaSaturated ? _diag.alphaSaturated[di] : false;
+    const sk      = _diag.dryStreaks  ? _diag.dryStreaks[di]  : 0;
+    const dAlpha  = _diag.deltaAlpha  ? _diag.deltaAlpha[di]  : 0;
+    const dHdwc   = _diag.deltaHDWC   ? _diag.deltaHDWC[di]   : null;
+    const fcK     = _diag.fcK         ? _diag.fcK[di]         : 0;
+    const fcFc    = _diag.fcFc        ? _diag.fcFc[di]        : 0;
+    const fcDrel  = _diag.fcDrel      ? _diag.fcDrel[di]      : 0;
+    const fcDrelA = _diag.fcDrelActive? _diag.fcDrelActive[di]: false;
+    const fcBon   = _diag.fcBonus     ? _diag.fcBonus[di]     : 0;
+    const tmax    = _diag.tmax        ? _diag.tmax[di]        : null;
+    const tmin    = _diag.tmin        ? _diag.tmin[di]        : null;
+    const wind    = _diag.wind        ? _diag.wind[di]        : null;
+    const gust    = _diag.gust        ? _diag.gust[di]        : null;
+    const dirD    = _diag.dirDom      ? _diag.dirDom[di]      : null;
+    const rain    = _diag.rain        ? _diag.rain[di]        : null;
+    const ns      = nightScores       ? nightScores[di]       : 0;
+    const s       = v => (v >= 0 ? '+' : '') + v.toFixed(3);
+
+    // Day class strict mismatch diagnostic (gate AND_c3only)
+    let dcMismatchNote = '';
+    if (dc_s != null && dc !== dc_s) {
+      const tc3 = HDW_V2?.tmax_class3 ?? 35;
+      let reason = '';
+      if (dc === 3 && dc_s === 2 && tmax != null && tmax < tc3) {
+        reason = ` — Tmax ${tmax.toFixed(1)}°C < tc3=${tc3}°C`;
+      } else if (dc === 2 && dc_s === 1) {
+        reason = ' — provável trigger só NS ou RH/VPD';
+      }
+      dcMismatchNote = ` <i>(strict: ${dc_s}${reason})</i>`;
+    }
+
+    // α breakdown
+    const parts = aRef != null ? [`base ${aRef.toFixed(3)}`] : [];
+    if (sk > 0) {
+      const ddLabel = dc_s === 3 ? 'dd3' : dc_s === 2 ? 'dd2' : 'dd0';
+      parts.push(`streak ${sk}d ${s(daDry)} [${ddLabel}]`);
+    } else if (daDry !== 0) {
+      parts.push(`dry ${s(daDry)}`);
+    }
+    if (daNight !== 0) parts.push(`night ${s(daNight)}`);
+    if (daFoehn !== 0) parts.push(`foehn ${s(daFoehn)}`);
+    if (daRel   !== 0) parts.push(`relief ${s(daRel)}`);
+    const todayContribs = parseFloat((daDry + daNight + daFoehn + daRel).toFixed(4));
+    const perso = parseFloat((dAlpha - todayContribs).toFixed(4));
+    if (dc === 0 && Math.abs(perso) > 0.0009) parts.push(`perdido ${s(perso)}`);
+
+    // α saturation note
+    const aMax = HDW_V2?.alpha_max ?? 0.95;
+    const satNote = aSat ? ` · <i>α saturado a ${aMax} (raw=${aRaw.toFixed(3)})</i>` : '';
+
+    // F_class line
+    let fclassLine = '';
+    if (fcBon > 0) {
+      const tc2 = HDW_V2?.tmax_class2 ?? 30, tc3 = HDW_V2?.tmax_class3 ?? 35;
+      let kLabel, tempRange;
+      if (tmax != null && tmax >= tc3) { kLabel = 'k_high'; tempRange = `Tmax ≥ ${tc3}°C`; }
+      else if (tmax != null && tmax >= tc2) { kLabel = 'k_mid'; tempRange = `Tmax ${tc2}–${tc3}°C`; }
+      else { kLabel = 'k_base'; tempRange = `Tmax < ${tc2}°C`; }
+      const drelTxt = fcDrelA ? ` · drel ×${(1+fcDrel).toFixed(2)}` : '';
+      fclassLine = `F_class: +${fcBon.toFixed(1)} (${kLabel}=${fcK}, ${tempRange} · Fc=${fcFc.toFixed(2)}${drelTxt})<br>`;
+    }
+
+    // HDW_eff
+    const heLine = (fcBon > 0)
+      ? `HDW_eff: <b>${eff.toFixed(1)}</b> (raw ${inst.toFixed(1)} + F_class +${fcBon.toFixed(1)})<br>`
+      : `HDW_eff: <b>${eff.toFixed(1)}</b><br>`;
+
+    // HDWc + delta
+    const hdwcLine = (dHdwc != null && Math.abs(dHdwc) > 0.05)
+      ? `HDWc: ${(fSolid[i]??'—').toString()} (${dHdwc>=0?'+':''}${dHdwc.toFixed(1)} vs ontem)<br>`
+      : `HDWc: ${(fSolid[i]??'—').toString()}<br>`;
+
+    return (
+      `<b>${dt}</b><br>` +
+      `${dcLabel}${dcMismatchNote}<br>` +
+      hdwcLine +
+      (alpha != null ? `α: <b>${alpha.toFixed(3)}</b>${parts.length?' ('+parts.join(' · ')+')':''}${satNote}<br>` : '') +
+      `Δα dia: ${s(dAlpha)}<br>` +
+      heLine +
+      fclassLine +
+      `Tmax: ${tmax!=null?tmax.toFixed(1)+'°C':'—'} · Tmin: ${tmin!=null?tmin.toFixed(1)+'°C':'—'} · NS: ${ns} (${_NS_NAMES[ns]||'—'})<br>` +
+      `Vento: ${wind!=null?Math.round(wind):'—'} km/h · Rajada: ${gust!=null?Math.round(gust):'—'} km/h · Dir: ${dirSymbol(dirD)} · Chuva: ${rain!=null?rain.toFixed(1):'0'}mm` +
+      `<extra></extra>`
+    );
   });
 
   const traces = [
@@ -9393,11 +9595,16 @@ function toggleFullscreen(cardId,chartId,contentId){
   if ((chartId==='chart-72temp'||chartId==='chart-72hdw') && _hourly72 && _ts72Hours.length) {
     const _s=parseInt(document.getElementById('ts72Start')?.value||0);
     const _e=parseInt(document.getElementById('ts72End')?.value||(_ts72Hours.length-1));
-    const _fs72start=new Date(); _fs72start.setHours(0,0,0,0);
-    const _fs72end=new Date(_fs72start.getTime()+72*3600000);
-    const _mask=_hourly72.time.map(t=>{const ts=new Date(t);return ts>=_fs72start&&ts<_fs72end;});
-    const _sl72=k=>(_hourly72[k]||[]).filter((_,i)=>_mask[i]).slice(_s,_e+1);
-    const _t=_sl72('time'),_w=_sl72('windspeed_10m'),_g=_sl72('windgusts_10m'),_d=_sl72('winddirection_10m');
+    // v10.1 FIX: usa _ts72Hours (range slider corrente, può essere 72h normale o drill esteso),
+    // non la vecchia maschera fissa [oggi, oggi+72h] che ignorava il drill mode e
+    // tagliava le barbe solo ai primi 3 giorni quando il chart mostrava 7+ giorni.
+    const _selTimes = _ts72Hours.slice(_s, _e+1);
+    const _timeIdx = new Map(_hourly72.time.map((t,i)=>[t,i]));
+    const _idxs = _selTimes.map(t => _timeIdx.get(t)).filter(i => i != null);
+    const _t = _idxs.map(i => _hourly72.time[i]);
+    const _w = _idxs.map(i => _hourly72.windspeed_10m[i]);
+    const _g = _idxs.map(i => _hourly72.windgusts_10m[i]);
+    const _d = _idxs.map(i => _hourly72.winddirection_10m[i]);
     _drawFsBarbs(() => drawBarbs('fs-barb-svg','fs-inner-plot',_t,_w,_g,_d,null));
   }
 
@@ -9558,11 +9765,17 @@ function closeFullscreen(silent=false){
     setTimeout(()=>{
       const s=parseInt(document.getElementById('ts72Start')?.value||0);
       const e=parseInt(document.getElementById('ts72End')?.value||(_ts72Hours.length-1));
-      const _s72=new Date(); _s72.setHours(0,0,0,0);
-      const _e72=new Date(_s72.getTime()+72*3600000);
-      const mask=_hourly72.time.map(t=>{const ts=new Date(t);return ts>=_s72&&ts<_e72;});
-      const sl=k=>(_hourly72[k]||[]).filter((_,i)=>mask[i]).slice(s,e+1);
-      const t=sl('time'),w=sl('windspeed_10m'),g=sl('windgusts_10m'),d=sl('winddirection_10m'),tmp=sl('temperature_2m');
+      // v10.1 FIX: usa _ts72Hours (range slider corrente, può essere 72h normale o drill esteso),
+      // non la vecchia maschera fissa [oggi, oggi+72h] che ignorava il drill mode e
+      // disegnava barbe solo per i primi 3 giorni quando i chart minimizzati mostravano 7+ giorni.
+      const _selTimes = _ts72Hours.slice(s, e+1);
+      const _timeIdx = new Map(_hourly72.time.map((tt,ii)=>[tt,ii]));
+      const _idxs = _selTimes.map(tt => _timeIdx.get(tt)).filter(ii => ii != null);
+      const t = _idxs.map(ii => _hourly72.time[ii]);
+      const w = _idxs.map(ii => _hourly72.windspeed_10m[ii]);
+      const g = _idxs.map(ii => _hourly72.windgusts_10m[ii]);
+      const d = _idxs.map(ii => _hourly72.winddirection_10m[ii]);
+      const tmp = _idxs.map(ii => _hourly72.temperature_2m[ii]);
       drawBarbs('barbs-72temp','chart-72temp',t,w,g,d,tmp);
       drawBarbs('barbs-72hdw','chart-72hdw',t,w,g,d,tmp);
     }, 150);
@@ -12986,6 +13199,39 @@ function toggleAlphaSection() {
   if (chev) chev.textContent = collapsed ? '▼' : '▶';
 }
 
+// v55: Toggle modo tooltip diagnóstico para o gráfico HDWc.
+// Off (default): tooltip mínimo — HDW_inst, HDW_eff, Δ fclass, Classe.
+// On: tooltip rico — α breakdown (base + streak/night/foehn/relief), F_class detail,
+//     dc strict mismatch, α saturação, Tmax/Tmin/Vento/Rajada/Dir/Chuva inline.
+// Padrão: barText builder portado de hdwc_batch_v37.
+function toggleDiagToolTipMode() {
+  const cur = window._diagToolTipMode === true;
+  window._diagToolTipMode = !cur;
+  try { localStorage.setItem('diag_tooltip_mode', window._diagToolTipMode ? '1' : '0'); } catch(e) {}
+  const btn = document.getElementById('diag-hdw-toggle');
+  if (btn) {
+    btn.style.background = window._diagToolTipMode ? 'var(--accent, #7c3aed)' : '';
+    btn.style.color      = window._diagToolTipMode ? '#fff' : '';
+    btn.title = window._diagToolTipMode ? 'Tooltip diagnóstico ON · clique para desativar' : 'Tooltip diagnóstico OFF · clique para ativar';
+  }
+  console.log('Diagnostic tooltip mode:', window._diagToolTipMode ? 'ON' : 'OFF', '— select a point to see effect');
+}
+
+// Restore preference on page load
+try {
+  const _diagPref = localStorage.getItem('diag_tooltip_mode');
+  if (_diagPref === '1') {
+    window._diagToolTipMode = true;
+    setTimeout(() => {
+      const btn = document.getElementById('diag-hdw-toggle');
+      if (btn) {
+        btn.style.background = 'var(--accent, #7c3aed)';
+        btn.style.color = '#fff';
+        btn.title = 'Tooltip diagnóstico ON · clique para desativar';
+      }
+    }, 100);
+  }
+} catch(e) {}
 </script>
 
 <div id="cmpDrawer">
