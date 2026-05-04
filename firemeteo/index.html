@@ -1360,6 +1360,13 @@ tr:hover{background:#f9fafb}
 <div id="toast"></div>
 
 <script>
+// firemeteo_v55.1 — Build: 2026-05-04T18:20:56
+// BUGFIX: chart-72temp/72hdw fullscreen barbs ora rispettano il drill range,
+//   non più filtrati a [oggi, oggi+72h]. Quando si entra in fullscreen su un drill
+//   esteso (es. 7 giorni), le barbe vengono disegnate per tutto il range visibile.
+//   Bug originario: _drawFsBarbs riceveva _hourly72 mascherato a 72h fissi mentre
+//   il chart Plotly fullscreen mostrava il range completo del drill.
+
 // firemeteo_v55 — Build: 2026-05-02T21:56:53
 // FEATURES:
 //   1. Tooltip diagnostico HDWc (toggle 🔬): α breakdown (base + streak/night/foehn/relief),
@@ -9686,11 +9693,16 @@ function toggleFullscreen(cardId,chartId,contentId){
   if ((chartId==='chart-72temp'||chartId==='chart-72hdw') && _hourly72 && _ts72Hours.length) {
     const _s=parseInt(document.getElementById('ts72Start')?.value||0);
     const _e=parseInt(document.getElementById('ts72End')?.value||(_ts72Hours.length-1));
-    const _fs72start=new Date(); _fs72start.setHours(0,0,0,0);
-    const _fs72end=new Date(_fs72start.getTime()+72*3600000);
-    const _mask=_hourly72.time.map(t=>{const ts=new Date(t);return ts>=_fs72start&&ts<_fs72end;});
-    const _sl72=k=>(_hourly72[k]||[]).filter((_,i)=>_mask[i]).slice(_s,_e+1);
-    const _t=_sl72('time'),_w=_sl72('windspeed_10m'),_g=_sl72('windgusts_10m'),_d=_sl72('winddirection_10m');
+    // v55.1 FIX: usa _ts72Hours (range slider corrente, può essere 72h normale o drill esteso),
+    // non la vecchia maschera fissa [oggi, oggi+72h] che ignorava il drill mode e
+    // tagliava le barbe solo ai primi 3 giorni quando il chart mostrava 7+ giorni.
+    const _selTimes = _ts72Hours.slice(_s, _e+1);
+    const _timeIdx = new Map(_hourly72.time.map((t,i)=>[t,i]));
+    const _idxs = _selTimes.map(t => _timeIdx.get(t)).filter(i => i != null);
+    const _t = _idxs.map(i => _hourly72.time[i]);
+    const _w = _idxs.map(i => _hourly72.windspeed_10m[i]);
+    const _g = _idxs.map(i => _hourly72.windgusts_10m[i]);
+    const _d = _idxs.map(i => _hourly72.winddirection_10m[i]);
     _drawFsBarbs(() => drawBarbs('fs-barb-svg','fs-inner-plot',_t,_w,_g,_d,null));
   }
 
@@ -9851,11 +9863,17 @@ function closeFullscreen(silent=false){
     setTimeout(()=>{
       const s=parseInt(document.getElementById('ts72Start')?.value||0);
       const e=parseInt(document.getElementById('ts72End')?.value||(_ts72Hours.length-1));
-      const _s72=new Date(); _s72.setHours(0,0,0,0);
-      const _e72=new Date(_s72.getTime()+72*3600000);
-      const mask=_hourly72.time.map(t=>{const ts=new Date(t);return ts>=_s72&&ts<_e72;});
-      const sl=k=>(_hourly72[k]||[]).filter((_,i)=>mask[i]).slice(s,e+1);
-      const t=sl('time'),w=sl('windspeed_10m'),g=sl('windgusts_10m'),d=sl('winddirection_10m'),tmp=sl('temperature_2m');
+      // v55.1 FIX: usa _ts72Hours (range slider corrente, può essere 72h normale o drill esteso),
+      // non la vecchia maschera fissa [oggi, oggi+72h] che ignorava il drill mode e
+      // disegnava barbe solo per i primi 3 giorni quando i chart minimizzati mostravano 7+ giorni.
+      const _selTimes = _ts72Hours.slice(s, e+1);
+      const _timeIdx = new Map(_hourly72.time.map((tt,ii)=>[tt,ii]));
+      const _idxs = _selTimes.map(tt => _timeIdx.get(tt)).filter(ii => ii != null);
+      const t = _idxs.map(ii => _hourly72.time[ii]);
+      const w = _idxs.map(ii => _hourly72.windspeed_10m[ii]);
+      const g = _idxs.map(ii => _hourly72.windgusts_10m[ii]);
+      const d = _idxs.map(ii => _hourly72.winddirection_10m[ii]);
+      const tmp = _idxs.map(ii => _hourly72.temperature_2m[ii]);
       drawBarbs('barbs-72temp','chart-72temp',t,w,g,d,tmp);
       drawBarbs('barbs-72hdw','chart-72hdw',t,w,g,d,tmp);
     }, 150);
