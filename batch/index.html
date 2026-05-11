@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HDWc Batch Analysis v37 · Portogallo</title>
+<title>HDWc Batch Analysis v37.1 · Portogallo</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1020,7 +1020,10 @@ async function analyzeFire(fire) {
   if (d2MaxIdx < 0) { d2MaxPre = 0; d2MaxIdx = n; }
   const result = {
     name: fire_id,  // v32: use individual record name from CSV
-    fire_id,date,area_ha,size_class,lat:+lat.toFixed(2),lon:+lon.toFixed(2),
+    // v37.1 (11/5/26): aggiunto date_end al result per propagazione a showDetail
+    // (loop monitor riga ~1242 + onclick tabella riga ~1987). Permette rendering
+    // barra verticale azzurra dash-dot al date_end nel grafico (analoga al D0 bianco).
+    fire_id,date,date_end,area_ha,size_class,lat:+lat.toFixed(2),lon:+lon.toFixed(2),
     engine_id: fireEngineId,
     hdwc_d0:Math.round(d0.hdwc), hdweff_d0:Math.round(d0.he*10)/10,
     alpha_d0:Math.round(d0.alpha*1000)/1000, streak_d0:d0.sk,
@@ -1239,7 +1242,7 @@ async function _monitorRenderSelected() {
   // funziona perfettamente in sequenza.
   for (const r of toRender) {
     try {
-      await showDetail(r.fire_id, r.date, r.lat, r.lon, r.area_ha);
+      await showDetail(r.fire_id, r.date, r.lat, r.lon, r.area_ha, null, 0, r.date_end || null);
     } catch(e) {
       console.error('Monitor render error for', r.fire_id, e);
     }
@@ -1984,7 +1987,7 @@ function renderTable(c) {
       default:                return `<td>${r[k]??'—'}</td>`;
     }
   };
-  const tbody = sorted.map(r => `<tr style="cursor:pointer" onclick="showDetail('${r.fire_id}','${r.date}',${r.lat},${r.lon},'${r.area_ha}')">
+  const tbody = sorted.map(r => `<tr style="cursor:pointer" onclick="showDetail('${r.fire_id}','${r.date}',${r.lat},${r.lon},'${r.area_ha}',null,0,${r.date_end ? `'${r.date_end}'` : 'null'})">
     <td style="text-align:center;width:24px" onclick="event.stopPropagation()">
       <input type="checkbox" class="monitor-chk" data-fire-id="${r.fire_id}"
              ${_monitorSelected.has(r.fire_id) ? 'checked' : ''}
