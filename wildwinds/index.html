@@ -198,7 +198,7 @@ tr:hover td{background:var(--surface2)}
 <header class="hdr">
   <div class="hdr-flame"></div>
   <div><div class="hdr-title">WildWinds · Wind &amp; Humidity</div><div class="hdr-sub">Open-Meteo · PT · IT · US · ±16d</div></div>
-  <span class="hdr-badge">v3.0</span>
+  <span class="hdr-badge">v3.1</span>
   <span id="gstatus" style="font-size:10px;color:#6b7280;font-family:var(--mono)"></span>
   <div class="hdr-spacer"></div>
   <button class="btn" onclick="exportPDF()">📄 PDF</button>
@@ -326,10 +326,10 @@ tr:hover td{background:var(--surface2)}
           <!-- Humidity -->
           <div class="chart-card">
             <div class="chart-header">
-              <div class="chart-title">💧 Humidity · RH, VPD &amp; Precip</div>
+              <div class="chart-title">💧 Humidity · RH, VPD, T &amp; Precip</div>
               <div class="chart-controls">
                 <button class="chart-control-btn" onclick="toggleCC('chartHum')">▲</button>
-                <button class="chart-control-btn" onclick="toggleFS('chartHum','Humidity · RH, VPD & Precip')">⤢</button>
+                <button class="chart-control-btn" onclick="toggleFS('chartHum','Humidity · RH, VPD, T &amp; Precip')">⤢</button>
                 <button class="chart-control-btn" onclick="pngDiv('chartHum')">🖼</button>
               </div>
             </div>
@@ -1718,26 +1718,74 @@ function detectWindShifts(times,ws,wg,dirs,temps){
   return shifts;
 }
 
-// Build Plotly wind-shift trace (⚡ triangle-up on gust curve)
+// ── Wind shift classification (v3.1, trapianto da firemeteo v54) ─────────
+// Classifica ogni shift flaggato in 4 tipi operativi usando wind_eff
+// (wmean * W + wgust * max(G,W)) + gust factor + Δdir.
+// T1 = drift morbido (rumore di fondo, ~80% switch in regime stazionario)
+// T2 = shift netto (rotazione media + intensificazione)
+// T3 = inversione (rotazione forte + vento sostenuto)
+// T4 = reversal estremo (frontale + downburst)
+// Pesi vento: WildWinds non ha preset HDW_V2 (nessun motore HDWc qui),
+// quindi usa default 0.7/0.3 (regime medio). Soglie identiche a firemeteo.
+function classifyWindShift(s,wmean,wgust){
+  var W=parseFloat(s.speed)||0;
+  var G=parseFloat(s.gust)||W;
+  var wind_eff=wmean*W+wgust*Math.max(G,W);
+  var gf=G/Math.max(W,0.5);
+  var dDir=s.dDir||0;
+  var dWind=parseFloat(s.dWind)||0;
+  if(dDir>=120&&wind_eff>=40&&gf>=3.0)            return 4;
+  if(dDir>= 90&&wind_eff>=30)                     return 3;
+  if(dDir>= 60&&wind_eff>=20)                     return 2;
+  if(dDir>= 45&&dWind>=15&&wind_eff>=25)          return 2;
+  return 1;
+}
+var SHIFT_STYLE={
+  1:{color:'#fbbf24',size: 8,outline:null     ,outlineW:0  ,label:'Drift morbido'   },
+  2:{color:'#fb923c',size:11,outline:'#7c2d12',outlineW:1.5,label:'Shift netto'     },
+  3:{color:'#dc2626',size:14,outline:'#7f1d1d',outlineW:1.5,label:'Inversione'      },
+  4:{color:'#7c3aed',size:17,outline:'#000000',outlineW:2  ,label:'Reversal estremo'}
+};
+
+// Build Plotly wind-shift traces (⚡ triangle-up classificati T1-T4 sulla curva gust)
+// Ritorna ARRAY di traces (uno per ogni tipo presente). Pre-v3.1 ritornava trace singolo.
 function _buildShiftTrace(times,ws,wg,wd,temp){
   var shifts=detectWindShifts(times,ws,wg,wd,temp);
-  if(!shifts.length)return null;
-  var sy=shifts.map(function(s){return(s.gust!=null?s.gust:s.speed)+3;});
-  var ht=shifts.map(function(s){
-    var p=[];
-    if(s.hasDir&&s.dDir!=null){
-      var sign=s.dDirSigned!=null?(s.dDirSigned>0?'+':''):'';
-      var ft=(s.fromDir&&s.toDir)?' ('+s.fromDir+'→'+s.toDir+')':'';
-      p.push('Δdir '+sign+s.dDirSigned+'°'+(s.rotation?' '+s.rotation:'')+ft);
-    }
-    if(s.dWind!=null)p.push('Δwind '+(s.dWind>0?'+':'')+s.dWind+' km/h');
-    if(s.dGust!=null)p.push('Δgust '+(s.dGust>0?'+':'')+s.dGust+' km/h');
-    return '⚡ Wind shift<br>'+p.join('<br>');
+  if(!shifts.length)return [];
+  var wmean=0.7,wgust=0.3; // default regime (WildWinds non ha preset HDW_V2)
+  var byType={1:[],2:[],3:[],4:[]};
+  shifts.forEach(function(s){byType[classifyWindShift(s,wmean,wgust)].push(s);});
+  var out=[];
+  [1,2,3,4].forEach(function(t){
+    var items=byType[t];if(!items.length)return;
+    var style=SHIFT_STYLE[t];
+    var ht=items.map(function(s){
+      var p=['⚡ Wind shift T'+t+' — '+style.label.toUpperCase()];
+      if(s.hasDir&&s.dDir!=null){
+        var sign=s.dDirSigned!=null?(s.dDirSigned>0?'+':''):'';
+        var ft=(s.fromDir&&s.toDir)?' ('+s.fromDir+'→'+s.toDir+')':'';
+        p.push('Δdir '+sign+s.dDirSigned+'°'+(s.rotation?' '+s.rotation:'')+ft);
+      }
+      if(s.dWind!=null)p.push('Δwind '+(s.dWind>0?'+':'')+s.dWind+' km/h');
+      if(s.dGust!=null)p.push('Δgust '+(s.dGust>0?'+':'')+s.dGust+' km/h');
+      var W=parseFloat(s.speed)||0,G=parseFloat(s.gust)||W;
+      var we=(wmean*W+wgust*Math.max(G,W)).toFixed(1);
+      var gf=(G/Math.max(W,0.5)).toFixed(1);
+      p.push('wind_eff: '+we+' km/h · GF: '+gf+'×');
+      return p.join('<br>');
+    });
+    out.push({
+      x:items.map(function(s){return s.date;}),
+      y:items.map(function(s){return(s.gust!=null?s.gust:s.speed)+3;}),
+      name:'⚡ T'+t+' '+style.label,
+      type:'scatter',mode:'markers',
+      marker:{symbol:'triangle-up',size:style.size,color:style.color,
+        line:style.outline?{color:style.outline,width:style.outlineW}:{width:0}},
+      hovertemplate:ht.map(function(t){return t+'<extra></extra>';}),
+      showlegend:true
+    });
   });
-  return{x:shifts.map(function(s){return s.date;}),y:sy,name:'⚡ Shift',
-    type:'scatter',mode:'markers',
-    marker:{symbol:'triangle-up',size:10,color:'#dc2626',line:{color:'#7f1d1d',width:1.5}},
-    hovertemplate:ht.map(function(t){return t+'<extra></extra>';}),showlegend:true};
+  return out;
 }
 
 // Direction-based color: cold (blue) for N winds, warm (red/orange) for S winds
@@ -1838,9 +1886,9 @@ function renderTimeSeries(obsF,fctF){
       {x:obsF.times,y:obsF.deltas,name:'Δ G−W',type:'scatter',mode:'lines',
        line:{color:'#7c3aed',width:1,dash:'dot'},fill:'tozeroy',fillcolor:'rgba(124,58,237,.06)'}
     ];
-    // Wind shifts ⚡
+    // Wind shifts ⚡ T1-T4 (v3.1: classificati 4 tipi)
     var shiftTrObs=_buildShiftTrace(obsF.times,obsF.ws,obsF.wg,obsF.wd,obsF.temp);
-    if(shiftTrObs)obsTraces.push(shiftTrObs);
+    shiftTrObs.forEach(function(t){obsTraces.push(t);});
     // Foehn diamonds ♦ every 3h
     _buildFoehnTraces(obsF.times,obsF.ws,obsF.wg,obsF.wd,_sectors).forEach(function(t){obsTraces.push(t);});
 
@@ -1862,9 +1910,9 @@ function renderTimeSeries(obsF,fctF){
       {x:fctF.times,y:fctF.deltas,name:'Δ FCT',type:'scatter',mode:'lines',
        line:{color:'#7c3aed',width:1,dash:'dash'},fill:'tozeroy',fillcolor:'rgba(124,58,237,.04)'}
     ];
-    // Wind shifts ⚡
+    // Wind shifts ⚡ T1-T4 (v3.1: classificati 4 tipi)
     var shiftTrFct=_buildShiftTrace(fctF.times,fctF.ws,fctF.wg,fctF.wd,fctF.temp);
-    if(shiftTrFct)fctTraces.push(shiftTrFct);
+    shiftTrFct.forEach(function(t){fctTraces.push(t);});
     // Foehn diamonds ♦ every 3h
     _buildFoehnTraces(fctF.times,fctF.ws,fctF.wg,fctF.wd,_sectors).forEach(function(t){fctTraces.push(t);});
 
@@ -1877,19 +1925,25 @@ function renderTimeSeries(obsF,fctF){
 }
 
 function renderHumidityChart(obsF,fctF){
-  var lay=mkL(180,{yaxis:{color:'#94a3b8',gridcolor:'#e2e8f0',tickfont:{color:'#94a3b8',size:9},title:{text:'RH% · VPD×10',font:{color:'#94a3b8',size:9}},range:[0,115]},
-    yaxis2:{overlaying:'y',side:'right',color:'#3b82f6',tickfont:{color:'#3b82f6',size:9},title:{text:'Precip mm',font:{color:'#3b82f6',size:9}},showgrid:false,rangemode:'nonnegative'}});
+  // v3.1: aggiunta curva T °C su 3° asse Y (destra, position 0.99). xaxis domain
+  // ridotto a [0,0.93] per dare spazio agli assi destri multipli (Precip + °C).
+  var lay=mkL(180,{xaxis:{domain:[0,0.93]},
+    yaxis:{color:'#94a3b8',gridcolor:'#e2e8f0',tickfont:{color:'#94a3b8',size:9},title:{text:'RH% · VPD×10',font:{color:'#94a3b8',size:9}},range:[0,115]},
+    yaxis2:{overlaying:'y',side:'right',color:'#3b82f6',tickfont:{color:'#3b82f6',size:9},title:{text:'Precip mm',font:{color:'#3b82f6',size:9}},showgrid:false,rangemode:'nonnegative'},
+    yaxis3:{overlaying:'y',side:'right',anchor:'free',position:0.99,color:'#ea580c',tickfont:{color:'#ea580c',size:9},title:{text:'°C',font:{color:'#ea580c',size:9}},showgrid:false}});
   var traces=[];
   if(roseMode!=='fct'&&obsF&&obsF.times.length){
     var vp10=obsF.vpds.map(function(v){return v!=null?+(v*10).toFixed(2):null;});
     traces.push({x:obsF.times,y:obsF.rh,name:'RH % OBS',type:'scatter',mode:'lines',line:{color:'#0d9488',width:1.6}});
     traces.push({x:obsF.times,y:vp10,name:'VPD×10 OBS',type:'scatter',mode:'lines',line:{color:'#d97706',width:1.2,dash:'dot'},fill:'tozeroy',fillcolor:'rgba(217,119,6,.05)'});
+    traces.push({x:obsF.times,y:obsF.temp,name:'T °C OBS',type:'scatter',mode:'lines',line:{color:'#ea580c',width:1.4},yaxis:'y3',hovertemplate:'T: %{y:.1f}°C<extra></extra>'});
     traces.push({x:obsF.times,y:obsF.prec,name:'Precip mm',type:'bar',marker:{color:'rgba(59,130,246,.5)'},yaxis:'y2'});
   }
   if(roseMode!=='obs'&&fctF&&fctF.times.length){
     var vp10f=fctF.vpds.map(function(v){return v!=null?+(v*10).toFixed(2):null;});
     traces.push({x:fctF.times,y:fctF.rh,name:'RH % FCT',type:'scatter',mode:'lines',line:{color:'#0d9488',width:1.2,dash:'dot'}});
     traces.push({x:fctF.times,y:vp10f,name:'VPD×10 FCT',type:'scatter',mode:'lines',line:{color:'#f59e0b',width:1,dash:'dash'},fill:'tozeroy',fillcolor:'rgba(245,158,11,.04)'});
+    traces.push({x:fctF.times,y:fctF.temp,name:'T °C FCT',type:'scatter',mode:'lines',line:{color:'#ea580c',width:1,dash:'dash'},yaxis:'y3',hovertemplate:'T FCT: %{y:.1f}°C<extra></extra>'});
     traces.push({x:fctF.times,y:fctF.prec,name:'Precip FCT',type:'bar',marker:{color:'rgba(99,102,241,.4)'},yaxis:'y2'});
   }
   Plotly.react('chartHum',traces,lay,PC);
@@ -2666,7 +2720,7 @@ async function exportPDF(){
   var chartDefs=[
     {id:'roseDelta',title:'Wind Rose · Delta'},
     {id:'roseHdw',title:'Wind Rose · HDW/Mode'},
-    {id:'chartHum',title:'Humidity · RH, VPD & Precip',h:200},
+    {id:'chartHum',title:'Humidity · RH, VPD, T & Precip',h:200},
     {id:'chartSoil',title:'Soil Moisture · All Layers',h:200},
     {id:'chartWindObs',title:'Wind Time Series · Observed',h:180},
     {id:'chartWindFct',title:'Wind Forecast',h:180},
