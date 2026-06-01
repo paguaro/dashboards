@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FireMeteo v54 · ICNF + Open-Meteo</title>
+<title>FireMeteo v55.3 · ICNF + Open-Meteo</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -339,7 +339,7 @@ tr:hover{background:#f9fafb}
     <div><div class="hdr-title">Fire Meteo</div><div class="hdr-sub">EFFIS + Open-Meteo · Operational - Research</div></div>
   </div>
   <div style="flex:1"></div>
-  <span class="hdr-badge">v10.0</span>
+  <span class="hdr-badge">v10.1</span>
   <span class="hdr-nome" id="hdrNome" style="display:none"></span>
   <div id="hdrSemaforo"><div class="sem-dot" id="semDot"></div><span id="semLabel">—</span></div>
   <div id="hdrPeakDay" style="display:none;font-family:var(--mono);font-size:13px;font-weight:700;padding:5px 13px;border-radius:12px;border:1.5px solid transparent;white-space:nowrap;letter-spacing:.01em"></div>
@@ -958,7 +958,7 @@ tr:hover{background:#f9fafb}
         
         <div class="chart-card" id="card-hdw">
           <div class="chart-header">
-            <div class="chart-title" onclick="toggleChart('chart-hdw-content')">🔥 HDW_inst · HDW_eff · HDWc <span id="chart-hdw-title-range" style="font-weight:400;color:var(--dim);font-size:12px"></span></div>
+            <div class="chart-title" onclick="toggleChart('chart-hdw-content')">🔥 HDW_peak · HDW_eff · HDWc <span id="chart-hdw-title-range" style="font-weight:400;color:var(--dim);font-size:12px"></span></div>
             <div class="chart-controls">
               <button class="chart-control-btn" id="diag-hdw-toggle" title="Tooltip diagnostico (α components)" onclick="toggleDiagToolTipMode()" style="font-size:13px">🔬</button>
               <button class="chart-control-btn hover-unified btn-hover-toggle" id="hover-hdw" title="Hover: unificado" onclick="toggleHoverMode('chart-hdw')">◈</button>
@@ -1240,7 +1240,7 @@ tr:hover{background:#f9fafb}
                 <th class="sortable" onclick="sortTable('tbl-meteo',5)">Gust km/h</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',6)">Dom. Dir.</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',7)">Precip. mm</th>
-                <th class="sortable" onclick="sortTable('tbl-meteo',8)">HDW inst.</th>
+                <th class="sortable" onclick="sortTable('tbl-meteo',8)" title="HDW daily classico (Srock 1987, VPD × Wind)">HDW daily</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',9)">HDWc</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',10)" title="Fire Weather Index canonico [Van Wagner 1987], calcolato al mezzogiorno locale standard">FWI</th>
                 <th class="sortable" onclick="sortTable('tbl-meteo',11)" title="Haines Mid Index (stability + moisture 850/700 hPa, range 2-6)">Haines</th>
@@ -1291,7 +1291,7 @@ tr:hover{background:#f9fafb}
           <span>⚠ Critical HDW Events · Time Periods</span>
           <span style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
             <span style="font-size:11px;color:var(--dim);font-weight:400" id="tbl-crit-sub"></span>
-            <span style="font-size:10px;color:var(--dim);font-style:italic" title="Only periods with HDW inst. ≥ 15 are shown.">ℹ HDW≥15 only</span>
+            <span style="font-size:10px;color:var(--dim);font-style:italic" title="Only periods with HDW daily ≥ 15 are shown.">ℹ HDW daily ≥15 only</span>
             <button id="tbl-crit-toggle" class="btn-csv" onclick="_toggleTableFilter()">📍 Window</button>
             <button class="btn-csv" onclick="exportCSVFiltered('tbl-crit','critical_window')">⬇ CSV window</button>
             <button class="btn-csv" onclick="exportCSV('tbl-crit','critical_total')">⬇ CSV total</button>
@@ -3752,6 +3752,7 @@ let _activeEngineConfig = null; // full JSON from config builder when loaded
 // Timezone resolver: reads meta.timezone from active config, else 'auto' (Open-Meteo
 // detects from lat/lon). Ensures hourly data arrive in LOCAL time of the clicked point,
 // which is critical for night-window NS calculations outside Europe/Lisbon.
+console.log('%c[FireMeteo v55.3 — chart label fix: HDW (Srock daily) vs HDW_peak (10-17 weighted) disambiguati in legenda+tooltip+banner. Y2 autorange su Temperature chart per no clip. Tabella oraria rispetta _archiveShowForecast (observed + forecast tail). — 29/5/26]%c semantic-only, motore intatto', 'color:#4ade80;font-weight:bold', 'color:#aaa');
 console.log('%c[FireMeteo v54 — wind shift classification: triangoli switch tipizzati T1-T4 (drift/shift/inversione/reversal) usando wind_eff con pesi preset attivo — 26/4/26]%c override soglie in classifyWindShift()', 'color:#4ade80;font-weight:bold', 'color:#aaa');
 console.log(`%c[FireMeteo v54] Defaults streak: dd2=${HDW_V2.delta_dry2} dd3=${HDW_V2.delta_dry3} log_divisor=${HDW_V2.streak_log_divisor} (preset JSON sovrascrive)`, 'color:#facc15');
 function _getTimezone() {
@@ -5843,7 +5844,7 @@ function renderPanel(icnf,meteo){
     <div class="sblock"><div class="sblock-hdr" onclick="toggleBlock(this)"><span class="sblock-title">${_archiveMode ? '🌡 HDWc · ' + (_archiveRefDate ? new Date(_archiveRefDate+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : 'Archive') : '🌡 Cumulative HDW · Today'}</span><span class="sblock-arrow">▼</span></div>
     <div class="sblock-body">
       <div class="hdwc-badge" style="color:${cc.color};background:${cc.bg};border-color:${cc.border}">● HDWc: <strong>${hdwC!=null?hdwC.toFixed(1):'—'}</strong> · ${cc.label}${hdwcTrendHTML(hdwCum,ti)}${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[_refMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];var _aidx=(_archiveMode&&d&&d._csvBoundary)?d.time.reduce(function(b,dt,i){return dt<=d._csvBoundary?i:b;},hdwCum.length-1):hdwCum.length-1;var pk=Math.max.apply(null,hdwCum.slice(0,_aidx+1));if(!ms||pk<=ms.p95)return '';return '<span style="margin-left:6px;background:rgba(127,29,29,.15);border:1.5px solid rgba(127,29,29,.5);border-radius:4px;padding:2px 7px;color:#7f1d1d;font-family:var(--mono);font-size:10px;font-weight:700">&#9888; SEASONAL ANOMALY</span>';})()} ${(()=>{var mks=['jan','feb','mar','apr','mai','jun','jul','ago','set','out','nov','dez'];var mk=mks[_refMonth()];var ms=getActiveSoglie()&&getActiveSoglie().mesi&&getActiveSoglie().mesi[mk];if(!ms||ms.low_confidence!==true)return '';var ny=ms.n_years!=null?' ('+ms.n_years+' yr)':'';return '<span style=\'margin-left:6px;background:rgba(161,98,7,.15);border:1px solid rgba(161,98,7,.4);border-radius:4px;padding:2px 7px;color:#92400e;font-family:var(--mono);font-size:10px;font-weight:700\'>&#9888; LOW DATA'+ny+'</span>';})()} </div>
-      <div class="irow"><span class="l">HDW_inst today</span><span class="v" style="font-family:var(--mono)">${hdwArr[ti]!=null?hdwArr[ti].toFixed(1):'—'}</span></div>
+      <div class="irow"><span class="l">HDW daily today</span><span class="v" style="font-family:var(--mono)">${hdwArr[ti]!=null?hdwArr[ti].toFixed(1):'—'}</span></div>
       <div class="irow"><span class="l">HDW_eff today</span><span class="v" style="font-family:var(--mono);color:${hdwAlphas&&hdwAlphas[ti]!=null?'var(--accent)':'inherit'}">${_hdwEffArr&&_hdwEffArr[ti]!=null?_hdwEffArr[ti].toFixed(1):'—'}</span></div>
       <div class="alpha-row"><span class="alpha-lbl">Memory α</span><div class="alpha-bar"><div class="alpha-fill" style="width:${(alpha*100).toFixed(0)}%;background:${alphaColor}"></div></div><span class="alpha-val">${alpha.toFixed(2)}</span></div>
       <div style="font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono)">${wu_hdw2?'✓ Warmup: 21 historical days':'⚠ No historical warmup'}${_archiveMode?' · <span style="color:#1e3a5f;font-weight:700">📂 CSV+Forecast</span>':''}</div>
@@ -5949,13 +5950,24 @@ function updatePeakDay(hdwArr, hdwCum, dates, todayIdx) {
     }
   } catch(e) {}
 
+  // v55.3 C5: banner header espone anche HDW_peak (peak orario 10-17 con pesi)
+  // che è la grandezza che entra in HDW_eff e HDWc. Letto da _lastHdwInst
+  // popolato da drawHDW. Fallback silenzioso se non disponibile.
+  let peakSuffix = '';
+  try {
+    const _hi = window._lastHdwInst;
+    if (_hi && _hi[maxIdx] != null) {
+      peakSuffix = ' · peak ' + _hi[maxIdx].toFixed(0);
+    }
+  } catch(e) {}
+
   peakEl.innerHTML = (daysAhead === 0
     ? '🔥 Pico hoje'
     : daysAhead === 1
     ? '🔥 Pico amanhã'
     : '🔥 Peak in ' + daysAhead + 'd') +
     ' · <strong>' + dateLbl + '</strong>' +
-    ' · HDW ' + maxHDW.toFixed(0) +
+    ' · HDW ' + maxHDW.toFixed(0) + peakSuffix +
     ' · <span style="color:#7c3aed">HDWc ' + hdwcVal + '</span>' +
     fwiSuffix;
 
@@ -7202,11 +7214,17 @@ function drawTemp(meteo,todayIdx,hdwArr,hdwCum,dayClasses,nightScores){
      line:{color:'#e85d2f',width:2},marker:{size:4},fill:'tonexty',fillcolor:'rgba(232,93,47,.06)'},
     {x:fd,y:ftmin,name:'T Min °C',type:'scatter',mode:'lines+markers',
      line:{color:'#3b82f6',width:1.5,dash:'dot'},marker:{size:3}},
-    {x:fd,y:fhdw,name:'HDW inst.',type:'bar',yaxis:'y2',
-     marker:{color:barColors, opacity:barOpacity}, width:.7*86400000},
+    {x:fd,y:fhdw,name:'HDW (Srock 1987, daily)',type:'bar',yaxis:'y2',
+     marker:{color:barColors, opacity:barOpacity}, width:.7*86400000,
+     hovertemplate:'%{x}<br>HDW (daily classic): <b>%{y:.1f}</b><extra></extra>'},
     ...(nsTrace ? [nsTrace] : []),
   ];
   const layout=plotlyTimeLayout('°C','HDW');
+  // v55.3 C6: autorange esplicito su Y2 per evitare clip visivo della barra OGGI
+  // quando HDW peak supera l'autorange Plotly default. Headroom 15% + minimo 50.
+  const _hdwMax = Math.max(50, ...fhdw.filter(v => v != null && isFinite(v)));
+  layout.yaxis2.range = [0, _hdwMax * 1.15];
+  layout.yaxis2.autorange = false;
   const archiveShape = _archiveZoneShape(meteo);
   const {shapes:evShapes, annotations:evAnnot} = _eventShapes(fd);
   const _csvBT = (meteo._csvBoundary && isArchive) ? csvBoundaryLine(meteo._csvBoundary) : null;
@@ -7361,12 +7379,12 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
     const dcLabel = fDC ? ['🔵 Classe 0','⚪ Classe 1','🟠 Classe 2','🔴 Classe 3'][fDC[i]??1] : '';
     if (!_diagOn || !_diag) {
       // Tooltip MINIMAL (default firemeteo legacy)
-      return `${dt}<br>HDW_inst: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${fDelta[i]>0?`<br>Δ fclass: +${fDelta[i].toFixed(1)}`:''}${dcLabel?`<br>${dcLabel}`:''}<extra></extra>`;
+      return `${dt}<br>HDW_peak: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${fDelta[i]>0?`<br>Δ fclass: +${fDelta[i].toFixed(1)}`:''}${dcLabel?`<br>${dcLabel}`:''}<extra></extra>`;
     }
     // ── DIAGNOSTIC TOOLTIP — pattern barText batch v37 ──────────────────────
     const di = _diagIdxOf(dt);
     if (di < 0) {
-      return `${dt}<br>HDW_inst: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${dcLabel?`<br>${dcLabel}`:''}<extra></extra>`;
+      return `${dt}<br>HDW_peak: <b>${inst.toFixed(1)}</b><br>HDW_eff: <b>${eff.toFixed(1)}</b>${dcLabel?`<br>${dcLabel}`:''}<extra></extra>`;
     }
     const dc      = (_diag.dayClasses && _diag.dayClasses[di]) ?? (fDC ? fDC[i] : null);
     const dc_s    = _diag.dayClassesStrict ? _diag.dayClassesStrict[di] : null;
@@ -7441,9 +7459,9 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
       fclassLine = `F_class: +${fcBon.toFixed(1)} (${kLabel}=${fcK}, ${tempRange} · Fc=${fcFc.toFixed(2)}${drelTxt})<br>`;
     }
 
-    // HDW_eff scomposizione
+    // HDW_eff scomposizione (v55.3: "raw" disambiguato come "peak" per coerenza con legenda)
     const heLine = (fcBon > 0)
-      ? `HDW_eff: <b>${eff.toFixed(1)}</b> (raw ${inst.toFixed(1)} + F_class +${fcBon.toFixed(1)})<br>`
+      ? `HDW_eff: <b>${eff.toFixed(1)}</b> (peak ${inst.toFixed(1)} + F_class +${fcBon.toFixed(1)})<br>`
       : `HDW_eff: <b>${eff.toFixed(1)}</b><br>`;
 
     // HDWc + delta
@@ -7466,8 +7484,8 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
   });
 
   const traces = [
-    // Barra base: HDW_inst (segnale atmosferico)
-    {x:fDates, y:fInst, name:'HDW_inst', type:'bar',
+    // Barra base: HDW_peak (peak orario VPD×W_eff in finestra 10-17, pesi wind preset)
+    {x:fDates, y:fInst, name:'HDW_peak (10-17, weighted)', type:'bar',
      marker:{color:fColors, opacity:fOpacity}, width:w,
      hovertemplate:instHover},
     // Strato delta: amplificazione _fclassBonus (solo dove > 0)
@@ -7517,8 +7535,8 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
 
   // Layout: y2 per Haines solo se overlay attivo (retrocompatibilità silenziosa)
   const layout = fHaines
-    ? plotlyTimeLayout('HDW_inst · HDW_eff · HDWc', 'Haines Mid')
-    : plotlyTimeLayout('HDW_inst · HDW_eff · HDWc', null);
+    ? plotlyTimeLayout('HDW_peak · HDW_eff · HDWc', 'Haines Mid')
+    : plotlyTimeLayout('HDW_peak · HDW_eff · HDWc', null);
   if (fHaines) {
     // Range y2 fisso [1.8, 6.2]: 1.8 dà respiro sotto Haines=2, 6.2 sopra Haines=6
     layout.yaxis2.range  = [1.8, 6.2];
@@ -10136,8 +10154,11 @@ window.renderAll=function(meteo){
 };
 
 function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
-  // In archive mode: use archive-only hourly data for the table
-  const hSrc = (_archiveMode && meteo._archiveHourly?.time?.length)
+  // v55.3: rispetta _archiveShowForecast — se l'utente ha attivato il toggle
+  // "Show forecast after archive", la tabella mostra observed + forecast tail
+  // usando meteo.hourly (già merged), altrimenti solo _archiveHourly (observed).
+  // Coerente con il comportamento del chart HDWc che traccia HDWc forecast in dashed.
+  const hSrc = (_archiveMode && meteo._archiveHourly?.time?.length && !_archiveShowForecast)
     ? meteo._archiveHourly
     : meteo.hourly;
   const h = hSrc;
@@ -10149,12 +10170,20 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
   const refDateStr = _archiveMode && _archiveRefDate ? _archiveRefDate : new Date().toISOString().split('T')[0];
   const htimes = h.time;
   const nDays = Math.round(htimes.length / 24);
+  // v55.3: subtitle e count title riflettono il fatto che ora possiamo includere forecast
+  const showingForecast = _archiveMode && _archiveShowForecast && meteo._archiveHourly?.time?.length;
+  const archObsCount = meteo._archiveHourly?.time?.length || 0;
+  const fcastExtra = showingForecast ? Math.max(0, htimes.length - archObsCount) : 0;
   const subLbl = _archiveMode
-    ? `${htimes.length} registos observados (${nDays} days)`
+    ? (showingForecast
+        ? `${archObsCount} observados + ${fcastExtra} previsão (${nDays} days)`
+        : `${htimes.length} registos observados (${nDays} days)`)
     : `${htimes.length} recordos`;
   document.getElementById('tbl-hourly-sub').textContent = subLbl + ' · click column to sort';
   const _ht = document.getElementById('tbl-hourly-title-count');
-  if (_ht) _ht.textContent = _archiveMode ? `${nDays}d × 24h (observed)` : `${nDays}d × 24h`;
+  if (_ht) _ht.textContent = _archiveMode
+    ? (showingForecast ? `${nDays}d × 24h (obs+fcst)` : `${nDays}d × 24h (observed)`)
+    : `${nDays}d × 24h`;
 
   // Highlight the last record in archive mode, or closest-to-now in forecast mode
   const refMs = _archiveMode
@@ -10172,8 +10201,19 @@ function renderHourlyTable(meteo,hdwArr_daily,dates_daily){
     const dt=ts.split('T')[0];
     const hour=ts.split('T')[1]||'00:00';
     const isToday=i===closestIdx;
-    // In archive mode: rows after archive boundary are forecast (grayed)
-    const isFut = _archiveMode ? false : new Date(ts).getTime()>nowMs; // archive data is all observed
+    // v55.3: in archive mode + showForecast attivo, le righe successive al
+    // boundary archivio sono forecast (grayed). Calcolo isFut su ts vs boundary
+    // archivio invece che vs nowMs. Default (archive senza showForecast): tutto observed.
+    let isFut;
+    if (_archiveMode) {
+      if (showingForecast && archObsCount > 0) {
+        isFut = i >= archObsCount;  // dopo le ore osservate iniziano i forecast
+      } else {
+        isFut = false; // archive only: tutto observed
+      }
+    } else {
+      isFut = new Date(ts).getTime() > nowMs;
+    }
     const t=h.temperature_2m?.[i];
     const rh=h.relativehumidity_2m?.[i];
     const ws=h.windspeed_10m?.[i];
@@ -10518,7 +10558,7 @@ async function exportPDF(){
   const metricsRowsHTML = [
     ['HDWc today',        _metrics.hdwcToday],
     ['HDWc peak (window)',_metrics.hdwcPeak + (_metrics.peakDate !== '—' ? ' · ' + _metrics.peakDate : '')],
-    ['Days HDW inst ≥ 80', _metrics.daysAbove80],
+    ['Days HDW daily ≥ 80', _metrics.daysAbove80],
     ['Days class 2-3',    _metrics.daysCl23],
     ['Haines Mid (today)',_metrics.hainesToday],
     ['Haines Mid · peak', _metrics.hainesPeak + (_metrics.hainesPeakDate !== '—' ? ' · ' + _metrics.hainesPeakDate : '')],
@@ -11778,7 +11818,7 @@ function renderCmpDrawer(){
       <div class="cmp-card-coords">${p.nome}<br>${p.lat.toFixed(4)}° N  ${Math.abs(p.lng).toFixed(4)}° W</div>
       <div class="cmp-row"><span class="lbl">ICNF Return</span><span class="val" style="color:${isNaN(p.rv)?'var(--dim)':p.rv<=0.75?'#b91c1c':'#15803d'}">${rvStr}</span></div>
       <div class="cmp-row"><span class="lbl">HDWc today</span><span class="val" style="color:${cc.color}">${hdwcStr} · ${cc.label} ${p.trendHTML}</span></div>
-      <div class="cmp-row"><span class="lbl">HDW inst. max 16d</span><span class="val" style="color:${p.hdwMax>=40?'#e85d2f':'var(--text)'}">${p.hdwMax.toFixed(1)}</span></div>
+      <div class="cmp-row"><span class="lbl">HDW daily max 16d</span><span class="val" style="color:${p.hdwMax>=40?'#e85d2f':'var(--text)'}">${p.hdwMax.toFixed(1)}</span></div>
       ${p.simTopFire!=null?`<div class="cmp-row"><span class="lbl">Sim. top fire year</span><span class="val" style="color:${p.simTopFire>=70?'#b91c1c':p.simTopFire>=55?'#e85d2f':'var(--dim)'}">${p.simTopFire}%</span></div>`:''}
       <button class="btn-go" style="width:100%;margin-top:7px;padding:4px" onclick="goToPinned(${i})">↗ Ir para este ponto</button>
     </div>`;
