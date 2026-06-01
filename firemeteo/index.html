@@ -7047,7 +7047,7 @@ function renderAll(meteo){
       dirDom:meteo?.daily?.winddirection_10m_dominant||null
     };
     drawTemp(meteo,todayIdx,hdwArr,hdwCum,_dc_draw,_ns_draw);
-    drawHDW(meteo,todayIdx,_hdwInst_draw,_hdwEff_draw,hdwCum,_dc_draw,_ns_draw);
+    drawHDW(meteo,todayIdx,_hdwInst_draw,_hdwEff_draw,hdwCum,_dc_draw,_ns_draw,hdwArr);
     try { drawFWI(meteo,todayIdx,hdwCum); } catch(e) { console.warn('drawFWI failed:', e); }   // v50 Fase 3: card FWI canonical
     try { drawGS(meteo,hdwCum,_dr_draw); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3.1: card Green Streak + dry streak curve
     drawPrec(meteo,todayIdx);
@@ -7256,7 +7256,7 @@ function drawTemp(meteo,todayIdx,hdwArr,hdwCum,dayClasses,nightScores){
 // hdwInstArr : segnale atmosferico puro (max orario VPD×W_eff, pre-_fclassBonus)
 // hdwEffArr  : HDW_eff che entra in HDWC (= hdwInst + amplificazione _fclassBonus)
 // Il delta Δ_fclass = hdwEff - hdwInst > 0 solo quando hdwInst >= hdw_class2
-function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScores){
+function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScores,hdwSrockArr){
   // v44 PDF: espone globalmente ultime serie calcolate per _pdfAnalysisMetrics
   window._lastHdwCum      = hdwCum;
   window._lastHdwInst     = hdwInstArr;
@@ -7306,7 +7306,8 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
   // ── Filtri archivio / forecast horizon ───────────────────────────────────
   let fDates=dates, fInst=hdwInstArr||[], fDelta=deltaArr,
       fSolid=hdwcSolid, fDashed=hdwcDashed, fColors=barColors, fOpacity=barOpacity,
-      fDC=dayClasses?[...dayClasses]:null, fNS=nightScores?[...nightScores]:null;
+      fDC=dayClasses?[...dayClasses]:null, fNS=nightScores?[...nightScores]:null,
+      fSrock=hdwSrockArr?[...hdwSrockArr]:null; // v55.3: HDW Srock daily per tooltip diagnostico
 
   // Atmospheric Stability series (v43): Haines giornaliero allineato a dates.
   // Retrocompatibilità: se meteo._atmoSeries null → fHaines null → no overlay.
@@ -7325,6 +7326,7 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
     if (fDC) fDC = fDC.filter((_,i)=>keep[i]);
     if (fNS) fNS = fNS.filter((_,i)=>keep[i]);
     if (fHaines) fHaines = fHaines.filter((_,i)=>keep[i]);
+    if (fSrock) fSrock = fSrock.filter((_,i)=>keep[i]);
   }
   if (typeof _forecastDays !== 'undefined' && _forecastDays < fDates.length) {
     const bnd  = isArchiveMode
@@ -7341,6 +7343,7 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
       if (fDC) fDC = fDC.slice(0,cutI);
       if (fNS) fNS = fNS.slice(0,cutI);
       if (fHaines) fHaines = fHaines.slice(0,cutI);
+      if (fSrock) fSrock = fSrock.slice(0,cutI);
     }
   }
 
@@ -7459,6 +7462,15 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
       fclassLine = `F_class: +${fcBon.toFixed(1)} (${kLabel}=${fcK}, ${tempRange} · Fc=${fcFc.toFixed(2)}${drelTxt})<br>`;
     }
 
+    // HDW Srock daily (v55.3: aggiunta per coerenza visiva col chart Temperature)
+    // Esposizione di entrambe le grandezze nello stesso tooltip diagnostico
+    // permette all'operatore di capire perché un giorno con HDW Srock alto può
+    // avere HDW_peak basso (raffica forte fuori finestra termica 10-17) e viceversa.
+    const srock = fSrock ? fSrock[i] : null;
+    const srockLine = (srock != null && isFinite(srock))
+      ? `HDW Srock daily: ${srock.toFixed(1)}<br>`
+      : '';
+
     // HDW_eff scomposizione (v55.3: "raw" disambiguato come "peak" per coerenza con legenda)
     const heLine = (fcBon > 0)
       ? `HDW_eff: <b>${eff.toFixed(1)}</b> (peak ${inst.toFixed(1)} + F_class +${fcBon.toFixed(1)})<br>`
@@ -7475,6 +7487,7 @@ function drawHDW(meteo,todayIdx,hdwInstArr,hdwEffArr,hdwCum,dayClasses,nightScor
       hdwcLine +
       (alpha != null ? `α: <b>${alpha.toFixed(3)}</b>${parts.length?' ('+parts.join(' · ')+')':''}${satNote}<br>` : '') +
       `Δα giorno: ${s(dAlpha)}<br>` +
+      srockLine +
       heLine +
       fclassLine +
       `Tmax: ${tmax!=null?tmax.toFixed(1)+'°C':'—'} · Tmin: ${tmin!=null?tmin.toFixed(1)+'°C':'—'} · NS: ${ns} (${_NS_NAMES[ns]||'—'})<br>` +
@@ -11096,7 +11109,7 @@ function setForecastHorizon(days) {
   const hdwArr = d.time.map((_,i) => calcHDW(d.temperature_2m_max[i], d.relative_humidity_2m_mean[i], d.windspeed_10m_max[i], d.windgusts_10m_max?.[i]));
   const {hdw:wu_hdw, dates:wu_dates, rain:wu_rain, tmin:wu_tmin} = getWarmup(meteo);
   const {cum:hdwCum,hdwEffArr:_hdwEffCsv,hdwInstArr:_hdwInstCsv,dayClasses:_dcCsv,nightScores:_nsCsv,dryStreaks:_drCsv} = calcHDWCum_v2(hdwArr, d.time, d.temperature_2m_max, d.temperature_2m_min, d.precipitation_sum, wu_hdw, wu_dates, wu_rain, wu_tmin, null, null, d.winddirection_10m_dominant||null, d.windspeed_10m_max||null);
-  drawHDW(meteo, todayIdx, _hdwInstCsv, _hdwEffCsv, hdwCum, _dcCsv, _nsCsv);
+  drawHDW(meteo, todayIdx, _hdwInstCsv, _hdwEffCsv, hdwCum, _dcCsv, _nsCsv, hdwArr);
   try { drawFWI(meteo, todayIdx, hdwCum); } catch(e) { console.warn('drawFWI failed:', e); }   // v50 Fase 3: card FWI canonical
   try { drawGS(meteo, hdwCum); } catch(e) { console.warn('drawGS failed:', e); }  // v50 Fase 3: card Green Streak
   drawTemp(meteo, todayIdx, hdwArr, hdwCum, _dcCsv, _nsCsv);
