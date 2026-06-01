@@ -2,125 +2,112 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FireMeteo Suite · Fire Weather Dashboards</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fire Risk Dashboards — paguaro</title>
 <style>
-:root{
-  --bg:#0a0e14; --panel:#151b26;
-  --line:#222b3a; --line2:#2e3a4d;
-  --txt:#e8edf4; --dim:#7e8a9c; --dim2:#566173;
-  --accent:#e85d2f;
-  --mono:'JetBrains Mono',ui-monospace,monospace;
-  --sans:'Archivo',system-ui,sans-serif;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-  background:var(--bg); color:var(--txt); font-family:var(--sans);
-  min-height:100vh; -webkit-font-smoothing:antialiased;
-}
-body::before{
-  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(800px 460px at 80% -10%, rgba(232,93,47,.15), transparent 60%),
-    radial-gradient(620px 400px at 8% 2%, rgba(59,130,246,.09), transparent 60%);
-}
-.wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:0 24px}
-
-.head{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:22px 0 18px;border-bottom:1px solid var(--line);
-}
-.brand{display:flex;align-items:center;gap:11px}
-.flame{font-size:22px;filter:drop-shadow(0 0 10px rgba(232,93,47,.6))}
-.brand b{font-weight:900;font-size:16px;letter-spacing:-.02em;display:block;line-height:1.05}
-.brand span{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase}
-.head .src{font-family:var(--mono);font-size:9.5px;color:var(--dim2);letter-spacing:.08em;text-align:right;line-height:1.6}
-.head .src b{color:var(--accent)}
-
-.section-lbl{
-  font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-  color:var(--dim2);margin:42px 0 16px;display:flex;align-items:center;gap:12px;
-}
-.section-lbl::after{content:'';flex:1;height:1px;background:var(--line)}
-
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
-.card{
-  position:relative;display:flex;flex-direction:column;align-items:center;
-  background:linear-gradient(165deg,var(--panel),#10151d);
-  border:1px solid var(--line);border-radius:14px;
-  padding:26px 16px 18px;text-decoration:none;color:inherit;text-align:center;
-  transition:transform .3s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .3s;
-}
-.card:hover{transform:translateY(-5px);border-color:var(--cardc,var(--accent));
-  box-shadow:0 18px 40px -20px rgba(0,0,0,.7),0 0 0 1px var(--cardc,var(--accent)) inset}
-.flag{
-  width:52px;height:52px;border-radius:13px;display:grid;place-items:center;
-  font-size:26px;margin-bottom:14px;
-  background:var(--icbg,rgba(232,93,47,.12));
-  border:1px solid var(--icbd,rgba(232,93,47,.26));
-  transition:transform .3s;
-}
-.card:hover .flag{transform:scale(1.08)}
-.name{font-weight:800;font-size:16px;letter-spacing:-.01em;margin-bottom:12px}
-.ver{
-  font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.06em;
-  color:var(--cardc,var(--accent));
-  border:1px solid var(--line2);border-radius:20px;padding:3px 11px;
-}
-
-.c-fire{--cardc:#e85d2f;--icbg:rgba(232,93,47,.13);--icbd:rgba(232,93,47,.3)}
-.c-pt{--cardc:#22c55e;--icbg:rgba(34,197,94,.12);--icbd:rgba(34,197,94,.28)}
-.c-sard{--cardc:#06b6d4;--icbg:rgba(6,182,212,.12);--icbd:rgba(6,182,212,.28)}
-.c-mob{--cardc:#a78bfa;--icbg:rgba(167,139,250,.13);--icbd:rgba(167,139,250,.3)}
-.c-wind{--cardc:#38bdf8;--icbg:rgba(56,189,248,.12);--icbd:rgba(56,189,248,.28)}
-.c-batch{--cardc:#fbbf24;--icbg:rgba(251,191,36,.12);--icbd:rgba(251,191,36,.3)}
-.c-build{--cardc:#f472b6;--icbg:rgba(244,114,182,.12);--icbd:rgba(244,114,182,.3)}
-
-footer{
-  margin:56px 0 40px;padding-top:22px;border-top:1px solid var(--line);
-  font-family:var(--mono);font-size:10.5px;color:var(--dim2);letter-spacing:.05em;line-height:1.9;
-}
-footer a{color:var(--dim);text-decoration:none}
-footer a:hover{color:var(--accent)}
-
-.card{opacity:0;transform:translateY(16px);animation:rise .55s cubic-bezier(.2,.8,.2,1) forwards}
-@keyframes rise{to{opacity:1;transform:none}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+  .wrap{text-align:center;max-width:860px;width:100%}
+  h1{color:#f9fafb;font-size:22px;font-weight:700;margin-bottom:4px}
+  .sub{color:#64748b;font-size:12px;margin-bottom:10px}
+  .badge-row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:32px}
+  .badge{background:#1e293b;border:1px solid #334155;border-radius:20px;
+         padding:3px 10px;font-size:10px;color:#94a3b8;font-family:monospace}
+  .section-lbl{color:#475569;font-size:9.5px;font-weight:700;text-transform:uppercase;
+               letter-spacing:.1em;margin-bottom:12px;margin-top:24px}
+  .cards{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .card{background:#1e293b;border:1.5px solid #334155;border-radius:12px;
+        padding:22px 22px 18px;text-decoration:none;transition:border-color .2s,transform .15s;
+        min-width:130px;flex:1;max-width:150px;display:flex;flex-direction:column;align-items:center}
+  .card:hover{border-color:#e85d2f;transform:translateY(-3px)}
+  .card.tool{border-color:#1e3a5f}
+  .card.tool:hover{border-color:#2563eb}
+  .flag{font-size:34px;margin-bottom:8px}
+  .name{color:#f1f5f9;font-size:13px;font-weight:700;margin-bottom:3px}
+  .sub2{color:#64748b;font-size:10px;line-height:1.4;text-align:center}
+  .ver{font-size:9px;font-family:monospace;margin-top:7px;font-weight:700;
+       background:#0f172a;border-radius:4px;padding:2px 6px}
+  .ver.fire{color:#e85d2f}
+  .ver.tool{color:#3b82f6}
+  footer{color:#334155;font-size:10px;margin-top:36px;line-height:1.8}
+  footer a{color:#475569;text-decoration:none}
+  footer a:hover{color:#94a3b8}
+  @media(max-width:540px){
+    .cards{gap:10px}
+    .card{padding:16px 14px;min-width:100px;max-width:120px}
+    .flag{font-size:26px}
+    .name{font-size:11px}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-
-  <div class="head">
-    <div class="brand">
-      <span class="flame">🔥</span>
-      <div><b>FireMeteo Suite</b><span>Operational · Research</span></div>
-    </div>
-    <div class="src">Open-Meteo · ERA5 · EFFIS · VIIRS<br><b>HDWc</b> cumulative engine</div>
+  <h1>🔥 Fire Risk Dashboards</h1>
+  <div class="sub">HDWc · Open-Meteo 16d + ERA5 · EFFIS Copernicus · ANEPC · CFVA</div>
+  <div class="badge-row">
+    <span class="badge">HDWc v2 engine</span>
+    <span class="badge">α dynamic</span>
+    <span class="badge">Drill-down 72h</span>
+    <span class="badge">Geo-detection</span>
+    <span class="badge">ERA5 archive</span>
   </div>
 
-  <div class="section-lbl">Operational</div>
+  <div class="section-lbl">Operational Dashboards</div>
   <div class="cards">
-    <a class="card c-fire"  href="firemeteo/"     style="animation-delay:.02s"><div class="flag">🔥</div><div class="name">FireMeteo</div><div class="ver">master</div></a>
-    <a class="card c-pt"    href="portugal/"      style="animation-delay:.06s"><div class="flag">🇵🇹</div><div class="name">Portugal</div><div class="ver">13 zones</div></a>
-    <a class="card c-sard"  href="sardegna/"      style="animation-delay:.10s"><div class="flag">🌊</div><div class="name">Sardegna</div><div class="ver">IT</div></a>
-    <a class="card c-mob"   href="mobile/"        style="animation-delay:.14s"><div class="flag">📱</div><div class="name">Mobile</div><div class="ver">field</div></a>
+    <a class="card" href="firemeteo/">
+      <div class="flag">🌐</div>
+      <div class="name">FireMeteo</div>
+      <div class="sub2">Global · EFFIS<br>Custom WFS/GeoJSON<br>Multi-zone packages</div>
+      <div class="ver fire">v41</div>
+    </a>
+    <a class="card" href="portugal/">
+      <div class="flag">🇵🇹</div>
+      <div class="name">Portugal</div>
+      <div class="sub2">ICNF GIFR · ANEPC<br>11 ecoregions<br>Norte / Levante</div>
+      <div class="ver fire">v3</div>
+    </a>
+    <a class="card" href="sardegna/">
+      <div class="flag">🇮🇹</div>
+      <div class="name">Sardegna</div>
+      <div class="sub2">CFVA · ERA5 archive<br>EFFIS · VIIRS<br>Event markers</div>
+      <div class="ver fire">v5</div>
+    </a>
+    <a class="card" href="mobile/">
+      <div class="flag">📱</div>
+      <div class="name">Mobile</div>
+      <div class="sub2">Portugal · 72h<br>GPS · Touch</div>
+      <div class="ver fire">v1</div>
+    </a>
   </div>
 
   <div class="section-lbl">Analysis &amp; Tools</div>
   <div class="cards">
-    <a class="card c-wind"  href="wildwinds/"     style="animation-delay:.18s"><div class="flag">🌬</div><div class="name">WildWinds</div><div class="ver">wind</div></a>
-    <a class="card c-batch" href="hdwc_batch/"    style="animation-delay:.22s"><div class="flag">📊</div><div class="name">HDWc Batch</div><div class="ver">historical</div></a>
-    <a class="card c-build" href="hdwc_builder/"  style="animation-delay:.26s"><div class="flag">⚙️</div><div class="name">HDWc Builder</div><div class="ver">config</div></a>
+    <a class="card tool" href="wildwinds/">
+      <div class="flag">🌬</div>
+      <div class="name">WildWinds</div>
+      <div class="sub2">Wind rose dual FS<br>Foehn sectors<br>Wind clock · Scatter</div>
+      <div class="ver tool">v2</div>
+    </a>
+    <a class="card tool" href="batch/">
+      <div class="flag">📊</div>
+      <div class="name">HDWc Batch</div>
+      <div class="sub2">Multi-fire analysis<br>Monitoring · FWI<br>ERA5 · PDF export</div>
+      <div class="ver tool">v28</div>
+    </a>
+    <a class="card tool" href="hdwc_builder/">
+      <div class="flag">⚙️</div>
+      <div class="name">HDWc Builder</div>
+      <div class="sub2">Engine config editor<br>Zone Manager · Leaflet<br>α calibration</div>
+      <div class="ver tool">v8</div>
+    </a>
   </div>
 
   <footer>
     Giuseppe Cornaglia · ANEPC · Copernicus EMS NFP Portugal<br>
-    <a href="https://github.com/paguaro/dashboards">github.com/paguaro/dashboards</a> · 2026
+    <a href="https://github.com/paguaro/dashboards">github.com/paguaro/dashboards</a>
+    · 2026
   </footer>
-
 </div>
 </body>
 </html>
